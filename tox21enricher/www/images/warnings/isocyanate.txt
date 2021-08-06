@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" version="1.1" width="353" height="268"><style> text { cursor: default; } </style><g transform="scale(0.10016827533955401)">
+<rect x="0" y="0" height="2675" width="3524" stroke="none" fill="white" />
+<line x1="972" y1="776" x2="1561" y2="1199" stroke="black" stroke-width="30" />
+<line x1="902" y1="873" x2="1491" y2="1297" stroke="black" stroke-width="30" />
+<line x1="1559" y1="1198" x2="2138" y2="1577" stroke="black" stroke-width="30" />
+<line x1="1493" y1="1298" x2="2072" y2="1677" stroke="black" stroke-width="30" />
+<line x1="937" y1="825" x2="408" y2="1238" stroke="black" stroke-width="30" />
+<rect x="712" y="630" height="390" width="420" rx="97" ry="97" stroke="none" fill="white" />
+<text x="802" y="960"  font-size="390px" font-family="Helvetica" fill="blue">N</text>
+<rect x="1301" y="1053" height="390" width="420" rx="97" ry="97" stroke="none" fill="white" />
+<text x="1391" y="1383"  font-size="390px" font-family="Helvetica" fill="rgb(64,64,64)">C</text>
+<rect x="1865" y="1432" height="390" width="450" rx="97" ry="97" stroke="none" fill="white" />
+<text x="1955" y="1762"  font-size="390px" font-family="Helvetica" fill="red">O</text>
+<rect x="183" y="1043" height="390" width="420" rx="97" ry="97" stroke="none" fill="white" />
+<text x="273" y="1373"  font-size="390px" font-family="Helvetica" fill="rgb(64,64,64)">R</text>
+</g></svg>

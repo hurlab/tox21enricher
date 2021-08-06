@@ -1,0 +1,6 @@
+default:
+  # Client config
+  tox21enricher-client:
+    # Location of API server
+    host: 'localhost'
+    port: '8000'

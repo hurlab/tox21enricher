@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" version="1.1" width="353" height="268"><style> text { cursor: default; } </style><g transform="scale(0.10016827533955401)">
+<rect x="0" y="0" height="2675" width="3524" stroke="none" fill="white" />
+<line x1="1486" y1="657" x2="1504" y2="1407" stroke="black" stroke-width="30" />
+<line x1="1366" y1="660" x2="1384" y2="1410" stroke="black" stroke-width="30" />
+<line x1="1444" y1="1409" x2="803" y2="1799" stroke="black" stroke-width="30" />
+<line x1="1444" y1="1409" x2="2102" y2="1768" stroke="black" stroke-width="30" />
+<rect x="1186" y="464" height="390" width="450" rx="97" ry="97" stroke="none" fill="white" />
+<text x="1276" y="794"  font-size="390px" font-family="Helvetica" fill="red">O</text>
+<rect x="578" y="1604" height="390" width="420" rx="97" ry="97" stroke="none" fill="white" />
+<text x="668" y="1934"  font-size="390px" font-family="Helvetica" fill="rgb(64,64,64)">R</text>
+<rect x="1877" y="1573" height="390" width="420" rx="97" ry="97" stroke="none" fill="white" />
+<text x="1967" y="1903"  font-size="390px" font-family="Helvetica" fill="rgb(64,64,64)">H</text>
+</g></svg>

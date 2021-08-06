@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" version="1.1" width="353" height="268"><style> text { cursor: default; } </style><g transform="scale(0.10016827533955401)">
+<rect x="0" y="0" height="2675" width="3524" stroke="none" fill="white" />
+<line x1="1821" y1="1504" x2="1446" y2="855" stroke="black" stroke-width="30" />
+<line x1="1446" y1="855" x2="1071" y2="1504" stroke="black" stroke-width="30" />
+<line x1="1071" y1="1504" x2="1821" y2="1504" stroke="black" stroke-width="30" />
+<polygon points="448,1822 1071,1504 388,1652" stroke="none" fill="black" />
+<polygon points="774,2199 1071,1504 618,2109" stroke="none" fill="black" />
+<polygon points="2261,2049 1821,1504 2108,2144" stroke="none" fill="black" />
+<polygon points="2477,1580 1821,1504 2432,1754" stroke="none" fill="black" />
+<rect x="1206" y="660" height="390" width="450" rx="97" ry="97" stroke="none" fill="white" />
+<text x="1296" y="990"  font-size="390px" font-family="Helvetica" fill="red">O</text>
+<rect x="193" y="1542" height="390" width="420" rx="97" ry="97" stroke="none" fill="white" />
+<text x="283" y="1872"  font-size="390px" font-family="Helvetica" fill="rgb(64,64,64)">R</text>
+<rect x="471" y="1959" height="390" width="420" rx="97" ry="97" stroke="none" fill="white" />
+<text x="561" y="2289"  font-size="390px" font-family="Helvetica" fill="rgb(64,64,64)">R</text>
+<rect x="1960" y="1901" height="390" width="420" rx="97" ry="97" stroke="none" fill="white" />
+<text x="2050" y="2231"  font-size="390px" font-family="Helvetica" fill="rgb(64,64,64)">R</text>
+<rect x="2229" y="1472" height="390" width="420" rx="97" ry="97" stroke="none" fill="white" />
+<text x="2319" y="1802"  font-size="390px" font-family="Helvetica" fill="rgb(64,64,64)">R</text>
+</g></svg>

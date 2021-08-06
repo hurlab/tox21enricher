@@ -1,0 +1,9 @@
+Package: jsme
+Title: What the Package Does (one line, title case)
+Version: 0.0.0.9000
+Authors@R: person("Abhik", "Seal", email = "abhik1368@gmail.com, role = c("aut", "cre"))
+Description: JSME Editor on R shiny
+Depends: R (>= 3.2.5)
+License: What license is it under?
+Encoding: UTF-8
+LazyData: true

@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" version="1.1" width="353" height="268"><style> text { cursor: default; } </style><g transform="scale(0.12732498871910194)">
+<rect x="0" y="0" height="2105" width="2772" stroke="none" fill="white" />
+<line x1="1287" y1="911" x2="1986" y2="903" stroke="black" stroke-width="30" />
+<line x1="1286" y1="821" x2="1985" y2="813" stroke="black" stroke-width="30" />
+<line x1="1288" y1="1001" x2="1987" y2="993" stroke="black" stroke-width="30" />
+<line x1="1287" y1="911" x2="659" y2="911" stroke="black" stroke-width="30" />
+<rect x="1062" y="716" height="390" width="420" rx="97" ry="97" stroke="none" fill="white" />
+<text x="1152" y="1046"  font-size="390px" font-family="Helvetica" fill="rgb(64,64,64)">C</text>
+<rect x="1761" y="708" height="390" width="420" rx="97" ry="97" stroke="none" fill="white" />
+<text x="1851" y="1038"  font-size="390px" font-family="Helvetica" fill="blue">N</text>
+<rect x="434" y="716" height="390" width="420" rx="97" ry="97" stroke="none" fill="white" />
+<text x="524" y="1046"  font-size="390px" font-family="Helvetica" fill="rgb(64,64,64)">R</text>
+</g></svg>
