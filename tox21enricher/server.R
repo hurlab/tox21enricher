@@ -127,6 +127,7 @@ shinyServer(function(input, output, session) {
         if(length(enrichmentList) == 0) { # No previous enrichment
           shinyjs::disable(id = "searchPrevButton")
           shinyjs::disable(id = "searchDeleteAll")
+          shinyjs::disable(id = "searchDeleteSelected")
           
           output[["enrichmentTable"]] <- renderUI(
             column(12,
@@ -137,6 +138,8 @@ shinyServer(function(input, output, session) {
         } else {
           shinyjs::enable(id = "searchPrevButton")
           shinyjs::enable(id = "searchDeleteAll")
+          shinyjs::enable(id = "searchDeleteSelected")
+          
           enrichmentListDisplay <- lapply(enrichmentList, function(x){
             enrichDataRaw <- read.table(x, sep="\t", comment.char="", stringsAsFactors = FALSE, fill=TRUE)
             print("enrichDataRaw")
