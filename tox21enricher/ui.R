@@ -17,8 +17,9 @@ js_code <- "
 # Define UI for Tox21Enricher application
 shinyUI(fluidPage(
     # Theme
-    theme = "bootstrap.css",
-    #theme = shinytheme("darkly"),
+    theme = "css/tox21enricher-light.css",
+    #theme = "css/darkly.min.css",
+    
     
     # Lang
     lang = "en",
@@ -62,14 +63,18 @@ shinyUI(fluidPage(
                 h1("View Results from Previous Enrichment"),
                 fluidRow(
                   h3("Select Request to View Results for"),
-                  uiOutput("enrichmentTable") %>% withSpinner(),
-                  column(6, actionButton("searchPrevButton", label="Search", icon=icon("search"))),
-                  column(3, actionButton("searchDeleteSelected", label="Delete Selected", icon=icon("trash"))),
-                  column(3, actionButton("searchDeleteAll", label="Delete All", icon=icon("dumpster"))),
+                  fluidRow(
+                    column(6, actionButton("searchPrevButton", label="Search", icon=icon("search"))),
+                    column(3, actionButton("searchDeleteSelected", label="Delete Selected", icon=icon("trash"))),
+                    column(3, actionButton("searchDeleteAll", label="Delete All", icon=icon("dumpster")))
+                  ),
                   hidden(
                     column(id="warningSearchColumn", 12,
-                      uiOutput("searchWarning")
+                           uiOutput("searchWarning")
                     )
+                  ),
+                  fluidRow(
+                    uiOutput("enrichmentTable") %>% withSpinner()
                   )
                 )
               )
@@ -91,10 +96,10 @@ shinyUI(fluidPage(
                 fluidRow(
                     h3("3) ", "Select Enrichment Cutoff"),
                     bsTooltip(id="nodeCutoff", title="This will determine the maximum number of results per data set and may affect how many nodes are generated during network generation. (default = 10). Higher values may cause the enrichment process to take longer (Not available when viewing annotations for Tox21 chemicals).", placement="right", trigger="hover"),
-                    sliderInput(inputId = "nodeCutoff", label="Select enrichment cutoff", value=10, min=1, max=100,step=1),
+                    sliderInput(inputId = "nodeCutoff", label="Select enrichment cutoff", value=10, min=1, max=100, step=1, width="100%"),
                     
                     hidden(
-                        sliderInput(inputId = "tanimotoThreshold", label="Select Tanimoto similarity threshold (%)", value=50, min=1, max=100,step=1)
+                        sliderInput(inputId = "tanimotoThreshold", label="Select Tanimoto similarity threshold (%)", value=50, min=1, max=100, step=1, width="100%")
                     )
                     
                 ),
@@ -137,14 +142,13 @@ shinyUI(fluidPage(
                         uiOutput("inputInstructions"),
                     ),
                     column(12,
-                        tags$textarea(id = "submitted_chemicals", rows=12,cols=100,"")
+                        tags$textarea(id = "submitted_chemicals", rows=12,cols=100,""),
                     )
                 ),
                 hidden( # hide error box; only display if there's an error
                     fluidRow(id = "errorBox",
                         column(12,
-                            textOutput("error_box"),
-                            tags$head(tags$style("#error_box{color: red; font-style: bold;}"))
+                            uiOutput("error_box"),
                         ),
                     )
                 ),
@@ -179,8 +183,7 @@ shinyUI(fluidPage(
                         uiOutput("waitingTable") %>% withSpinner()
                     ),
                     column(12,
-                        textOutput("results_error_box"),
-                        tags$head(tags$style("#results_error_box{color: red; font-style: bold;}"))
+                        uiOutput("results_error_box"),
                     )
                 )
             )

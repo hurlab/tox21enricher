@@ -20,6 +20,9 @@ library(xlsx)
 # Define server logic
 shinyServer(function(input, output, session) {
   
+    # Theme info
+    theme <- reactiveValues(textcolor = "#000000")
+  
     # API connectivity details
     # Change host address and port in config.yml
     tox21api <- config::get("tox21enricher-client")
@@ -255,6 +258,7 @@ shinyServer(function(input, output, session) {
                                  escape = FALSE,
                                  rownames = FALSE,
                                  class = "row-border stripe compact",
+                                 style = "bootstrap",
                                  options = list( 
                                    paging = TRUE,
                                    #autoWidth = FALSE,
@@ -311,12 +315,12 @@ shinyServer(function(input, output, session) {
       if(length(selectedSets) > 1){ # too many sets selected
         shinyjs::show(id="warningSearchColumn")
         output$searchWarning <- renderUI({
-          HTML(paste0("<div style=\"color:red;\">Error: Only one request may be selected.</div>"))
+          HTML(paste0("<div class=\"text-danger\">Error: Only one request may be selected.</div>"))
         })
       } else if(length(selectedSets) < 1){ # no sets selected
         shinyjs::show(id="warningSearchColumn")
         output$searchWarning <- renderUI({
-          HTML(paste0("<div style=\"color:red;\">Error: No requests selected.</div>"))
+          HTML(paste0("<div class=\"text-danger\">Error: No requests selected.</div>"))
         })
       } else {
       
@@ -356,7 +360,7 @@ shinyServer(function(input, output, session) {
           if(is.null(endTime) | is.null(beginTime)){
             shinyjs::show(id="warningSearchColumn")
             output$searchWarning <- renderUI({
-              HTML(paste0("<div style=\"color:red;\">Error: Request has not completed.</div>"))
+              HTML(paste0("<div class=\"text-danger\">Error: Request has not completed.</div>"))
             })
             return() 
           }
@@ -440,10 +444,64 @@ shinyServer(function(input, output, session) {
           fluidRow(
             column(12, 
               h4("Change Theme"),
-              themeSelector(),
+
+              column(12, checkboxInput(inputId="changeThemeToggle", label=HTML(paste0("Dark Theme ", icon("moon"))))),
+
+              # vvv solution from here: https://stackoverflow.com/questions/61632272/r-shiny-light-dark-mode-switch vvv
+              tags$script(
+                "
+                // define css theme filepaths
+                const themes = {
+                    dark: 'css/tox21enricher-dark.css',
+                    light: 'css/tox21enricher-light.css'
+                }
+        
+                // function that creates a new link element
+                function newLink(theme) {
+                    let el = document.createElement('link');
+                    el.setAttribute('rel', 'stylesheet');
+                    el.setAttribute('text', 'text/css');
+                    el.setAttribute('href', theme);
+                    return el;
+                }
+        
+                // function that remove <link> of current theme by href
+                function removeLink(theme) {
+                    let el = document.querySelector(`link[href='${theme}']`)
+                    return el.parentNode.removeChild(el);
+                }
+        
+                // define vars
+                const darkTheme = newLink(themes.dark);
+                const lightTheme = newLink(themes.light);
+                const head = document.getElementsByTagName('head')[0];
+                const toggle = document.getElementById('changeThemeToggle');
+        
+                // define extra css and add as default
+                const extraDarkThemeCSS = '.dataTables_length label, .dataTables_filter label, .dataTables_info {       color: white!important;} .paginate_button { background: white!important;} thead { color: white;}'
+                const extraDarkThemeElement = document.createElement('style');
+                extraDarkThemeElement.appendChild(document.createTextNode(extraDarkThemeCSS));
+                head.appendChild(extraDarkThemeElement);
+        
+        
+                // define event - checked === 'light'
+                toggle.addEventListener('input', function(event) {
+                    // if checked, switch to dark theme
+                    if (toggle.checked) {
+                        removeLink(themes.light);
+                        head.appendChild(extraDarkThemeElement)
+                        head.appendChild(darkTheme);
+                        
+                    }  else {
+                        // else add light theme
+                        removeLink(themes.dark);
+                        head.removeChild(extraDarkThemeElement);
+                        head.appendChild(lightTheme);
+                    }
+                })
+                "
+              )
               
-              column(6, actionButton(inputId="changeThemeButtonDark", label="Dark Theme", icon=icon("moon"))),
-              column(6, actionButton(inputId="changeThemeButtonLight", label="Light Theme", icon=icon("sun")))
             )
           ),
           
@@ -452,6 +510,15 @@ shinyServer(function(input, output, session) {
           
         )
       )
+    })
+    
+    # update theme data when checkbox is clicked
+    observeEvent(input$changeThemeToggle, {
+      if(input$changeThemeToggle == TRUE){ # dark
+        theme$textcolor <- "#FFFFFF"
+      } else { # light
+        theme$textcolor <- "#000000"
+      }
     })
     
     # Clear cache when button is pressed
@@ -463,7 +530,7 @@ shinyServer(function(input, output, session) {
           size="l",
           fluidRow(
             column(12, 
-              HTML(paste0("<p>You are about to clear the application's local storage at: <p style=\"color:red\">", getwd(), "/www/tmp/</p>This action cannot be undone. Continue?</p>")),
+              HTML(paste0("<p>You are about to clear the application's local storage at: <p class=\"text-danger\">", getwd(), "/www/tmp/</p>This action cannot be undone. Continue?</p>")),
               column(6, actionButton(inputId="clearCacheButtonConfirm", label="Yes, clear the cache.") ),
               column(6, actionButton(inputId="clearCacheButtonCancel", label="Close") )
             )
@@ -489,7 +556,7 @@ shinyServer(function(input, output, session) {
       
       # Render confirmation text
       output$cacheConfirmation <- renderUI({
-        HTML(paste0("<div style=\"color:red;\">Cache cleared.</div>"))
+        HTML(paste0("<div class=\"text-danger\">Cache cleared.</div>"))
       })
     })
     
@@ -536,7 +603,7 @@ shinyServer(function(input, output, session) {
       
       # Render confirmation text
       output$searchDeleteAllConfirmation <- renderUI({
-        HTML(paste0("<div style=\"color:red;\">All records deleted.</div>"))
+        HTML(paste0("<div class=\"text-danger\">All records deleted.</div>"))
       })
     })
     
@@ -573,7 +640,7 @@ shinyServer(function(input, output, session) {
       if(length(selectedSets) < 1){
         shinyjs::show(id="warningSearchColumn")
         output$searchWarning <- renderUI({
-          HTML(paste0("<div style=\"color:red;\">Error: No requests selected.</div>"))
+          HTML(paste0("<div class=\"text-danger\">Error: No requests selected.</div>"))
         })
       } else {
         showModal(
@@ -583,7 +650,7 @@ shinyServer(function(input, output, session) {
             size="l",
             fluidRow(
               column(12, 
-                     HTML(paste0("<p>You are about to delete the records of the following requests:<br><div style=\"color:red;\">", paste0(selectedSets, collapse="<br>"), "</div><br>This action cannot be undone. Continue?</p>")),
+                     HTML(paste0("<p>You are about to delete the records of the following requests:<br><div class=\"text-danger\">", paste0(selectedSets, collapse="<br>"), "</div><br>This action cannot be undone. Continue?</p>")),
                      column(6, actionButton(inputId="searchDeleteSelectedConfirm", label="Yes, delete the selected records.") ),
                      column(6, actionButton(inputId="searchDeleteSelectedCancel", label="Close") )
               )
@@ -608,7 +675,7 @@ shinyServer(function(input, output, session) {
       
       # Render confirmation text
       output$searchDeleteSelectedConfirmation <- renderUI({
-        HTML(paste0("<div style=\"color:red;\">Selected records deleted.</div>"))
+        HTML(paste0("<div class=\"text-danger\">Selected records deleted.</div>"))
       })
     })
     
@@ -632,11 +699,11 @@ shinyServer(function(input, output, session) {
     resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="ping")
     if(resp$status_code != 200) {
       output$apiConnection <- renderUI({
-        HTML(paste0("<div style=\"color:red;\">Could not connect to Tox21 Enricher server!</div>"))
+        HTML(paste0("<div class=\"text-danger\">Could not connect to Tox21 Enricher server!</div>"))
       })
     } else {
       output$apiConnection <- renderUI({
-        HTML(paste0("<div style=\"color:green;\">Connection with Tox21 Enricher server successfully established.</div>"))
+        HTML(paste0("<div class=\"text-success\">Connection with Tox21 Enricher server successfully established.</div>"))
       })
     }
     
@@ -720,7 +787,7 @@ shinyServer(function(input, output, session) {
         names(classCTD) <- lapply(1:length(classCTD), function(x){
           # Show warning for CTD_GOFAT_BIOPROCESS
           if(classCTD[[x]] == "CTD_GOFAT_BIOPROCESS"){
-            return("CTD_GOFAT_BIOPROCESS (Very slow, unchecked by default)")
+            return(paste0("CTD_GOFAT_BIOPROCESS (Very slow, unchecked by default)"))
           } else {
             return(classCTD[[x]])
           }
@@ -736,30 +803,40 @@ shinyServer(function(input, output, session) {
 
         # Render checkboxes for each annotation class
         column(12,
-            tabsetPanel(id="annotationClasses", type="pills",
+            tabsetPanel(id="annotationClasses",
                 tabPanel("PubChem Compound Annotations", 
                   fluidRow(
-                    extendedCheckboxGroupInput("checkboxPubChem", "PubChem Compound Annotations", choices=classPubChem, selected=classPubChem, extensions=ttPubChem)
+                    column(12,
+                      extendedCheckboxGroupInput("checkboxPubChem", "PubChem Compound Annotations", choices=classPubChem, selected=classPubChem, extensions=ttPubChem)
+                    )
                   )
                 ),
                 tabPanel("DrugMatrix Annotations",
                   fluidRow(
-                    extendedCheckboxGroupInput("checkboxDrugMatrix", "DrugMatrix Annotations", choices=classDrugMatrix, selected=classDrugMatrix, extensions=ttDrugMatrix)
+                    column(12,
+                      extendedCheckboxGroupInput("checkboxDrugMatrix", "DrugMatrix Annotations", choices=classDrugMatrix, selected=classDrugMatrix, extensions=ttDrugMatrix)
+                    )
                   )
                 ),
                 tabPanel("DrugBank Annotations",
                   fluidRow(
-                    extendedCheckboxGroupInput("checkboxDrugBank", "DrugBank Annotations", choices=classDrugBank, selected=classDrugBank, extensions=ttDrugBank)
+                    column(12,
+                      extendedCheckboxGroupInput("checkboxDrugBank", "DrugBank Annotations", choices=classDrugBank, selected=classDrugBank, extensions=ttDrugBank)
+                    )
                   )
                 ),
                 tabPanel("CTD Annotations",
                   fluidRow(
-                    extendedCheckboxGroupInput("checkboxCTD", "CTD Annotations", width="500px", choices=classCTD, selected=classCTDSelected, extensions=ttCTD)
+                    column(12,
+                      extendedCheckboxGroupInput("checkboxCTD", "CTD Annotations", width="500px", choices=classCTD, selected=classCTDSelected, extensions=ttCTD)
+                    )
                   )
                 ),
                 tabPanel("Other Annotations",
                   fluidRow(
-                    extendedCheckboxGroupInput("checkboxOther", "Other Annotations", choices=classOther, selected=classOther, extensions=ttOther)
+                    column(12,
+                      extendedCheckboxGroupInput("checkboxOther", "Other Annotations", choices=classOther, selected=classOther, extensions=ttOther)
+                    )
                   )
                 )
             )
@@ -968,7 +1045,8 @@ shinyServer(function(input, output, session) {
                DT::datatable({waitingData}, 
                              escape = FALSE,
                              rownames = FALSE,
-                             class = "row-border stripe compact"
+                             class = "row-border stripe compact",
+                             style = "bootstrap"
                )
         )
       )
@@ -1650,7 +1728,8 @@ shinyServer(function(input, output, session) {
                  DT::datatable({waitingData}, 
                                escape = FALSE,
                                rownames = FALSE,
-                               class = "row-border stripe compact"
+                               class = "row-border stripe compact",
+                               style = "bootstrap"
                  )
           )
         )
@@ -1761,7 +1840,7 @@ shinyServer(function(input, output, session) {
         
         if(checkIfQueueFile == FALSE){
           # If it is not, print warning to UI
-          output$results_error_box <- renderText(paste0("Your request has not completed yet. Please wait for it to complete before accessing results."))
+          output$results_error_box <- renderUI(HTML(paste0("<div class=\"text-danger\">Your request has not completed yet. Please wait for it to complete before accessing results.</div>")))
         } else {
           # Else if done, get results
           #future({
@@ -1821,8 +1900,8 @@ shinyServer(function(input, output, session) {
       # Show error message on main page
       shinyjs::show(id="errorBox")
       
-      output$error_box <- renderText({
-        paste0("Request cancelled.")
+      output$error_box <- renderUI({
+        HTML(paste0("<div class=\"text-danger\">Request cancelled.</div>"))
       })
       
       # Query the API to cancel enrichment
@@ -2389,7 +2468,17 @@ shinyServer(function(input, output, session) {
                             ),
                             # Main heatmap per set
                             fluidRow(
-                              plot_ly(x = gctAnnoNames, y = gctCASRNNames, z = gctFileMatrix, colors = colorRamp(c("white", "red")), type="heatmap", xgap=2, ygap=2 ) %>% layout(autosize=TRUE, showlegend=FALSE, margin = list(r=200, b=200), xaxis=list(title="<b>Annotations</b>", tickfont=list(size=9), tickangle=15, automargin=TRUE), yaxis=list(title="<b>Input CASRNs</b>", type="category", automargin=TRUE)) %>% hide_colorbar()
+                              plot_ly(x = gctAnnoNames, y = gctCASRNNames, z = gctFileMatrix, colors = colorRamp(c("white", "red")), type="heatmap", xgap=2, ygap=2 ) %>% 
+                                layout(
+                                  autosize=TRUE, 
+                                  showlegend=FALSE, 
+                                  margin = list(r=200, b=200), 
+                                  xaxis=list(title="<b>Annotations</b>", tickfont=list(size=9), tickangle=15, automargin=TRUE), 
+                                  yaxis=list(title="<b>Input CASRNs</b>", type="category", automargin=TRUE),
+                                  plot_bgcolor="transparent",
+                                  paper_bgcolor="transparent",
+                                  font=list(color=theme$textcolor)
+                                ) %>% hide_colorbar()
                             ),
                             hr(),
                             fluidRow(
@@ -2721,6 +2810,7 @@ shinyServer(function(input, output, session) {
                           escape = FALSE, 
                           class = "row-border stripe compact",
                           rownames = FALSE,
+                          style = "bootstrap",
                           options = list( 
                             paging=TRUE,
                             preDrawCallback = JS('function() { Shiny.unbindAll(this.api().table().node()); }'), 
@@ -2745,7 +2835,7 @@ shinyServer(function(input, output, session) {
                   fluidRow(
                     h3("Adjust Network Node Cutoff"),
                     bsTooltip(id="nodeCutoffRe", title="This will determine the maximum number of results per data set and may affect how many nodes are generated during network generation. (default = 10). Higher values may cause the enrichment process to take longer (Not available when viewing annotations for Tox21 chemicals).", placement="right", trigger="hover"),
-                    sliderInput(inputId = "nodeCutoffRe", label="Re-enrichment Cutoff", value=10, min=1, max=100,step=1)
+                    sliderInput(inputId = "nodeCutoffRe", label="Re-enrichment Cutoff", value=10, min=1, max=100, step=1, width="100%")
                     
                   ),
                   hr()
@@ -2775,7 +2865,7 @@ shinyServer(function(input, output, session) {
                       #if(length(unlist(warningList$warnings, recursive=FALSE)) > 0){
                       if(length(unlist(warningList$warnings[[i]], recursive=FALSE)) > 0){
                         if(mode != "casrn" | (originalEnrichMode == "substructure" | originalEnrichMode == "similarity")) {
-                          actionButton("selectAllWarningsReenrichButton", HTML("<div style=\"color:red\">Deselect All Chemicals with Warnings</div>"))
+                          actionButton("selectAllWarningsReenrichButton", HTML("<div class=\"text-danger\">Deselect All Chemicals with Warnings</div>"))
                         }
                       }
                     )
@@ -2967,7 +3057,15 @@ shinyServer(function(input, output, session) {
           output[["chartHeatmap"]] <- renderUI(
               fluidRow(
                 tabsetPanel(
-                  tabPanel("Chart Heatmap", plot_ly(x = gctCASRNNamesChart, y = gctAnnoNamesChart, z = gctFileChartMatrix, colors = colorRamp(c("white", "red")), type="heatmap", xgap=2, ygap=2, colorbar=list(title=list(text='<b>-log<sub>10</sub> (BH P-value)</b>'))) %>% layout(margin = list(l = 300, r = 200, b = 160), xaxis=list(title="<b>Annotations</b>", tickfont=list(size=9), tickangle=15), yaxis=list(title="<b>Input Sets</b>", type="category"))), 
+                  tabPanel("Chart Heatmap", plot_ly(x = gctCASRNNamesChart, y = gctAnnoNamesChart, z = gctFileChartMatrix, colors = colorRamp(c("white", "red")), type="heatmap", xgap=2, ygap=2, colorbar=list(title=list(text='<b>-log<sub>10</sub> (BH P-value)</b>'))) %>% 
+                             layout(
+                               margin = list(l = 300, r = 200, b = 160), 
+                               xaxis=list(title="<b>Annotations</b>", tickfont=list(size=9), tickangle=15), 
+                               yaxis=list(title="<b>Input Sets</b>", type="category"),
+                               plot_bgcolor="transparent",
+                               paper_bgcolor="transparent",
+                               font=list(color=theme$textcolor)
+                              )), 
                   tabPanel("Chart Network", 
                     fluidRow(
                       column(3, 
@@ -2990,7 +3088,15 @@ shinyServer(function(input, output, session) {
           output[["clusterHeatmap"]] <- renderUI(
               fluidRow(
                 tabsetPanel(
-                  tabPanel("Cluster Heatmap", plot_ly(x = gctCASRNNamesCluster, y = gctAnnoNamesCluster, z = gctFileClusterMatrix, colors = colorRamp(c("white", "red")), type="heatmap", xgap=2, ygap=2, colorbar=list(title=list(text='<b>-log<sub>10</sub> (BH P-value)</b>'))) %>% layout(margin = list(l = 300, r = 200, b = 160), xaxis=list(title="<b>Annotation Clusters</b>", tickfont=list(size=9), tickangle=15), yaxis=list(title="<b>Input Sets</b>", type="category"))),
+                  tabPanel("Cluster Heatmap", plot_ly(x = gctCASRNNamesCluster, y = gctAnnoNamesCluster, z = gctFileClusterMatrix, colors = colorRamp(c("white", "red")), type="heatmap", xgap=2, ygap=2, colorbar=list(title=list(text='<b>-log<sub>10</sub> (BH P-value)</b>'))) %>% 
+                             layout(
+                               margin = list(l = 300, r = 200, b = 160), 
+                               xaxis=list(title="<b>Annotation Clusters</b>", tickfont=list(size=9), tickangle=15), 
+                               yaxis=list(title="<b>Input Sets</b>", type="category"),
+                               plot_bgcolor="transparent",
+                               paper_bgcolor="transparent",
+                               font=list(color=theme$textcolor)
+                              )),
                   tabPanel("Cluster Network", 
                     fluidRow(
                       column(3, 
@@ -3212,7 +3318,7 @@ shinyServer(function(input, output, session) {
       
       if(selectAllWarningsReenrichButtonStatus$option == "select") { # Selecting
         selectAllWarningsReenrichButtonStatus$option = "deselect"
-        updateActionButton(session, "selectAllWarningsReenrichButton", label="<div style=\"color:red\">Deselect All Chemicals with Warnings</div>")
+        updateActionButton(session, "selectAllWarningsReenrichButton", label="<div class=\"text-danger\">Deselect All Chemicals with Warnings</div>")
         for (i in checkboxList$checkboxes) {
           for(j in names(i)){
             if(j %in% chemicalsWithWarningsList){
@@ -3223,7 +3329,7 @@ shinyServer(function(input, output, session) {
         }
       } else { # Deselecting
         selectAllWarningsReenrichButtonStatus$option = "select"
-        updateActionButton(session, "selectAllWarningsReenrichButton", label="<div style=\"color:red\">Select All Chemicals with Warnings</div>")
+        updateActionButton(session, "selectAllWarningsReenrichButton", label="<div class=\"text-danger\">Select All Chemicals with Warnings</div>")
         for (i in checkboxList$checkboxes) {
           for(j in names(i)){
             if(j %in% chemicalsWithWarningsList){
@@ -3251,11 +3357,11 @@ shinyServer(function(input, output, session) {
       resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="generateNetwork", query=list(transactionId=transactionId, cutoff=cutoff, mode=networkMode, input=inputNetwork, qval=qval))
       #TODO: error check
       if(resp$status_code != 200){
-        return(HTML("<p style=\"color:red\"><b>Error:</b> An error occurred while generating the network.</p>"))
+        return(HTML("<p class=\"text-danger\"><b>Error:</b> An error occurred while generating the network.</p>"))
       }
       
       if(length(content(resp)) == 0){
-        return(HTML("<p style=\"color:red\"><b>Error:</b> The generated network has zero nodes.</p>"))
+        return(HTML("<p class=\"text-danger\"><b>Error:</b> The generated network has zero nodes.</p>"))
       }
       
       outpNetwork <- t(sapply(content(resp), function(x){
@@ -3346,7 +3452,7 @@ shinyServer(function(input, output, session) {
       output$chartNetwork <- renderUI(div())
       #TODO: error handle no results
       if(length(input$chartNetworkChoices) == 0){
-        output$chartNetwork <- renderUI(HTML("<p style=\"color:red\"><b>Error:</b> No input sets selected.</p>"))
+        output$chartNetwork <- renderUI(HTML("<p class=\"text-danger\"><b>Error:</b> No input sets selected.</p>"))
       } else {
         chartFullNetwork <- generateNetwork(transactionId=reactiveTransactionId$id, cutoff=input$nodeCutoffRe, networkMode="chart", inputNetwork=input$chartNetworkChoices, qval=input$chartqval)
         # Render networks
@@ -3360,7 +3466,7 @@ shinyServer(function(input, output, session) {
       output$clusterNetwork <- renderUI(div())
       #TODO: error handle no input sets
       if(length(input$clusterNetworkChoices) == 0){
-        output$clusterNetwork <- renderUI(HTML("<p style=\"color:red\"><b>Error:</b> No input sets selected.</p>"))
+        output$clusterNetwork <- renderUI(HTML("<p class=\"text-danger\"><b>Error:</b> No input sets selected.</p>"))
       } else {
         clusterFullNetwork <- generateNetwork(transactionId=reactiveTransactionId$id, cutoff=input$nodeCutoffRe, networkMode="cluster", inputNetwork=input$clusterNetworkChoices, qval=input$clusterqval)
         # Render networks
@@ -3543,7 +3649,10 @@ shinyServer(function(input, output, session) {
             margin = list(l = 300, r = 200, b = 160), 
             xaxis=list(title="<b>-log<sub>10</sub> (P-value)</b>", tickfont=list(size=12)), # TODO: need to invert p-value
             yaxis=list(title="<b>Annotation Terms</b>", type="category"),
-            barmode="group"
+            barmode="group",
+            plot_bgcolor="transparent",
+            paper_bgcolor="transparent",
+            font=list(color=theme$textcolor)
           )
           
           # Remove first input set since we have already plotted it

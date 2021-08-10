@@ -2,15 +2,6 @@ default:
   # API server config
   tox21enricher:
     ### Database information for connecting to Postgres database ###
-    ### REMOTE ###
-    #driver: 'Postgres'
-    #server: 'hurlab.med.und.edu:5432/tox21enricher'
-    #host: 'hurlab.med.und.edu'
-    #uid: 'username'
-    #pwd: "password"
-    #port: 5432
-    #database: 'tox21enricher'
-    ### LOCAL ###
     driver: 'Postgres'
     server: '127.0.0.1:5432/tox21enricher'
     host: 'localhost'
@@ -25,15 +16,6 @@ default:
     appdir: "/home/username/tox21enricher/"
   tox21enricher-queue:
     ### Database information for connecting to Postgres database ###
-    ### REMOTE ###
-    #driver: 'Postgres'
-    #server: '127.0.0.1:8001/tox21enricher'
-    #host: 'localhost'
-    #uid: 'username'
-    #pwd: "password"
-    #port: 8001
-    #database: 'tox21enricher'
-    ### LOCAL ###
     driver: 'Postgres'
     server: '127.0.0.1:5432/tox21enricher'
     host: 'localhost'
