@@ -423,10 +423,9 @@ shinyServer(function(input, output, session) {
       }
     })
     
-
-    
     # Open settings modal menu
     observeEvent(input$settingsButton, {
+      
       showModal(
         modalDialog(
           title="Settings",
@@ -438,70 +437,6 @@ shinyServer(function(input, output, session) {
               actionButton(inputId="clearCacheButton", label="Clear Local Cache", icon=icon("trash")),
               br(),
               p("This will clear the Tox21 Enricher client application's local storage and delete files like enrichment results and the manual. These files will have to be redownloaded in the future. This cannot be undone.")       
-            )
-          ),
-          
-          fluidRow(
-            column(12, 
-              h4("Change Theme"),
-
-              column(12, checkboxInput(inputId="changeThemeToggle", label=HTML(paste0("Dark Theme ", icon("moon"))))),
-
-              # vvv solution from here: https://stackoverflow.com/questions/61632272/r-shiny-light-dark-mode-switch vvv
-              tags$script(
-                "
-                // define css theme filepaths
-                const themes = {
-                    dark: 'css/tox21enricher-dark.css',
-                    light: 'css/tox21enricher-light.css'
-                }
-        
-                // function that creates a new link element
-                function newLink(theme) {
-                    let el = document.createElement('link');
-                    el.setAttribute('rel', 'stylesheet');
-                    el.setAttribute('text', 'text/css');
-                    el.setAttribute('href', theme);
-                    return el;
-                }
-        
-                // function that remove <link> of current theme by href
-                function removeLink(theme) {
-                    let el = document.querySelector(`link[href='${theme}']`)
-                    return el.parentNode.removeChild(el);
-                }
-        
-                // define vars
-                const darkTheme = newLink(themes.dark);
-                const lightTheme = newLink(themes.light);
-                const head = document.getElementsByTagName('head')[0];
-                const toggle = document.getElementById('changeThemeToggle');
-        
-                // define extra css and add as default
-                const extraDarkThemeCSS = '.dataTables_length label, .dataTables_filter label, .dataTables_info {       color: white!important;} .paginate_button { background: white!important;} thead { color: white;}'
-                const extraDarkThemeElement = document.createElement('style');
-                extraDarkThemeElement.appendChild(document.createTextNode(extraDarkThemeCSS));
-                head.appendChild(extraDarkThemeElement);
-        
-        
-                // define event - checked === 'light'
-                toggle.addEventListener('input', function(event) {
-                    // if checked, switch to dark theme
-                    if (toggle.checked) {
-                        removeLink(themes.light);
-                        head.appendChild(extraDarkThemeElement)
-                        head.appendChild(darkTheme);
-                        
-                    }  else {
-                        // else add light theme
-                        removeLink(themes.dark);
-                        head.removeChild(extraDarkThemeElement);
-                        head.appendChild(lightTheme);
-                    }
-                })
-                "
-              )
-              
             )
           ),
           
@@ -519,6 +454,9 @@ shinyServer(function(input, output, session) {
       } else { # light
         theme$textcolor <- "#000000"
       }
+      # change stylesheet
+      js$toggleTheme()
+      
     })
     
     # Clear cache when button is pressed

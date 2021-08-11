@@ -14,21 +14,81 @@ js_code <- "
         }
       "
 
+# Theme toggle js
+# vvv solution from here: https://stackoverflow.com/questions/61632272/r-shiny-light-dark-mode-switch vvv
+#tags$script(
+js_theme <-  "
+        shinyjs.toggleTheme = function() {
+        
+                // define css theme filepaths
+                const themes = {
+                    dark: 'css/tox21enricher-dark.css',
+                    light: 'css/tox21enricher-light.css'
+                }
+
+                // function that creates a new link element
+                function newLink(theme) {
+                    let el = document.createElement('link');
+                    el.setAttribute('rel', 'stylesheet');
+                    el.setAttribute('text', 'text/css');
+                    el.setAttribute('href', theme);
+                    return el;
+                }
+        
+                // function that remove <link> of current theme by href
+                function removeLink(theme) {
+                    let el = document.querySelector(`link[href='${theme}']`)
+                    return el.parentNode.removeChild(el);
+                }
+        
+                // define vars
+                const darkTheme = newLink(themes.dark);
+                const lightTheme = newLink(themes.light);
+                const head = document.getElementsByTagName('head')[0];
+                const toggle = document.getElementById('changeThemeToggle');
+        
+                // define extra css and add as default
+                const extraDarkThemeCSS = '.dataTables_length label, .dataTables_filter label, .dataTables_info {       color: white!important;} .paginate_button { background: white!important;} thead { color: white;}'
+                const extraDarkThemeElement = document.createElement('style');
+                extraDarkThemeElement.appendChild(document.createTextNode(extraDarkThemeCSS));
+                head.appendChild(extraDarkThemeElement);
+        
+        
+                // define event - checked === 'light'
+                toggle.addEventListener('input', function(event) {
+                  // if checked, switch to dark theme
+                  console.log('>> checking');
+                  console.log(toggle.checked);
+                  if (toggle.checked) {
+                      removeLink(themes.light);
+                      head.appendChild(extraDarkThemeElement);
+                      head.appendChild(darkTheme);
+                  }  else {
+                      // else add light theme
+                      removeLink(themes.dark);
+                      head.removeChild(extraDarkThemeElement);
+                      head.appendChild(lightTheme);
+                  }
+                })
+          }
+        "
+#),
+
 # Define UI for Tox21Enricher application
 shinyUI(fluidPage(
     # Theme
     theme = "css/tox21enricher-light.css",
-    #theme = "css/darkly.min.css",
-    
-    
+
     # Lang
     lang = "en",
     
+    # Set up clipboard copying
     rclipboardSetup(),
 
     # Application title
     title = "Tox21 Enricher",
     titlePanel("Tox21 Enricher"),
+    
 
     # Sidebar
     sidebarLayout(
@@ -36,8 +96,9 @@ shinyUI(fluidPage(
         sidebarPanel(width=2,
             useShinyjs(),
             extendShinyjs(text = js_code, functions = 'browseURL'),
+            extendShinyjs(text = js_theme, functions = 'toggleTheme'),
             #p("Please see this ", tags$a(href="docs/Tox21Enricher_Manual_v3.0.pdf", "link", target="_blank"), "for instructions on using this application and the descriptions about the chemical / biological categories. Other resources from the Tox21 toolbox can be viewed", tags$a(href="https://ntp.niehs.nih.gov/results/tox21/tbox/","here.")),
-            p("Welcome to Tox21 Enricher! Please see this ", actionLink(inputId="manualLink", label="link"), "for instructions on using this application and the descriptions about the chemical / biological categories. Other resources from the Tox21 toolbox can be viewed", tags$a(href="https://ntp.niehs.nih.gov/results/tox21/tbox/","here."), "A sufficiently robust internet connection is required to use all of this application's features."),
+            p("Welcome to Tox21 Enricher! Please see this ", actionLink(inputId="manualLink", label="link"), "for instructions on using this application and the descriptions about the chemical / biological categories. Other resources from the Tox21 toolbox can be viewed", tags$a(href="https://ntp.niehs.nih.gov/results/tox21/tbox/","here."), "A sufficiently robust internet connection and JavaScript are required to use all of this application's features."),
             # Display API connection status
             uiOutput("apiConnection"),
             # Display enrichment total count
@@ -46,6 +107,8 @@ shinyUI(fluidPage(
             actionButton(inputId="settingsButton", label="Settings", icon=icon("cog")),
             # Search enrichments button
             actionButton(inputId="searchButton", label="View Previous Enrichment", icon=icon("search")),
+            # Theme toggle
+            checkboxInput(inputId="changeThemeToggle", label=HTML(paste0(icon("moon"), " Dark Theme"))),
             # Enrichment type selection
             selectInput("enrich_from", h4("1) Select Enrichment Type"),
                         choices = list("User-Provided CASRN List" = "User-Provided CASRN List",
