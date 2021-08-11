@@ -1,4 +1,3 @@
-# tox21enricher
 <h1>Tox21 Enricher</h1>
 The Tox21 Enricher is a web application that is still currently under development. It performs PubChem enrichment analysis on a set or sets of chemicals included in the the Tox21 dataset and it is being created in collaboration with NIEHS as part of their suite of Tox21 tools.
 
