@@ -1950,6 +1950,11 @@ shinyServer(function(input, output, session) {
                          )
                        })))
                 )
+              ),
+              fluidRow(
+                column(12,
+                       actionButton(inputId="downloadButton", label="Download Results", icon=icon("download"))       
+                )
               )
             )
           })
@@ -2049,11 +2054,6 @@ shinyServer(function(input, output, session) {
                       )
                     }
                   })
-                ),
-                fluidRow(
-                  # Download results button
-                  #actionButton(inputId="downloadButton", label="Download Results", icon=icon("download"), onclick=paste0("window.open('", outDirWeb, "tox21enricher_", transactionId, ".zip', '_blank')"))
-                  actionButton(inputId="downloadButton", label="Download Results", icon=icon("download"))
                 )
               )
             )
@@ -2103,6 +2103,12 @@ shinyServer(function(input, output, session) {
                               )
                           })))
                       )
+                  ),
+                  fluidRow(
+                    column(12,
+                      # Download results button
+                      actionButton(inputId="downloadButton", label="Download Results", icon=icon("download"))
+                    )
                   ),
                   fluidRow(
                     column(12, 
@@ -2397,12 +2403,12 @@ shinyServer(function(input, output, session) {
                                       )
                                     }
                                 })  
-                              ),
-                              fluidRow(
-                                # Download results button
-                                #actionButton(inputId="downloadButton", label="Download Results", icon=icon("download"), onclick=paste0("window.open('", outDirWeb, "tox21enricher_", transactionId, ".zip', '_blank')"))
-                                actionButton(inputId="downloadButton", label="Download Results", icon=icon("download"))
-                              )
+                              )#,
+                              #fluidRow(
+                              #  # Download results button
+                              #  #actionButton(inputId="downloadButton", label="Download Results", icon=icon("download"), onclick=paste0("window.open('", outDirWeb, "tox21enricher_", transactionId, ".zip', '_blank')"))
+                              #  actionButton(inputId="downloadButton", label="Download Results", icon=icon("download"))
+                              #)
                             ),
                             # Main heatmap per set
                             fluidRow(
@@ -2773,7 +2779,7 @@ shinyServer(function(input, output, session) {
                   fluidRow(
                     h3("Adjust Network Node Cutoff"),
                     bsTooltip(id="nodeCutoffRe", title="This will determine the maximum number of results per data set and may affect how many nodes are generated during network generation. (default = 10). Higher values may cause the enrichment process to take longer (Not available when viewing annotations for Tox21 chemicals).", placement="right", trigger="hover"),
-                    sliderInput(inputId = "nodeCutoffRe", label="Re-enrichment Cutoff", value=10, min=1, max=100, step=1, width="100%")
+                    sliderInput(inputId = "nodeCutoffRe", label="Re-enrichment Cutoff", value=10, min=1, max=100, step=1, width="85%")
                     
                   ),
                   hr()
