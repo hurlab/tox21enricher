@@ -157,12 +157,13 @@ shinyServer(function(input, output, session) {
             enrichmentSets <- enrichDataRaw[1, 6]
             # original names <- 7
             # reenrichresults <- 8
-            submitTime <- enrichDataRaw[1, 9]
+            #colorsList <- enrichDataRaw[1, 9]
+            submitTime <- enrichDataRaw[1, 10]
             
             beginTime <- "not started"
             endTime <- "incomplete"
             print(ncol(enrichDataRaw))
-            if(ncol(enrichDataRaw) < 11){
+            if(ncol(enrichDataRaw) < 12){
               # Get timestamps for missing entries
               # Get ending timestamp to put in file
               resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="getTimestamp", query=list(transactionId=transactionId))
@@ -186,8 +187,8 @@ shinyServer(function(input, output, session) {
               }
 
             } else {
-              beginTime <- enrichDataRaw[1, 10]
-              endTime <- enrichDataRaw[1, 11]  
+              beginTime <- enrichDataRaw[1, 11]
+              endTime <- enrichDataRaw[1, 12]  
             }
             
             cleanedMode <- ""
@@ -327,15 +328,20 @@ shinyServer(function(input, output, session) {
         setToFetch <- selectedSets[1]
   
         params <- read.table(paste0("./www/tmp/transaction/", setToFetch), sep="\t", comment.char="", stringsAsFactors = FALSE)
+        
+        print("=================================================")
+        print(params)
+        print("=================================================")
   
         originalMode <- params[1, 1]
         mode <- params[1, 2]
         transactionId <- params[1, 3]
         annoSelectStr <- params[1, 4]
         nodeCutoff <- params[1, 5]
+        colorsList <- params[1, 9]
         
         # Check if request has actually finished yet
-        if(length(params) < 11){
+        if(length(params) < 12){
           beginTime <- NULL
           endTime <- NULL
           # Get timestamps for missing entries - check if enrichment has completed
@@ -415,10 +421,22 @@ shinyServer(function(input, output, session) {
           names(reenrichResults) <- reenrichResultsNames
         }
         
+        # Get colors list
+        colorsList <- unlist(str_split(colorsList, "\\|"))
+        colorsListSetNames <- lapply(colorsList, function(x){
+          unlist(str_split(x, "__"))[1]
+        })
+        colorsListSetItems <- lapply(colorsList, function(x){
+          unlist(str_split(x, "__"))[2]
+        })
+        colorsList <- colorsListSetItems
+        names(colorsList) <- colorsListSetNames
+        colorsList <- unlist(colorsList)
+        
         shinyjs::hide(id = "searchForm")
         shinyjs::disable(id = "searchForm")
         future({
-          enrichmentResults(mode, transactionId, annoSelectStr, nodeCutoff, enrichmentSets, originalNames, reenrichResults, originalMode)
+          enrichmentResults(mode, transactionId, annoSelectStr, nodeCutoff, enrichmentSets, originalNames, reenrichResults, originalMode, colorsList)
         })
       }
     })
@@ -1537,13 +1555,19 @@ shinyServer(function(input, output, session) {
         # Get submission timestamp to put in file
         beginTime <- Sys.time()
         
+        # Clean up colors to put into local file
+        colorsToPrint <- lapply(1:length(colorsAllSets), function(i){
+          paste0(names(colorsAllSets)[i], "__", colorsAllSets[i])
+        })
+        colorsToPrint <- paste0(colorsToPrint, collapse="|")
+
         
         # Write local info file so we can reference this request later
         file.create(paste0(tmpDir, transactionId))
         tmpLocalFile <- file(paste0(tmpDir, transactionId), open="wb")
         #tmpLocalFile <- paste0(tmpDir, transactionId)
         #writeLines(paste0(originalEnrichModeList$originalEnrichMode, "\t", enrichmentType$enrichType, "\t", transactionId, "\t", annoSelectStr, "\t", input$nodeCutoff, "\t", enrichmentSetsSanitizedLocal, "\t", paste0(originalNamesList$originalNames, collapse="|"), "\t", paste0(reenrichResultsSanitized, collapse="|"), "\t", beginTime), tmpLocalFile)
-        fileContents <- paste0(originalEnrichModeList$originalEnrichMode, "\t", enrichmentType$enrichType, "\t", transactionId, "\t", annoSelectStr, "\t", input$nodeCutoff, "\t", enrichmentSetsSanitizedLocal, "\t", paste0(originalNamesList$originalNames, collapse="|"), "\t", paste0(reenrichResultsSanitized, collapse="|"), "\t", beginTime)
+        fileContents <- paste0(originalEnrichModeList$originalEnrichMode, "\t", enrichmentType$enrichType, "\t", transactionId, "\t", annoSelectStr, "\t", input$nodeCutoff, "\t", enrichmentSetsSanitizedLocal, "\t", paste0(originalNamesList$originalNames, collapse="|"), "\t", paste0(reenrichResultsSanitized, collapse="|"), "\t", colorsToPrint, "\t", beginTime)
         cat(fileContents, file=tmpLocalFile)
         
         #close(tmpLocalFile)
@@ -1853,7 +1877,7 @@ shinyServer(function(input, output, session) {
     })
     
     #enrichmentResults <- function(mode, transactionId, annoSelectStr, cutoff){
-    enrichmentResults <- function(mode, transactionId, annoSelectStr, cutoff, enrichmentSets, originalNames, reenrichResults, originalEnrichMode){
+    enrichmentResults <- function(mode, transactionId, annoSelectStr, cutoff, enrichmentSets, originalNames, reenrichResults, originalEnrichMode, colorsList){
       
         # Update cache file for completed enrichment
         # Create local file so we can reference later
@@ -1926,6 +1950,13 @@ shinyServer(function(input, output, session) {
         # Get original enrich mode
         if(is.null(originalEnrichModeList$originalEnrichMode) == FALSE){
           originalEnrichMode <- originalEnrichModeList$originalEnrichMode
+        }
+        
+        # Get colors
+        if(is.null(setColors$color) == FALSE){
+          colorsList <- setColors$color
+        } else {
+          setColors$color <- colorsList
         }
 
         # Get directories
@@ -2088,7 +2119,7 @@ shinyServer(function(input, output, session) {
           
           # Choice names for radio buttons
           radioNames <- lapply(names(enrichmentSets), function(setName){
-            return( HTML(paste0("<div style='width:100%;height:20px;background-color:", setColors$color[setName], "'>",  setName, "</div>")) )
+            return( HTML(paste0("<div style='width:100%;height:20px;background-color:", colorsList[setName], "'>",  setName, "</div>")) )
           })
           
           output$resultsTabset <- renderUI({
@@ -3168,9 +3199,9 @@ shinyServer(function(input, output, session) {
           
           bgChartFullReactive$bgChartFull <- bgChartFull
           bgChartAllCategoriesReactive$bgChartAllCategories <- bgChartAllCategories
-
+          
           # For each unique class name, render a bar plot
-          createBargraph(bgChartFull=bgChartFull, bgChartAllCategories=bgChartAllCategories, orderSet=names(enrichmentSets)[1])
+          createBargraph(bgChartFull=bgChartFull, bgChartAllCategories=bgChartAllCategories, orderSet=names(enrichmentSets)[1], colorsList=colorsList)
           
         }
         
@@ -3287,7 +3318,7 @@ shinyServer(function(input, output, session) {
     
     # Re-order bar graphs with respect to given input set
     observeEvent(input$updateBargraphButton, {
-      createBargraph(bgChartFull=bgChartFullReactive$bgChartFull, bgChartAllCategories=bgChartAllCategoriesReactive$bgChartAllCategories, orderSet=input$radioBargraph)
+      createBargraph(bgChartFull=bgChartFullReactive$bgChartFull, bgChartAllCategories=bgChartAllCategoriesReactive$bgChartAllCategories, orderSet=input$radioBargraph, colorsList=setColors$color)
     })
     
     # Shared code to create networks
@@ -3554,7 +3585,8 @@ shinyServer(function(input, output, session) {
     }
     
     # Generate bargraphs
-    createBargraph <- function(bgChartFull=bgChartFull, bgChartAllCategories=bgChartAllCategories, orderSet){
+    createBargraph <- function(bgChartFull=bgChartFull, bgChartAllCategories=bgChartAllCategories, orderSet, colorsList){
+      
       output[["bargraph"]] <- renderUI(
         do.call(tabsetPanel, c(id="pvaluetab", lapply(bgChartAllCategories, function(catName){
           tmpBgNames <- unique(unlist(unname(lapply(bgChartFull[[catName]], function(x){
@@ -3587,7 +3619,7 @@ shinyServer(function(input, output, session) {
             y = tmpBgNames, # term names
             name = names(tmpBgCleaned)[1],
             type = "bar",
-            marker = list(color = setColors$color[names(tmpBgCleaned[1])])
+            marker = list(color = colorsList[names(tmpBgCleaned[1])])
           ) %>% layout(
             title = catName,
             margin = list(l = 300, r = 200, b = 160), 
@@ -3598,14 +3630,18 @@ shinyServer(function(input, output, session) {
             paper_bgcolor="transparent",
             font=list(color=theme$textcolor)
           )
-          
+
           # Remove first input set since we have already plotted it
           tmpBgCleaned <- tmpBgCleaned[-1]
-          
+
           # Add additional plots to bar graph if more than 1 valid input set
           if(length(tmpBgCleaned) > 0){
             for(i in 1:length(tmpBgCleaned)){
-              bgDisplay <- bgDisplay %>% add_trace(x = tmpBgCleaned[[i]], name = names(tmpBgCleaned)[i], marker = list(color = setColors$color[names(tmpBgCleaned[i])])  )
+              
+              print("THIS ===")
+              print(colorsList[names(tmpBgCleaned[i])])
+              
+              bgDisplay <- bgDisplay %>% add_trace(x = tmpBgCleaned[[i]], name = names(tmpBgCleaned)[i], marker = list(color = colorsList[names(tmpBgCleaned[i])])  )
             }
           }
           return(tabPanel(title=catName, bgDisplay))
