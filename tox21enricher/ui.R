@@ -147,8 +147,11 @@ shinyUI(fluidPage(
                 # Annotation selection
                 fluidRow(
                     h3("2) ", "Select Chemical/Biological Annotation Categories"),
-                    column(6,
+                    column(2,
                         actionButton("select_all_annotations", "Deselect All")
+                    ),
+                    column(10,
+                        HTML("<p><b>Note</b>: Selecting no annotation categories will cause enrichment to just use the default categories.</p>")
                     ),
                 ),
                 fluidRow(

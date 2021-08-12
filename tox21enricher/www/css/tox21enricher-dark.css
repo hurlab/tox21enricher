@@ -3706,6 +3706,8 @@ tbody.collapse.in {
   border-left: 4px solid transparent;
 }
 
+
+
 .dt-button-info {
   background-color: #222222;
   border: #464545;
@@ -4915,10 +4917,19 @@ fieldset[disabled] .navbar-inverse .btn-link:focus {
 .breadcrumb > .active {
   color: #777777;
 }
+
+.table.dataTable,
+table.dataTable
+th, table.dataTable td {
+  box-sizing: content-box;
+
+}
+
 .table.dataTable tbody td.active, .table.dataTable tbody tr.active td {
   color: #fff;
   background-color: #0ce3ac;
 }
+
 .pagination {
   display: inline-block;
   padding-left: 0;
@@ -5021,6 +5032,8 @@ fieldset[disabled] .navbar-inverse .btn-link:focus {
 .dataTables_paginate {
   color: #303030;
 }
+
+
 
 .shiny-input-container {
   color: #fff;

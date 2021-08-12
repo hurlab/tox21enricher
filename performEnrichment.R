@@ -767,7 +767,6 @@ createInput <- function(res, req, transactionId, enrichmentSets, setNames, mode,
   
     # Create input set txt for enrichment
     for (i in names(enrichmentSets)) {
-      inFile <- file(paste0(inDir, i, ".txt"))
       outString <- ""
       for (j in enrichmentSets[[i]]) {
         query <- sqlInterpolate(ANSI(), paste0("SELECT testsubstance_chemname FROM chemical_detail WHERE CASRN LIKE '", j, "';"), id = j)
@@ -776,8 +775,12 @@ createInput <- function(res, req, transactionId, enrichmentSets, setNames, mode,
           outString <- paste0(outString, j, "\t", outp, "\n\n")
         }
       }
-      writeLines(outString,inFile)
-      close(inFile)
+      # Only write if there are matching chemicals (don't create input files for empty sets)
+      if(nchar(outString) > 0){
+        inFile <- file(paste0(inDir, i, ".txt"))
+        writeLines(outString,inFile)
+        close(inFile) 
+      }
     }
     poolClose(poolInput)
     return(TRUE)
@@ -800,6 +803,19 @@ hasError <- function(res, req, transactionId){
     }
     return(FALSE)
   #})
+}
+
+#* Returns list of sets that are valid/existing for a given transaction
+#* @param transactionId UUID of the request
+#* @get /checkSets
+checkSets <- function(res, req, transactionId){
+  inputDir <- paste0(APP_DIR, "Input/")
+  inputFilesList <- Sys.glob(paste0(inputDir, transactionId, "/*.txt"))
+  inputFilesList <- unlist(lapply(inputFilesList, function(x){
+    x_lv1 <- gsub(paste0(inputDir, transactionId, "/"), "", x)
+    x_lv2 <- gsub(".txt", "", x_lv1)
+  }))
+  return(inputFilesList)
 }
 
 #* Check if enrichment process has terminated for given request

@@ -223,6 +223,7 @@ performEnrichment <- function(enrichmentUUID="-1", annoSelectStr="MESH=checked,P
   
   # Load input DSSTox ID or CASRN ID sets
   inputFiles <- list.files(path=paste0(APP_DIR, "Input/", enrichmentUUID), pattern="*.txt", full.names=TRUE)
+  
   # Throw error if no input sets
   if(length(inputFiles) < 1){
     #res$status = 500
@@ -243,8 +244,18 @@ performEnrichment <- function(enrichmentUUID="-1", annoSelectStr="MESH=checked,P
   ldf <- lapply(1:length(ldf), function(x){
     return(ldf[[x]])
   })
+  
+  # Assign names to ldf
+  inputFilesNames <- unlist(lapply(inputFiles, function(x){
+    x_lv1 <- gsub(paste0(APP_DIR, "Input/", enrichmentUUID, "/"), "", x)
+    x_lv2 <- gsub(".txt", "", x_lv1)
+  }))
+  names(ldf) <- inputFilesNames
   ldf <- ldf[!sapply(ldf, is.null)]
   
+  print(" ===== LDF ===== ")
+  print(ldf)
+
   # If there are no good input sets, crash gracefully. If we have at least one, 
   if(length(ldf) < 1){
     #res$status = 500
@@ -2742,15 +2753,6 @@ queue <- function(){
         annoSelectStr <- queueFile[1,3]
         nodeCutoff <- queueFile[1,4]
         
-        print("MODE")
-        print(mode)
-        print("enrichmentUUID")
-        print(enrichmentUUID)
-        print("annoSelectStr")
-        print(annoSelectStr)
-        print("nodeCutoff")
-        print(nodeCutoff)
-        
         # Query Plumber API
         resp <- NULL
         status_code <- 500
@@ -2785,7 +2787,7 @@ queue <- function(){
           file.create(paste0(queueDir, "error__", enrichmentUUID))
           errorFile <- file(paste0(queueDir, "error__", enrichmentUUID))
           #writeLines(paste0(content(resp, as="text")), errorFile)
-          writeLines(paste0("PLACEHOLDER ERROR"), errorFile)
+          writeLines(paste0(status_code), errorFile)
           close(errorFile)
           unlink(input)
         }

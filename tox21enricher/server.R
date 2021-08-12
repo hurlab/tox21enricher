@@ -305,14 +305,19 @@ shinyServer(function(input, output, session) {
       #  }
       #}
       selectedSets <- lapply(searchCheckboxes$checkboxes, function(i){
-        if(input[[i]] == TRUE) {
-          return(unlist(str_split(i, "__"))[2])
+
+        if(is.null(input[[i]]) == FALSE) {
+          if(input[[i]] == TRUE) {
+            return(unlist(str_split(i, "__"))[2])
+          } else {
+            return(NULL)
+          }
         } else {
           return(NULL)
         }
       })
       selectedSets <- selectedSets[!sapply(selectedSets, is.null)]
-      
+
       if(length(selectedSets) > 1){ # too many sets selected
         shinyjs::show(id="warningSearchColumn")
         output$searchWarning <- renderUI({
@@ -1066,7 +1071,18 @@ shinyServer(function(input, output, session) {
     
     # Perform CASRN enrichment analysis when submit button is pressed
     observeEvent(input$submit, {
-        performEnrichment(input$submitted_chemicals, reenrichFlag=FALSE)  
+      # First, check if user filled out text input form  
+      # Remove whitespace for checking
+      validatedInput <- gsub("\\s*", "", input$submitted_chemicals)
+      if(validatedInput == "") {
+        shinyjs::show(id="errorBox")
+        output$error_box <- renderUI({
+          HTML(paste0("<div class=\"text-danger\">Error: no input lines.</div>")) 
+        })
+        return(FALSE)
+      }
+      
+      performEnrichment(input$submitted_chemicals, reenrichFlag=FALSE)  
     })
     
     # Create reactive variable to store chemicals to re-enrich
@@ -1350,11 +1366,18 @@ shinyServer(function(input, output, session) {
                       
                       resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="substructure", query=list(input=setName, reenrich=FALSE))
                       print("resp")
-                      
+                      print("vvv")
+                      print(content(resp))
+
                       if(resp$status_code != 200){
                         return(NULL)
                       }
                       
+                      if(length(content(resp)) < 1){
+                        print("bad")
+                        return(NULL)
+                      }
+
                       outputSubCasrns <- unlist(lapply(content(resp), function(x){
                         return(x$casrn)
                       }))
@@ -1439,6 +1462,30 @@ shinyServer(function(input, output, session) {
         }
         
         if (enrichmentType$enrichType == "similarity" | enrichmentType$enrichType == "substructure") {
+          # Error if no good sets
+          if(length(unlist(reenrichResults, recursive=FALSE)) < 1){
+            # Hide original form when done with enrichment
+            shinyjs::show(id="enrichmentForm")
+            
+            # Disable changing input type when button is clicked
+            shinyjs::enable(id="enrich_from")
+            
+            # Show 'Restart' button, disable by default so user can't interfere with enrichment process
+            shinyjs::hide(id="refresh")
+            shinyjs::enable(id="refresh")
+            
+            # Hide loading spinner
+            shinyjs::hide(id="resultsContainer")
+            
+            # Show error message on main page
+            shinyjs::show(id="errorBox")
+            
+            output$error_box <- renderUI({
+              HTML(paste0("<div class=\"text-danger\">Error: no valid input sets.</div>"))
+            })
+            return(FALSE)
+          }
+          
           names(reenrichResults) <- unlist(lapply(1:length(casrnBoxSplit), function(i){
             return(paste0("Set", i))
           }))
@@ -1592,8 +1639,8 @@ shinyServer(function(input, output, session) {
           # Show error message on main page
           shinyjs::show(id="errorBox")
           
-          output$error_box <- renderText({
-            paste0("Error: problem creating input files for enrichment.")
+          output$error_box <- renderUI({
+            HTML(paste0("<div class=\"text-danger\">Error: problem creating input files for enrichment.</div>"))
           })
           
           return(FALSE)
@@ -1655,8 +1702,8 @@ shinyServer(function(input, output, session) {
           # Show error message on main page
           shinyjs::show(id="errorBox")
           
-          output$error_box <- renderText({
-            paste0("Error: ", content(resp, as="text"))
+          output$error_box <- renderUI({
+            HTML(paste0("<div class=\"text-danger\">Error: ", content(resp, as="text"), "</div>"))
           })
           
           return(FALSE)
@@ -1722,8 +1769,8 @@ shinyServer(function(input, output, session) {
           # Show error message on main page
           shinyjs::show(id="errorBox")
           
-          output$error_box <- renderText({
-            paste0("Error: ", errorFile)
+          output$error_box <- renderUI({
+            HTML(paste0("<div class=\"text-danger\">Error: ", errorFile, "</div>"))
           })
           return(FALSE)
         }
@@ -1778,8 +1825,8 @@ shinyServer(function(input, output, session) {
         shinyjs::enable(id="clipboard")
         shinyjs::enable(id="cancelEnrichment")
         
-        output$error_box <- renderText({
-          paste0("Error: ", unlist(content(resp)))
+        output$error_box <- renderUI({
+          HTML(paste0("<div class=\"text-danger\">Error: ", unlist(content(resp)), "</div>"))
         })
         
         return(FALSE)
@@ -1933,9 +1980,22 @@ shinyServer(function(input, output, session) {
           enrichmentSets <- enrichmentSetsList$enrichmentSets  
         }
         
-        print("enrichmentSets")
-        print(enrichmentSets)
-        print("^^^^")
+        # Check which enrichment sets are good
+        resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="checkSets", query=list(transactionId=transactionId))
+        #TODO: error check
+        if(resp$status_code != 200){
+          return(NULL)
+        }
+        
+        validatedSets <- unlist(content(resp))
+        enrichmentSets <- unlist(lapply(names(enrichmentSets), function(x){
+          if(x %in% validatedSets){
+            return(enrichmentSets[x])
+          } 
+          return(NULL)
+        }), recursive=FALSE)
+        
+        enrichmentSets <- enrichmentSets[!sapply(enrichmentSets, is.null)]
         
         #Get original names
         if(is.null(originalNamesList$originalNames) == FALSE){
@@ -2178,9 +2238,7 @@ shinyServer(function(input, output, session) {
                   
               )
           })
-          
-          
-          
+
           lapply(names(enrichmentSets), function(i) {
               
             print(paste0("NAME: ", i))      
@@ -2189,12 +2247,14 @@ shinyServer(function(input, output, session) {
                   resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="readGct", query=list(transactionId=transactionId, cutoff=cutoff, mode="set", set=i))
                   #TODO: error check
                   if(resp$status_code != 200){
-                    #return(NULL)
+                    return(NULL)
                   }
                   resp2 <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="getResults", query=list(transactionId=transactionId, setName=i))
                   
                   print(" ======================= content(resp) here =======================")
                   print(is.null(resp))
+                  print(resp$status_code)
+                  print(content(resp))
                   print("resp2")
                   print(content(resp2))
 
@@ -2478,8 +2538,7 @@ shinyServer(function(input, output, session) {
                   }
               }
           )
-        
-        
+
           # Render reenrichment if Substructure or Similarity
           #if (mode != "casrn") {
               reenrichResultsTotalLength <- length(unlist(lapply(names(reenrichResults), function(i){
@@ -2937,18 +2996,7 @@ shinyServer(function(input, output, session) {
             gctFileChartInner <- gctFileChartInner[!sapply(gctFileChartInner, is.null)]
             return(gctFileChartInner)
           })))
-          
-          print("gctFileChart 2 1")
-          print(gctFileChart)
-          
-          # If only 1 column (only 1 set has results), translate as R with coerce this into the wrong shape
-          #if(ncol(gctFileChart) > 1){
-          #  gctFileChart <- t(gctFileChart)
-          #}
-          
-          print("gctFileChart 2 2")
-          print(gctFileChart)
-          
+
           colnames(gctFileChart) <- gctFileChartColNames
           row.names(gctFileChart) <- gctFileChartRowNames
           gctFileChartMatrix <- data.matrix(gctFileChart)
@@ -2980,16 +3028,10 @@ shinyServer(function(input, output, session) {
           
           gctFileCluster<- data.frame(gctFileCluster)
           
-          print("gctFileCluster 1 1")
-          print(gctFileCluster)
-          
           if(ncol(gctFileCluster) > 1){
             gctFileCluster <- t(gctFileCluster)
           }
           
-          print("gctFileCluster 1 2")
-          print(gctFileCluster)
-
           gctFileClusterColNames <- unique(unlist(lapply(content(resp), function(x){
             gctFileClusterInner <- unlist(lapply(names(x), function(y) {
               if(y != "_row"){
@@ -3013,12 +3055,6 @@ shinyServer(function(input, output, session) {
             return(gctFileClusterInner)
           })))
           
-          # If only 1 column (only 1 set has results), translate as R with coerce this into the wrong shape
-          
-          #if(ncol(gctFileCluster) > 1){
-          #  gctFileCluster <- t(gctFileCluster)
-          #}
-          
           colnames(gctFileCluster) <- gctFileClusterColNames
           row.names(gctFileCluster) <- gctFileClusterRowNames
           gctFileClusterMatrix <- data.matrix(gctFileCluster)
@@ -3029,7 +3065,6 @@ shinyServer(function(input, output, session) {
           gctFileChartMatrix <- t(gctFileChartMatrix)
           gctFileClusterMatrix <- t(gctFileClusterMatrix)
           
-          # TODO: fix CASRN generation by changing name from reenrich Results
           chartFullNetwork <- generateNetwork(transactionId=transactionId, cutoff=cutoff, networkMode="chart", inputNetwork=names(enrichmentSets), qval=0.05)
           clusterFullNetwork <- generateNetwork(transactionId=transactionId, cutoff=cutoff, networkMode="cluster", inputNetwork=names(enrichmentSets), qval=0.05)
           
