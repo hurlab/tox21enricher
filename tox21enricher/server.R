@@ -2458,7 +2458,11 @@ shinyServer(function(input, output, session) {
                             hr(),
                             fluidRow(
                               if(mode != "casrn" | (originalEnrichMode == "substructure" | originalEnrichMode == "similarity")) {
-                                uiOutput(paste0("table_", i))
+                                h3("Result Chemicals")
+                              },
+                              if(mode != "casrn" | (originalEnrichMode == "substructure" | originalEnrichMode == "similarity")) {
+                                #uiOutput(paste0("table_", i))
+                                DTOutput(paste0("table_", i))
                               }
                             )
                         )
@@ -2777,11 +2781,13 @@ shinyServer(function(input, output, session) {
                   rownames(fullTable) <- 1:nrow(fullTable)
                   
                   if(mode != "casrn" | (originalEnrichMode == "substructure" | originalEnrichMode == "similarity")) {
-                    output[[paste0("table_", i)]] <- renderUI(
-                      column(12,
-                        h3("Result Chemicals"),
+                    #output[[paste0("table_", i)]] <- renderUI(
+                    output[[paste0("table_", i)]] <- renderDT(
+                      #column(12,
+                        #h3("Result Chemicals"),
                         # Render reenrichment table (solution from https://stackoverflow.com/questions/37356625/adding-a-column-with-true-false-and-showing-that-as-a-checkbox/37356792#37356792)
-                        DT::datatable({fullTable}, 
+                        #DT::datatable({fullTable}, 
+                      fullTable,
                           escape = FALSE, 
                           class = "row-border stripe compact",
                           rownames = FALSE,
@@ -2795,8 +2801,8 @@ shinyServer(function(input, output, session) {
                             #                                                           ^^ this is so we always keep the select checkboxes in the table (user can't hide them)
                           ),
                           extensions="Buttons"
-                        )
-                      )
+                        #)
+                      #)
                     )
                   } 
   
