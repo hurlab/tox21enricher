@@ -3683,19 +3683,18 @@ function(enrichmentType="CASRNs", inputStr="", annoSelectStr="MESH PHARMACTIONLI
 
 ########################################################################################################################################################################################################################################################
 
-# TODO: UPDATE THIS!!!!!!!!!!!
+### ! headless (no-gui-client) endpoints ! ###
+
 #* Download enrichment results for a given uuid
 #* @serializer contentType list(type="application/zip")
 #* @param id The UUID of the enrichment process to download.
 #* @get /download
 function(id="-1", res) {
   # async
-  #future_promise({
-    dirToReturn <- dir(paste0(APP_DIR, "Output/",id,"/",sep=""), full.names=TRUE)
-    dlFile <- zip(zipfile=paste0(APP_DIR, "Output/",id,"/tox21enricher.zip",sep=""), files=dirToReturn)
-    fName <- paste0(APP_DIR, "Output/",id,"/tox21enricher.zip",sep="")
+  future_promise({
+    fName <- paste0(APP_DIR, "Output/", id, "/tox21enricher_", id, ".zip", sep="")
     readBin(fName, 'raw', n = file.info(fName)$size)
-  #})
+  })
 }
 #######################################################################################
 
