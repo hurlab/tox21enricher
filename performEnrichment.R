@@ -834,6 +834,21 @@ finishedRequest <- function(res, req, transactionId){
   #})
 }
 
+#* Check if result files exist in Input/Output directories for given request
+#* @param transactionId UUID of the request
+#* @get /exists
+exists <- function(res, req, transactionId){
+  inDir <- paste0(APP_DIR, "Input/")
+  outDir <- paste0(APP_DIR, "Output/")
+  checkIfInFile <- Sys.glob(paste0(inDir, transactionId, "/*"))
+  checkIfOutFile <- Sys.glob(paste0(inDir, transactionId, "/*"))
+  if(length(checkIfInFile) > 0 & length(checkIfOutFile) > 0){
+    return(TRUE)
+  } else {
+    return(FALSE)
+  }
+}
+
 #* Get results for given directory
 #* @param transactionId UUID of the request
 #* @setName if supplied, is the set name to fetch from

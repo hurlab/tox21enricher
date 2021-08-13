@@ -278,7 +278,7 @@ shinyServer(function(input, output, session) {
         }
         
       } else {
-        # Hide main page and show search page
+        # Show main page and hide search page
         shinyjs::hide(id = "searchForm")
         shinyjs::show(id = "enrichmentForm")
         shinyjs::disable(id = "searchForm")
@@ -344,6 +344,28 @@ shinyServer(function(input, output, session) {
         annoSelectStr <- params[1, 4]
         nodeCutoff <- params[1, 5]
         colorsList <- params[1, 9]
+        
+        
+        # Check if result (Input/Output) files exist on the server
+        resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="exists", query=list(transactionId=transactionId))
+        # TODO: error check
+        if(resp$status_code != 200){
+          # error here
+          shinyjs::show(id="warningSearchColumn")
+          output$searchWarning <- renderUI({
+            HTML(paste0("<div class=\"text-danger\">Error: Problem fetching results from server.</div>"))
+          })
+          return(FALSE)
+        } else {
+          if(content(resp) == FALSE){
+            #error here
+            shinyjs::show(id="warningSearchColumn")
+            output$searchWarning <- renderUI({
+              HTML(paste0("<div class=\"text-danger\">Error: The results for this request are missing on the Tox21 Enricher server.</div>"))
+            })
+            return(FALSE)
+          }
+        }
         
         # Check if request has actually finished yet
         if(length(params) < 12){
@@ -2914,10 +2936,13 @@ shinyServer(function(input, output, session) {
                   fluidRow(
                     column(id=paste0("reenrichButtonCol", i), 12, 
                       if(mode != "casrn" | (originalEnrichMode == "substructure" | originalEnrichMode == "similarity")) {
-                        actionButton("reenrichButton", "Reenrich Selected Chemicals")    
+                        actionButton("reenrichButton", "Reenrich Selected Chemicals", icon=icon("arrow-alt-circle-right"))    
                       } else {
-                        actionButton("updateNetworkButton", "Update Network")    
-                      }
+                        actionButton("updateNetworkButton", "Update Network", icon=icon("arrow-alt-circle-right"))    
+                      },
+                      hidden(
+                        uiOutput("reenrich_error_box")
+                      )
                       
                     )
                   ),
@@ -2942,7 +2967,7 @@ shinyServer(function(input, output, session) {
             # Show waiting page
             shinyjs::show(id="waitingPage")
             
-            output$results_error_box <- renderText(paste0("There was an error completing your request."))
+            output$results_error_box <- renderUI(HTML("<div class=\"text-danger\">There was an error completing your request.</div>"))
 
             return(NULL)
           }
@@ -3730,9 +3755,17 @@ shinyServer(function(input, output, session) {
     
       print ("reenrichCASRNBox")
       print (reenrichCASRNBox)
-
-      # Reset finalTableToDisplay$table TODO: see if this works
-      #finalTableToDisplay$table <- NULL
+      
+      if(reenrichCASRNBox == ""){
+        # error if nothing selected
+        # Show error msg
+        shinyjs::show(id="reenrich_error_box")
+        output[["reenrich_error_box"]] <- renderUI(
+          HTML(paste0("<div class=\"text-danger\">Error: no chemicals are selected.</div>"))
+        )
+        return(FALSE)
+        
+      }
 
       # This is to preserve original names if we want to re-enrich similarity
       originalNamesToReturn <- lapply(originalNamesList$originalNames, function(originalName){
