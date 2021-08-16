@@ -147,35 +147,27 @@ print("! Ready to accept connections.")
 queue <- function(mode="", enrichmentUUID="-1", annoSelectStr="MESH=checked,PHARMACTIONLIST=checked,ACTIVITY_CLASS=checked,ADVERSE_EFFECT=checked,INDICATION=checked,KNOWN_TOXICITY=checked,MECH_LEVEL_1=checked,MECH_LEVEL_2=checked,MECH_LEVEL_3=checked,MECHANISM=checked,MODE_CLASS=checked,PRODUCT_CLASS=checked,STRUCTURE_ACTIVITY=checked,TA_LEVEL_1=checked,TA_LEVEL_2=checked,TA_LEVEL_3=checked,THERAPEUTIC_CLASS=checked,TISSUE_TOXICITY=checked,DRUGBANK_ATC=checked,DRUGBANK_ATC_CODE=checked,DRUGBANK_CARRIERS=checked,DRUGBANK_ENZYMES=checked,DRUGBANK_TARGETS=checked,DRUGBANK_TRANSPORTERS=checked,CTD_CHEM2DISEASE=checked,CTD_CHEM2GENE_25=checked,CTD_CHEMICALS_DISEASES=checked,CTD_CHEMICALS_GENES=checked,CTD_CHEMICALS_GOENRICH_CELLCOMP=checked,CTD_CHEMICALS_GOENRICH_MOLFUNCT=checked,CTD_CHEMICALS_PATHWAYS=checked,CTD_GOSLIM_BIOPROCESS=checked,CTD_PATHWAY=checked,HTS_ACTIVE=checked,LEADSCOPE_TOXICITY=checked,MULTICASE_TOX_PREDICTION=checked,TOXCAST_ACTIVE=checked,TOXINS_TARGETS=checked,TOXPRINT_STRUCTURE=checked,TOXREFDB=checked,", nodeCutoff=10){
   # async
   #future_promise({
-    queueDir <- paste0(APP_DIR, "Queue/")
-    queueDirContents <- Sys.glob(paste0(APP_DIR, "Queue/*__queue__*"))
+  queueDir <- paste0(APP_DIR, "Queue/")
+  queueDirContents <- Sys.glob(paste0(APP_DIR, "Queue/*__queue__*"))
 
-    # Regenerate 0__queue__default file if missing
-    if(("0__queue__default" %in% queueDirContents) == FALSE) {
-      file.create(paste0(queueDir, "0__queue__default"))
-      queueDirContents <- Sys.glob(paste0(APP_DIR, "Queue/*__queue__*"))
-    }
-    
-    queueDirNumbers <- lapply(queueDirContents, function(queueFile){
-      #strip path
-      noPathFile <- unlist(str_split(queueFile, paste0(APP_DIR, "Queue/")))[2]
-      return(as.integer(unlist(str_split(noPathFile, "__queue__"))[1]))
-    })
-    
-    QUEUE_ORDER <- max(sapply(queueDirNumbers, max)) + 1
-    
-    # Reset QUEUE_ORDER to 1 if too big
-    #if(QUEUE_ORDER >= .Machine$integer.max){
-    #  QUEUE_ORDER <<- 1
-    #}
-    
-    # Create queue file in Queue dir
-    
-    file.create(paste0(queueDir, QUEUE_ORDER, "__queue__", enrichmentUUID))
-    queueFile <- file(paste0(queueDir, QUEUE_ORDER, "__queue__", enrichmentUUID))
-    writeLines(paste0(mode, "\t", enrichmentUUID, "\t", annoSelectStr, "\t", nodeCutoff), queueFile)
-    close(queueFile)
-    #QUEUE_ORDER <<- QUEUE_ORDER + 1
+  # Regenerate 0__queue__default file if missing
+  if(("0__queue__default" %in% queueDirContents) == FALSE) {
+    file.create(paste0(queueDir, "0__queue__default"))
+    queueDirContents <- Sys.glob(paste0(APP_DIR, "Queue/*__queue__*"))
+  }
+  
+  queueDirNumbers <- lapply(queueDirContents, function(queueFile){
+    #strip path
+    noPathFile <- unlist(str_split(queueFile, paste0(APP_DIR, "Queue/")))[2]
+    return(as.integer(unlist(str_split(noPathFile, "__queue__"))[1]))
+  })
+  
+  QUEUE_ORDER <- max(sapply(queueDirNumbers, max)) + 1
+  # Create queue file in Queue dir
+  file.create(paste0(queueDir, QUEUE_ORDER, "__queue__", enrichmentUUID))
+  queueFile <- file(paste0(queueDir, QUEUE_ORDER, "__queue__", enrichmentUUID))
+  writeLines(paste0(mode, "\t", enrichmentUUID, "\t", annoSelectStr, "\t", nodeCutoff), queueFile)
+  close(queueFile)
   #})
 }
 
@@ -268,7 +260,6 @@ cancelEnrichment <- function(res, req, transactionId){
   }
   
   # Connect to db
-  
   poolCancel <- dbPool(
     drv = dbDriver("PostgreSQL", max.con = 100),
     dbname = tox21config$database,
@@ -279,7 +270,6 @@ cancelEnrichment <- function(res, req, transactionId){
   )
   
   # Update database to show that request was canceled
-  #query <- sqlInterpolate(ANSI(), paste0("DELETE FROM enrichment_list WHERE id='", transactionId, "';"), id="cancelEnrichment")
   query <- sqlInterpolate(ANSI(), paste0("UPDATE enrichment_list SET timestamp_finish='cancelled' WHERE id='", transactionId, "';"), id="cancelEnrichment")
   outp <- dbGetQuery(poolCancel, query)
   
@@ -320,155 +310,144 @@ getTimestamp <- function(res, req, transactionId="-1"){
 getAnnotations <- function(res, req, enrichmentUUID="-1", annoSelectStr="MESH=checked,PHARMACTIONLIST=checked,ACTIVITY_CLASS=checked,ADVERSE_EFFECT=checked,INDICATION=checked,KNOWN_TOXICITY=checked,MECH_LEVEL_1=checked,MECH_LEVEL_2=checked,MECH_LEVEL_3=checked,MECHANISM=checked,MODE_CLASS=checked,PRODUCT_CLASS=checked,STRUCTURE_ACTIVITY=checked,TA_LEVEL_1=checked,TA_LEVEL_2=checked,TA_LEVEL_3=checked,THERAPEUTIC_CLASS=checked,TISSUE_TOXICITY=checked,DRUGBANK_ATC=checked,DRUGBANK_ATC_CODE=checked,DRUGBANK_CARRIERS=checked,DRUGBANK_ENZYMES=checked,DRUGBANK_TARGETS=checked,DRUGBANK_TRANSPORTERS=checked,CTD_CHEM2DISEASE=checked,CTD_CHEM2GENE_25=checked,CTD_CHEMICALS_DISEASES=checked,CTD_CHEMICALS_GENES=checked,CTD_CHEMICALS_GOENRICH_CELLCOMP=checked,CTD_CHEMICALS_GOENRICH_MOLFUNCT=checked,CTD_CHEMICALS_PATHWAYS=checked,CTD_GOSLIM_BIOPROCESS=checked,CTD_PATHWAY=checked,HTS_ACTIVE=checked,LEADSCOPE_TOXICITY=checked,MULTICASE_TOX_PREDICTION=checked,TOXCAST_ACTIVE=checked,TOXINS_TARGETS=checked,TOXPRINT_STRUCTURE=checked,TOXREFDB=checked,") {
   # async
   #future_promise({
-    
+  # Get list of selected annotations
+  annoSelect <- unlist(strsplit(annoSelectStr,"=checked,", fixed=TRUE), recursive=FALSE)
   
-    # Get list of selected annotations
-    annoSelect <- unlist(strsplit(annoSelectStr,"=checked,", fixed=TRUE), recursive=FALSE)
+  # Get input sets
+  inDir <- paste0(APP_DIR, "Input/", enrichmentUUID)    # Directory for input files for enrichment set
+  outDir <- paste0(APP_DIR, "Output/", enrichmentUUID)  # Directory for output files for enrichment set
+  inputSets <- Sys.glob(paste0(inDir,"/*"))
+  
+  # Connect to db
+  poolMatrix <- dbPool(
+    drv = dbDriver("PostgreSQL", max.con = 100),
+    dbname = tox21config$database,
+    host = tox21config$host,
+    user = tox21config$uid,
+    password = tox21config$pwd,
+    idleTimeout = 3600000
+  )
+  
+  #TODO: make multithreaded
+  annotationMatrix <- lapply(inputSets, function(infile){
+    # Get set name
+    setNameSplit <- str_split(infile, "/")[[1]]
+    setNameSplit2 <- str_split(setNameSplit[length(setNameSplit)], "\\.")[[1]]
+    setName <- setNameSplit2[1]
     
-    # Get input sets
-    inDir <- paste0(APP_DIR, "Input/", enrichmentUUID)    # Directory for input files for enrichment set
-    outDir <- paste0(APP_DIR, "Output/", enrichmentUUID)  # Directory for output files for enrichment set
-    
-    inputSets <- Sys.glob(paste0(inDir,"/*"))
+    # Read input files
+    input <- tryCatch({
+      read.delim(infile, sep="\t", comment.char="", quote="", stringsAsFactors = FALSE, header = FALSE)
+    }, error=function(e){
+      return(NULL)
+    })
 
+    if(length(input) < 1) {
+      return(NULL)
+    }
     
-    # Connect to db
-    
-    poolMatrix <- dbPool(
-      drv = dbDriver("PostgreSQL", max.con = 100),
-      dbname = tox21config$database,
-      host = tox21config$host,
-      user = tox21config$uid,
-      password = tox21config$pwd,
-      idleTimeout = 3600000
-    )
-    
-    #TODO: make multithreaded
-    annotationMatrix <- lapply(inputSets, function(infile){
-      # Get set name
-      setNameSplit <- str_split(infile, "/")[[1]]
-      setNameSplit2 <- str_split(setNameSplit[length(setNameSplit)], "\\.")[[1]]
-      setName <- setNameSplit2[1]
+    # Get just the CASRNs
+    inputCASRNs <- input[, 1]
+  
+    # Get the corresponding annotations for each input CASRN
+    annotations <- lapply(inputCASRNs, function(CASRN){
       
-      # Read input files
-      input <- tryCatch({
-        read.delim(infile, sep="\t", comment.char="", quote="", stringsAsFactors = FALSE, header = FALSE)
+      # Grab matrix
+      queryMatrix <- sqlInterpolate(ANSI(), paste0("SELECT annotation FROM annotation_matrix WHERE casrn = '", CASRN, "';"))
+      outpMatrix <- tryCatch({
+        dbGetQuery(poolMatrix, queryMatrix)
       }, error=function(e){
         return(NULL)
       })
-
-      if(length(input) < 1) {
-        return(NULL)
-      }
+      fetchedCASRNs <- outpMatrix[, 1]
       
-      # Get just the CASRNs
-      inputCASRNs <- input[, 1]
-    
-      # Get the corresponding annotations for each input CASRN
-      annotations <- lapply(inputCASRNs, function(CASRN){
+      # Split up list of annotation IDs
+      fetchedCASRNsList <- str_split(fetchedCASRNs, "\\|")[[1]]
+      fetchedCASRNsList <- fetchedCASRNsList[lapply(fetchedCASRNsList, length) > 0]
+      fetchedCASRNsList <- fetchedCASRNsList[-length(fetchedCASRNsList)]
+      return(fetchedCASRNsList)
         
-        # Grab matrix
-        queryMatrix <- sqlInterpolate(ANSI(), paste0("SELECT annotation FROM annotation_matrix WHERE casrn = '", CASRN, "';"))
-        outpMatrix <- tryCatch({
-          dbGetQuery(poolMatrix, queryMatrix)
-        }, error=function(e){
-          return(NULL)
-        })
-        
-        fetchedCASRNs <- outpMatrix[, 1]
-        
-        # Split up list of annotation IDs
-        fetchedCASRNsList <- str_split(fetchedCASRNs, "\\|")[[1]]
-        fetchedCASRNsList <- fetchedCASRNsList[lapply(fetchedCASRNsList, length) > 0]
-        fetchedCASRNsList <- fetchedCASRNsList[-length(fetchedCASRNsList)]
-        
-        return(fetchedCASRNsList)
-          
-      })
-      # Set list names to CASRNs
-      names(annotations) <- inputCASRNs
-      
-      # Create output files for each CASRN in the Set
-      individualMatrix <- lapply(inputCASRNs, function(CASRN){
-        file.create(paste0(outDir, "/", setName, "__", CASRN, ".txt"))
-        OUTPUT <- file(paste0(outDir, "/", setName, "__", CASRN, ".txt"))
-        
-        outAnnotationList <- paste0(annotations[[CASRN]], collapse="\n")
-        
-        # Fetch actual term names from IDs
-        fetchedTerms <- lapply(annotations[[CASRN]], function(annotation){
-          queryTerm <- sqlInterpolate(ANSI(), paste0("SELECT term FROM annotation_matrix_terms WHERE id = ", annotation, ";"))
-          outpTerm <- dbGetQuery(poolMatrix, queryTerm)
-          fetchedTerm <- outpTerm[[1, 1]]
-          
-          # Check if the fetched term is in the selected annotations
-          fetchedTermSplit <- unlist(str_split(fetchedTerm, "__"), recursive=FALSE)[1]
-          if(fetchedTermSplit %in% annoSelect){
-            # replace "__" with "\t" for better utility and return
-            return(gsub("__", "\t", fetchedTerm))
-          }
-          # else, return null if we deselected the annotation set for this given annotation
-          return(NULL)
-        })
-        fetchedTerms <- fetchedTerms[!sapply(fetchedTerms, is.null)]
-        fetchedTerms <- unlist(fetchedTerms, recursive=FALSE)
-
-        # Write annotations to output file
-        if(is.null(fetchedTerms) == FALSE){
-          writeLines(fetchedTerms, OUTPUT)
-        } else { # blank file if no matches
-          writeLines("No matching annotations.", OUTPUT)
-        }
-        close(OUTPUT)
-        
-        return(fetchedTerms)
-      })
-      # Set list names to CASRNs
-      names(individualMatrix) <- inputCASRNs
-      
-      combinedMatrix <- unlist(unname(individualMatrix), recursive = FALSE)
-                               
-      # Create matrix file for all CASRNs in set
-      file.create(paste0(outDir, "/", setName, "__FullMatrix.txt"))
-      MATRIX <- file(paste0(outDir, "/", setName, "__FullMatrix.txt"))
-      
-      matrixHeader <- paste(combinedMatrix, collapse='\t')
-      matrixOutput <- paste0("CASRN\t", matrixHeader, "\n\n")
-      
-      for (CASRN in inputCASRNs) {
-        matrixOutput <- paste0(matrixOutput, CASRN, sep="")
-        for (matrixItem in combinedMatrix){
-          if (matrixItem %in% individualMatrix[[CASRN]]){
-            matrixOutput <- paste0(matrixOutput, "\t1", sep="")
-          }
-          else{
-            matrixOutput <- paste0(matrixOutput, "\t0", sep="")
-          } 
-        }
-        matrixOutput <- paste0(matrixOutput, "\n", sep="")
-      }
-      
-      # Write to matrix file
-      write(matrixOutput, MATRIX, append=TRUE)
-      return(TRUE)
-      
     })
-    annotationMatrix <- annotationMatrix[!sapply(annotationMatrix, is.null)]
+    # Set list names to CASRNs
+    names(annotations) <- inputCASRNs
+    
+    # Create output files for each CASRN in the Set
+    individualMatrix <- lapply(inputCASRNs, function(CASRN){
+      file.create(paste0(outDir, "/", setName, "__", CASRN, ".txt"))
+      OUTPUT <- file(paste0(outDir, "/", setName, "__", CASRN, ".txt"))
+      outAnnotationList <- paste0(annotations[[CASRN]], collapse="\n")
       
-    if(length(annotationMatrix) < 1){
-      res$status = 500
-      res$body = paste0("No lines available in any input file. Cannot fetch annotations.")
-      return(res) #return error message  
+      # Fetch actual term names from IDs
+      fetchedTerms <- lapply(annotations[[CASRN]], function(annotation){
+        queryTerm <- sqlInterpolate(ANSI(), paste0("SELECT term FROM annotation_matrix_terms WHERE id = ", annotation, ";"))
+        outpTerm <- dbGetQuery(poolMatrix, queryTerm)
+        fetchedTerm <- outpTerm[[1, 1]]
+        
+        # Check if the fetched term is in the selected annotations
+        fetchedTermSplit <- unlist(str_split(fetchedTerm, "__"), recursive=FALSE)[1]
+        if(fetchedTermSplit %in% annoSelect){
+          # replace "__" with "\t" for better utility and return
+          return(gsub("__", "\t", fetchedTerm))
+        }
+        # else, return null if we deselected the annotation set for this given annotation
+        return(NULL)
+      })
+      fetchedTerms <- fetchedTerms[!sapply(fetchedTerms, is.null)]
+      fetchedTerms <- unlist(fetchedTerms, recursive=FALSE)
+
+      # Write annotations to output file
+      if(is.null(fetchedTerms) == FALSE){
+        writeLines(fetchedTerms, OUTPUT)
+      } else { # blank file if no matches
+        writeLines("No matching annotations.", OUTPUT)
+      }
+      close(OUTPUT)
+      return(fetchedTerms)
+    })
+    # Set list names to CASRNs
+    names(individualMatrix) <- inputCASRNs
+    combinedMatrix <- unlist(unname(individualMatrix), recursive = FALSE)
+                             
+    # Create matrix file for all CASRNs in set
+    file.create(paste0(outDir, "/", setName, "__FullMatrix.txt"))
+    MATRIX <- file(paste0(outDir, "/", setName, "__FullMatrix.txt"))
+    matrixHeader <- paste(combinedMatrix, collapse='\t')
+    matrixOutput <- paste0("CASRN\t", matrixHeader, "\n\n")
+    
+    for (CASRN in inputCASRNs) {
+      matrixOutput <- paste0(matrixOutput, CASRN, sep="")
+      for (matrixItem in combinedMatrix){
+        if (matrixItem %in% individualMatrix[[CASRN]]){
+          matrixOutput <- paste0(matrixOutput, "\t1", sep="")
+        }
+        else{
+          matrixOutput <- paste0(matrixOutput, "\t0", sep="")
+        } 
+      }
+      matrixOutput <- paste0(matrixOutput, "\n", sep="")
     }
     
-    # zip result files
-    zipDir <- dir(outDir, recursive=TRUE, include.dirs=TRUE)
-    filesToZip <- unlist(lapply(zipDir, function(x) paste0(outDir, "/", x)))
-    # try with system call instead vvv
-    system(paste0("cd ", outDir, "/ ; zip -r9X ./tox21enricher_", enrichmentUUID, ".zip ./*"))
+    # Write to matrix file
+    write(matrixOutput, MATRIX, append=TRUE)
+    return(TRUE)
     
-    # Close pool connection to db when done accessing
-    poolClose(poolMatrix)
+  })
+  annotationMatrix <- annotationMatrix[!sapply(annotationMatrix, is.null)]
+    
+  if(length(annotationMatrix) < 1){
+    res$status = 500
+    res$body = paste0("No lines available in any input file. Cannot fetch annotations.")
+    return(res) #return error message  
+  }
+  
+  # zip result files
+  zipDir <- dir(outDir, recursive=TRUE, include.dirs=TRUE)
+  filesToZip <- unlist(lapply(zipDir, function(x) paste0(outDir, "/", x)))
+  # try with system call instead vvv
+  system(paste0("cd ", outDir, "/ ; zip -r9X ./tox21enricher_", enrichmentUUID, ".zip ./*"))
+  
+  # Close pool connection to db when done accessing
+  poolClose(poolMatrix)
   #})
 } 
 
@@ -493,27 +472,25 @@ getAppVersion <- function(res, req){
 initAnnotations <- function(res, req){
   # async
   #future_promise({
-    
-    # Connect to db
-    
-    poolAnnotations <- dbPool(
-      drv = dbDriver("PostgreSQL", max.con = 100),
-      dbname = tox21config$database,
-      host = tox21config$host,
-      user = tox21config$uid,
-      password = tox21config$pwd,
-      idleTimeout = 3600000
-    )
-    annoClassQuery <- sqlInterpolate(ANSI(), "SELECT annoclassname, annotype, annodesc FROM annotation_class;", id = "getAnnotationClasses")
-    annoClassOutp <- dbGetQuery(poolAnnotations, annoClassQuery)
-    
-    # Phase out old CTD annotations (TODO: remove these altogether)
-    annoClassOutpRemove <- c("CTD_CHEM2DISEASE", "CTD_CHEM2GENE_25", "CTD_PATHWAY")
-    annoClassOutp2 <- annoClassOutp[!(annoClassOutp$annoclassname %in% annoClassOutpRemove), ]
-    rownames(annoClassOutp2) <- 1:nrow(annoClassOutp2)
-    
-    poolClose(poolAnnotations)
-    return(annoClassOutp2)
+  # Connect to db
+  poolAnnotations <- dbPool(
+    drv = dbDriver("PostgreSQL", max.con = 100),
+    dbname = tox21config$database,
+    host = tox21config$host,
+    user = tox21config$uid,
+    password = tox21config$pwd,
+    idleTimeout = 3600000
+  )
+  annoClassQuery <- sqlInterpolate(ANSI(), "SELECT annoclassname, annotype, annodesc FROM annotation_class;", id = "getAnnotationClasses")
+  annoClassOutp <- dbGetQuery(poolAnnotations, annoClassQuery)
+  
+  # Phase out old CTD annotations (TODO: remove these altogether)
+  annoClassOutpRemove <- c("CTD_CHEM2DISEASE", "CTD_CHEM2GENE_25", "CTD_PATHWAY")
+  annoClassOutp2 <- annoClassOutp[!(annoClassOutp$annoclassname %in% annoClassOutpRemove), ]
+  rownames(annoClassOutp2) <- 1:nrow(annoClassOutp2)
+  
+  poolClose(poolAnnotations)
+  return(annoClassOutp2)
   #})
 }
 
@@ -522,20 +499,18 @@ initAnnotations <- function(res, req){
 total <- function(res, req){
   # async
   #future_promise({
-    
-    # Connect to db
-    
-    poolTotal <- dbPool(
-      drv = dbDriver("PostgreSQL", max.con = 100),
-      dbname = tox21config$database,
-      host = tox21config$host,
-      user = tox21config$uid,
-      password = tox21config$pwd,
-      idleTimeout = 3600000
-    )
-    totalQuery <- sqlInterpolate(ANSI(), "SELECT COUNT(*) FROM enrichment_list;", id = "getTotalEnrichment")
-    totalOutp <- dbGetQuery(poolTotal, totalQuery)
-    return(totalOutp)
+  # Connect to db
+  poolTotal <- dbPool(
+    drv = dbDriver("PostgreSQL", max.con = 100),
+    dbname = tox21config$database,
+    host = tox21config$host,
+    user = tox21config$uid,
+    password = tox21config$pwd,
+    idleTimeout = 3600000
+  )
+  totalQuery <- sqlInterpolate(ANSI(), "SELECT COUNT(*) FROM enrichment_list;", id = "getTotalEnrichment")
+  totalOutp <- dbGetQuery(poolTotal, totalQuery)
+  return(totalOutp)
   #})
 }
 
@@ -548,34 +523,33 @@ total <- function(res, req){
 substructure <- function(res, req, input, reenrich=FALSE){
   # async
   #future_promise({
-    # Connect to db
-    
-    poolSubstructure <- dbPool(
-      drv = dbDriver("PostgreSQL", max.con = 100),
-      dbname = tox21config$database,
-      host = tox21config$host,
-      user = tox21config$uid,
-      password = tox21config$pwd,
-      idleTimeout = 3600000
-    )
-    
-    # Sanitize input, convert InChI strings to SMILES
-    # TODO: make it so the client doesn't have to request this, just do it all here
-    if (grepl("InChI=", input, fixed=TRUE)) {
-      input <- convertInchi(inchi=input)
-    }
-    
-    substructureQuery <- ""
-    
-    if(reenrich == FALSE){
-      substructureQuery <- sqlInterpolate(ANSI(), paste0("SELECT * FROM mols_2 WHERE m @> CAST('", input, "' AS mol);"), id = "substructureResults")
-    } else {
-      substructureQuery <- sqlInterpolate(ANSI(), paste0("SELECT * FROM mols_2 WHERE casrn='", input, "';"), id = "substructureResults")
-    }
-    
-    substructureOutp <- dbGetQuery(poolSubstructure, substructureQuery)
-    poolClose(poolSubstructure)
-    return(substructureOutp)
+  # Connect to db
+  poolSubstructure <- dbPool(
+    drv = dbDriver("PostgreSQL", max.con = 100),
+    dbname = tox21config$database,
+    host = tox21config$host,
+    user = tox21config$uid,
+    password = tox21config$pwd,
+    idleTimeout = 3600000
+  )
+  
+  # Sanitize input, convert InChI strings to SMILES
+  # TODO: make it so the client doesn't have to request this, just do it all here
+  if (grepl("InChI=", input, fixed=TRUE)) {
+    input <- convertInchi(inchi=input)
+  }
+  
+  substructureQuery <- ""
+  
+  if(reenrich == FALSE){
+    substructureQuery <- sqlInterpolate(ANSI(), paste0("SELECT * FROM mols_2 WHERE m @> CAST('", input, "' AS mol);"), id = "substructureResults")
+  } else {
+    substructureQuery <- sqlInterpolate(ANSI(), paste0("SELECT * FROM mols_2 WHERE casrn='", input, "';"), id = "substructureResults")
+  }
+  
+  substructureOutp <- dbGetQuery(poolSubstructure, substructureQuery)
+  poolClose(poolSubstructure)
+  return(substructureOutp)
   #})
 }
 
@@ -586,30 +560,28 @@ substructure <- function(res, req, input, reenrich=FALSE){
 similarity <- function(res, req, input, threshold){
   # async
   #future_promise({
-    
-    # Connect to db
-    
-    poolSimilarity <- dbPool(
-      drv = dbDriver("PostgreSQL", max.con = 100),
-      dbname = tox21config$database,
-      host = tox21config$host,
-      user = tox21config$uid,
-      password = tox21config$pwd,
-      idleTimeout = 3600000
-    )
-    
-    # Sanitize input, convert InChI strings to SMILES
-    if (grepl("InChI=", input, fixed=TRUE)) {
-      input <- convertInchi(inchi=input)
-    }
-    
-    queryTanimoto <- sqlInterpolate(ANSI(), paste0("set rdkit.tanimoto_threshold=", threshold, ";"), id = "tanimotoResults")
-    outpTanimoto <- dbGetQuery(poolSimilarity, queryTanimoto)
+  # Connect to db
+  poolSimilarity <- dbPool(
+    drv = dbDriver("PostgreSQL", max.con = 100),
+    dbname = tox21config$database,
+    host = tox21config$host,
+    user = tox21config$uid,
+    password = tox21config$pwd,
+    idleTimeout = 3600000
+  )
   
-    similarityQuery <- sqlInterpolate(ANSI(), paste0("SELECT * FROM get_mfp2_neighbors('", input, "');"), id = "similarityResults")
-    similarityOutp <- dbGetQuery(poolSimilarity, similarityQuery)
-    poolClose(poolSimilarity)
-    return(similarityOutp)
+  # Sanitize input, convert InChI strings to SMILES
+  if (grepl("InChI=", input, fixed=TRUE)) {
+    input <- convertInchi(inchi=input)
+  }
+  
+  queryTanimoto <- sqlInterpolate(ANSI(), paste0("set rdkit.tanimoto_threshold=", threshold, ";"), id = "tanimotoResults")
+  outpTanimoto <- dbGetQuery(poolSimilarity, queryTanimoto)
+
+  similarityQuery <- sqlInterpolate(ANSI(), paste0("SELECT * FROM get_mfp2_neighbors('", input, "');"), id = "similarityResults")
+  similarityOutp <- dbGetQuery(poolSimilarity, similarityQuery)
+  poolClose(poolSimilarity)
+  return(similarityOutp)
   #})
 }
 
@@ -619,22 +591,20 @@ similarity <- function(res, req, input, threshold){
 casrnData <- function(res, req, input){
   # async
   #future_promise({
-    
-    # Connect to db
-    
-    poolCasrn <- dbPool(
-      drv = dbDriver("PostgreSQL", max.con = 100),
-      dbname = tox21config$database,
-      host = tox21config$host,
-      user = tox21config$uid,
-      password = tox21config$pwd,
-      idleTimeout = 3600000
-    )
-  
-    casrnQuery <- sqlInterpolate(ANSI(), paste0("SELECT iupac_name, smiles, dtxsid, dtxrid, mol_formula, mol_weight, inchis, inchikey FROM chemical_detail WHERE CASRN LIKE '", input, "';"), id = "casrnResults")
-    casrnOutp <- dbGetQuery(poolCasrn, casrnQuery)
-    poolClose(poolCasrn)
-    return(casrnOutp)
+  # Connect to db
+  poolCasrn <- dbPool(
+    drv = dbDriver("PostgreSQL", max.con = 100),
+    dbname = tox21config$database,
+    host = tox21config$host,
+    user = tox21config$uid,
+    password = tox21config$pwd,
+    idleTimeout = 3600000
+  )
+
+  casrnQuery <- sqlInterpolate(ANSI(), paste0("SELECT iupac_name, smiles, dtxsid, dtxrid, mol_formula, mol_weight, inchis, inchikey FROM chemical_detail WHERE CASRN LIKE '", input, "';"), id = "casrnResults")
+  casrnOutp <- dbGetQuery(poolCasrn, casrnQuery)
+  poolClose(poolCasrn)
+  return(casrnOutp)
   #})
 }
 
@@ -644,27 +614,25 @@ casrnData <- function(res, req, input){
 inchiToSmiles <- function(res, req, inchi){
   #async
   #future_promise({
-    # Connect to db
-    
-    poolInchi <- dbPool(
-      drv = dbDriver("PostgreSQL", max.con = 100),
-      dbname = tox21config$database,
-      host = tox21config$host,
-      user = tox21config$uid,
-      password = tox21config$pwd,
-      idleTimeout = 3600000
-    )
-    inchiQuery <- sqlInterpolate(ANSI(), paste0("SELECT smiles FROM chemical_detail WHERE inchis = '", inchi, "';"), id = "convertInchi")
-    inchiOutp <- dbGetQuery(poolInchi, inchiQuery)
-    poolClose(poolInchi)
-    return(inchiOutp[[1]])
+  # Connect to db
+  poolInchi <- dbPool(
+    drv = dbDriver("PostgreSQL", max.con = 100),
+    dbname = tox21config$database,
+    host = tox21config$host,
+    user = tox21config$uid,
+    password = tox21config$pwd,
+    idleTimeout = 3600000
+  )
+  inchiQuery <- sqlInterpolate(ANSI(), paste0("SELECT smiles FROM chemical_detail WHERE inchis = '", inchi, "';"), id = "convertInchi")
+  inchiOutp <- dbGetQuery(poolInchi, inchiQuery)
+  poolClose(poolInchi)
+  return(inchiOutp[[1]])
   #})
 }
 
 # Same as above, but done from within the internal Tox21 Enricher substructure/similarity searches. we don't want to do this asynchronously because it is just a function and not an API endpoint.
 convertInchi <- function(res, req, inchi){
   # Connect to db
-  
   poolInchi <- dbPool(
     drv = dbDriver("PostgreSQL", max.con = 100),
     dbname = tox21config$database,
@@ -685,36 +653,34 @@ convertInchi <- function(res, req, inchi){
 generateStructures <- function(res, req, input){
   # async
   #future_promise({
-    
-    # Connect to db
-    
-    poolSvg <- dbPool(
-      drv = dbDriver("PostgreSQL", max.con = 100),
-      dbname = tox21config$database,
-      host = tox21config$host,
-      user = tox21config$uid,
-      password = tox21config$pwd,
-      idleTimeout = 3600000
-    )
+  # Connect to db
+  poolSvg <- dbPool(
+    drv = dbDriver("PostgreSQL", max.con = 100),
+    dbname = tox21config$database,
+    host = tox21config$host,
+    user = tox21config$uid,
+    password = tox21config$pwd,
+    idleTimeout = 3600000
+  )
+
+  tmpSplit <- unlist(str_split(input, "\n"))
   
-    tmpSplit <- unlist(str_split(input, "\n"))
+  structures <- lapply(tmpSplit, function(x){
+    tmpSplit2 <- unlist(str_split(x, "__"))
+    m <- tmpSplit2[2]
     
-    structures <- lapply(tmpSplit, function(x){
-      tmpSplit2 <- unlist(str_split(x, "__"))
-      m <- tmpSplit2[2]
-      
-      svgQuery <- sqlInterpolate(ANSI(), paste0("SELECT mol_to_svg('", m, "');"), id = "generateStructures")
-      svgOutp <- dbGetQuery(poolSvg, svgQuery)
-      
-      return(svgOutp[1, "mol_to_svg"])
-    })
-    names(structures) <- lapply(tmpSplit, function(x){
-      tmpSplit2 <- unlist(str_split(x, "__"))
-      return(tmpSplit2[1])
-    })
+    svgQuery <- sqlInterpolate(ANSI(), paste0("SELECT mol_to_svg('", m, "');"), id = "generateStructures")
+    svgOutp <- dbGetQuery(poolSvg, svgQuery)
     
-    poolClose(poolSvg)
-    return(structures)
+    return(svgOutp[1, "mol_to_svg"])
+  })
+  names(structures) <- lapply(tmpSplit, function(x){
+    tmpSplit2 <- unlist(str_split(x, "__"))
+    return(tmpSplit2[1])
+  })
+  
+  poolClose(poolSvg)
+  return(structures)
   #})
 }
 

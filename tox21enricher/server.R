@@ -50,12 +50,6 @@ shinyServer(function(input, output, session) {
           return(x$annodesc)
         }))
         outputAnnotations <- data.frame(annoclassname=outputAnnotationClass, annotype=outputAnnotationType, annodesc=outputAnnotationDesc, stringsAsFactors=FALSE)
-        
-        #query <- sqlInterpolate(ANSI(), "SELECT annoclassname, annotype FROM annotation_class;",
-        #    id = input$get_annotations)
-        #outp <- dbGetQuery(pool, query)
-        #return(outp)
-        
         return(outputAnnotations)
     }
     annoClasses <- reactiveValues(classes = c())
@@ -1193,17 +1187,12 @@ shinyServer(function(input, output, session) {
                     outputSubEpoxide <- unlist(lapply(content(resp), function(x){
                       return(x$epoxide)
                     }))
-                    
                     outpReenrichCasrns <- data.frame(casrn=outputSubCasrns, m=outputSubM, cyanide=outputSubCyanide, isocyanate=outputSubIsocyanate, aldehyde=outputSubAldehyde, epoxide=outputSubEpoxide, stringsAsFactors=FALSE)
                     
                   } else if(originalEnrichModeList$originalEnrichMode == "similarity"){
-                    #queryReenrichCasrns <- sqlInterpolate(ANSI(), paste0("SELECT * FROM get_mfp2_neighbors('", originalNamesToReturn[[names(enrichmentSets)[casrnSet]]], "');"), id = "smilesResults")
-                    #outpReenrichCasrns <- tryCatch({
-                      #reenrichSimilarityResults <- dbGetQuery(pool, queryReenrichCasrns)
                     
                     # Set Tanimoto threshold for similarity search
                     threshold <- as.numeric(input$tanimotoThreshold)/100
-                    
                     resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="similarity", query=list(input=originalNamesToReturn[[names(enrichmentSets)[casrnSet]]], threshold=threshold))
                     
                     if(resp$status_code != 200){
@@ -1471,8 +1460,6 @@ shinyServer(function(input, output, session) {
         # Write local info file so we can reference this request later
         file.create(paste0(tmpDir, transactionId))
         tmpLocalFile <- file(paste0(tmpDir, transactionId), open="wb")
-        #tmpLocalFile <- paste0(tmpDir, transactionId)
-        #writeLines(paste0(originalEnrichModeList$originalEnrichMode, "\t", enrichmentType$enrichType, "\t", transactionId, "\t", annoSelectStr, "\t", input$nodeCutoff, "\t", enrichmentSetsSanitizedLocal, "\t", paste0(originalNamesList$originalNames, collapse="|"), "\t", paste0(reenrichResultsSanitized, collapse="|"), "\t", beginTime), tmpLocalFile)
         fileContents <- paste0(originalEnrichModeList$originalEnrichMode, "\t", enrichmentType$enrichType, "\t", transactionId, "\t", annoSelectStr, "\t", input$nodeCutoff, "\t", enrichmentSetsSanitizedLocal, "\t", paste0(originalNamesList$originalNames, collapse="|"), "\t", paste0(reenrichResultsSanitized, collapse="|"), "\t", colorsToPrint, "\t", beginTime)
         cat(fileContents, file=tmpLocalFile)
         
@@ -1759,20 +1746,14 @@ shinyServer(function(input, output, session) {
       # Query the API to cancel enrichment
       resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="cancelEnrichment", query=list(transactionId=reactiveTransactionId$id))
       return(FALSE)
-      
-      
     })
     
-    #enrichmentResults <- function(mode, transactionId, annoSelectStr, cutoff){
     enrichmentResults <- function(mode, transactionId, annoSelectStr, cutoff, enrichmentSets, originalNames, reenrichResults, originalEnrichMode, colorsList){
-      
         # Update cache file for completed enrichment
         # Create local file so we can reference later
         tmpDir <- paste0("./www/tmp/transaction/")
         
-        
         # Get ending timestamp to put in file
-        #endTime <- Sys.time()
         resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="getTimestamp", query=list(transactionId=transactionId))
         # TODO: error check
         beginTime <- "not started"
@@ -1781,8 +1762,6 @@ shinyServer(function(input, output, session) {
           return(NULL)
         }
         tmpContent <- unlist(content(resp))
-        #beginTime <- tmpContent[["timestamp_start"]]
-        #endTime <- tmpContent[["timestamp_finish"]]
         
         if(is.null(tmpContent)) {
           beginTime <- "not started"
@@ -1834,7 +1813,6 @@ shinyServer(function(input, output, session) {
           } 
           return(NULL)
         }), recursive=FALSE)
-        
         enrichmentSets <- enrichmentSets[!sapply(enrichmentSets, is.null)]
         
         #Get original names
@@ -1868,7 +1846,6 @@ shinyServer(function(input, output, session) {
         
         # Render results page
         if(mode == "annotation") {
-          
           output$resultsTabset <- renderUI({
             fluidRow(
               fluidRow(
@@ -1890,35 +1867,35 @@ shinyServer(function(input, output, session) {
             )
           })
           
-            # Fetch setFiles from server via API
-            resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="getResults", query=list(transactionId=transactionId))
-            # TODO: error check
-            if(resp$status_code != 200){
-              return(NULL)
+          # Fetch setFiles from server via API
+          resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="getResults", query=list(transactionId=transactionId))
+          # TODO: error check
+          if(resp$status_code != 200){
+            return(NULL)
+          }
+          setFiles <- unlist(content(resp))
+          setFilesSplit <- lapply(setFiles, function(setFile){
+            tmpSplit <- unlist(str_split(setFile, "/"))
+            return(tmpSplit[length(tmpSplit)])
+          })
+          setFilesSplit <- unlist(setFilesSplit, recursive=FALSE)
+        
+          # Event listener for per set results onclick
+          lapply(1:length(setFiles), function(setFile){
+            # If not the FullMatrix file or the zipped results archive, create observer for individual CASRN file links
+            if( !grepl(paste0("__FullMatrix.txt"), setFilesSplit[setFile], fixed=TRUE) & !grepl(paste0(".zip"), setFilesSplit[setFile], fixed=TRUE)){
+              observeEvent(input[[paste0(setFilesSplit[setFile], "__link")]], {
+                # Create directory for request
+                dir.create(paste0("./www/tmp/output/", transactionId, "/"))
+                if(file.exists(paste0("./www/tmp/output/", transactionId, "/", setFilesSplit[setFile])) == FALSE){
+                  # TODO: error check if download fails
+                  download.file(paste0("http://", API_HOST, ":", API_PORT, "/serveFileText?transactionId=", transactionId, "&filename=", setFilesSplit[setFile], "&subDir=Output"), destfile=paste0("./www/tmp/output/", transactionId, "/", setFilesSplit[setFile]))
+                }
+                # Next, use custom JavaScript to open manual from disk in new tab
+                js$browseURL(paste0("tmp/output/", transactionId, "/", setFilesSplit[setFile]))
+              })
             }
-            setFiles <- unlist(content(resp))
-            setFilesSplit <- lapply(setFiles, function(setFile){
-              tmpSplit <- unlist(str_split(setFile, "/"))
-              return(tmpSplit[length(tmpSplit)])
-            })
-            setFilesSplit <- unlist(setFilesSplit, recursive=FALSE)
-          
-            # Event listener for per set results onclick
-            lapply(1:length(setFiles), function(setFile){
-              # If not the FullMatrix file or the zipped results archive, create observer for individual CASRN file links
-              if( !grepl(paste0("__FullMatrix.txt"), setFilesSplit[setFile], fixed=TRUE) & !grepl(paste0(".zip"), setFilesSplit[setFile], fixed=TRUE)){
-                observeEvent(input[[paste0(setFilesSplit[setFile], "__link")]], {
-                  # Create directory for request
-                  dir.create(paste0("./www/tmp/output/", transactionId, "/"))
-                  if(file.exists(paste0("./www/tmp/output/", transactionId, "/", setFilesSplit[setFile])) == FALSE){
-                    # TODO: error check if download fails
-                    download.file(paste0("http://", API_HOST, ":", API_PORT, "/serveFileText?transactionId=", transactionId, "&filename=", setFilesSplit[setFile], "&subDir=Output"), destfile=paste0("./www/tmp/output/", transactionId, "/", setFilesSplit[setFile]))
-                  }
-                  # Next, use custom JavaScript to open manual from disk in new tab
-                  js$browseURL(paste0("tmp/output/", transactionId, "/", setFilesSplit[setFile]))
-                })
-              }
-            })
+          })
           
           lapply(names(enrichmentSets), function(i) {
             # Full matrix
