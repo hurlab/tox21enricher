@@ -923,8 +923,8 @@ shinyServer(function(input, output, session) {
       queuePos <- -1
       resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="getQueuePos", query=list(transactionId=transactionId))
       if(resp$status_code != 200) {
-        output$results_error_box <- renderText({
-          paste0("Error: could not fetch queue position for this request.")
+        output$results_error_box <- renderUI({
+          paste0("<div class=\"text-danger\">Error: Could not fetch queue position for this request.</div>")
         })
       } else {
         queuePos <- content(resp)  
@@ -1042,7 +1042,7 @@ shinyServer(function(input, output, session) {
       if(validatedInput == "") {
         shinyjs::show(id="errorBox")
         output$error_box <- renderUI({
-          HTML(paste0("<div class=\"text-danger\">Error: no input lines.</div>")) 
+          HTML(paste0("<div class=\"text-danger\">Error: No input lines.</div>")) 
         })
         return(FALSE)
       }
@@ -1342,7 +1342,7 @@ shinyServer(function(input, output, session) {
             shinyjs::show(id="errorBox")
             
             output$error_box <- renderUI({
-              HTML(paste0("<div class=\"text-danger\">Error: no valid input sets.</div>"))
+              HTML(paste0("<div class=\"text-danger\">Error: No valid input sets.</div>"))
             })
             return(FALSE)
           }
@@ -1486,7 +1486,7 @@ shinyServer(function(input, output, session) {
           shinyjs::show(id="errorBox")
           
           output$error_box <- renderUI({
-            HTML(paste0("<div class=\"text-danger\">Error: problem creating input files for enrichment.</div>"))
+            HTML(paste0("<div class=\"text-danger\">Error: Problem creating input files for enrichment.</div>"))
           })
           
           return(FALSE)
@@ -1555,8 +1555,8 @@ shinyServer(function(input, output, session) {
         initQueuePos <- -1
         resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="getQueuePos", query=list(transactionId=transactionId))
         if(resp$status_code != 200) {
-          output$results_error_box <- renderText({
-            paste0("Error: could not fetch queue position for this request.")
+          output$results_error_box <- renderUI({
+            paste0("<div class=\"text-danger\">Error: Could not fetch queue position for this request.</div>")
           })
         } else {
           initQueuePos <- content(resp)  
@@ -3480,7 +3480,7 @@ shinyServer(function(input, output, session) {
         # Show error msg
         shinyjs::show(id="reenrich_error_box")
         output[["reenrich_error_box"]] <- renderUI(
-          HTML(paste0("<div class=\"text-danger\">Error: no chemicals are selected.</div>"))
+          HTML(paste0("<div class=\"text-danger\">Error: No chemicals are selected.</div>"))
         )
         return(FALSE)
         

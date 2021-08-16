@@ -214,10 +214,7 @@ performEnrichment <- function(enrichmentUUID="-1", annoSelectStr="MESH=checked,P
   
   # Throw error if no input sets
   if(length(inputFiles) < 1){
-    #res$status = 500
-    #res$body = paste0("No valid input sets. Cannot perform enrichment analysis.")
-    #return(res) #return error message
-    return("No valid input sets. Cannot perform enrichment analysis")
+    return("No valid input sets. Cannot perform enrichment analysis.")
   }
   
   ldf <- lapply(inputFiles, function(i){
@@ -1063,7 +1060,7 @@ process_variable_DAVID_CLUSTER_directories <- function(dirName, outputDir, extTa
     
     DATA <- tryCatch(read.delim(infile, sep="\t", comment.char="", quote="", stringsAsFactors = FALSE, header=TRUE, fill=TRUE, skip=1),
                      error=function(cond) {
-                       print("no lines in input file")
+                       print("No lines in input file.")
                        return(data.frame())
                      })
     
