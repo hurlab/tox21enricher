@@ -7,16 +7,6 @@
 #    http://shiny.rstudio.com/
 #
 
-library(catmaply)
-library(CePa)
-library(httr)
-library(igraph)
-library(igraphdata)
-library(plotly)
-library(uuid)
-library(visNetwork)
-library(xlsx)
-
 # Define server logic
 shinyServer(function(input, output, session) {
   
@@ -50,10 +40,6 @@ shinyServer(function(input, output, session) {
     get_annotations <- function(){
         # Query API to get list of annotation classes and types
         resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="initAnnotations")
-        
-        print("content(resp)")
-        print(content(resp))
-
         outputAnnotationClass <- unlist(lapply(content(resp), function(x){
           return(x$annoclassname)
         }))
@@ -94,7 +80,6 @@ shinyServer(function(input, output, session) {
       appVersion <- content(resp)
       # Next, check if we have previously downloaded the manual (Tox21 Enricher will cache previously-downloaded manuals). If yes, do nothing. If no, download the manual from the Plumber server
       # This should always get the most recent manual revision
-      print(paste0("VERSION: ", paste0("./www/tmp/docs/Tox21Enricher_Manual_v", appVersion, ".pdf")))
       if(file.exists(paste0("./www/tmp/docs/Tox21Enricher_Manual_v", appVersion, ".pdf")) == FALSE){
         # TODO: error check if download fails
         download.file(paste0("http://", API_HOST, ":", API_PORT, "/serveManual"), destfile=paste0("./www/tmp/docs/Tox21Enricher_Manual_v", appVersion, ".pdf"))
@@ -145,9 +130,6 @@ shinyServer(function(input, output, session) {
           
           enrichmentListDisplay <- lapply(enrichmentList, function(x){
             enrichDataRaw <- read.table(x, sep="\t", comment.char="", stringsAsFactors = FALSE, fill=TRUE)
-            print("enrichDataRaw")
-            print(enrichDataRaw)
-            print("^^^")
 
             originalMode <- enrichDataRaw[1, 1]
             mode <- enrichDataRaw[1, 2]
@@ -155,14 +137,10 @@ shinyServer(function(input, output, session) {
             annoSelectStr <- enrichDataRaw[1, 4]
             nodeCutoff <- enrichDataRaw[1, 5]
             enrichmentSets <- enrichDataRaw[1, 6]
-            # original names <- 7
-            # reenrichresults <- 8
-            #colorsList <- enrichDataRaw[1, 9]
             submitTime <- enrichDataRaw[1, 10]
             
             beginTime <- "not started"
             endTime <- "incomplete"
-            print(ncol(enrichDataRaw))
             if(ncol(enrichDataRaw) < 12){
               # Get timestamps for missing entries
               # Get ending timestamp to put in file
@@ -291,19 +269,7 @@ shinyServer(function(input, output, session) {
     
     # Search for selected request
     observeEvent(input$searchPrevButton, {
-      
-      print("INPUT::")
-      print(input)
-      print("============")
-      print(searchCheckboxes$checkboxes)
-      
       setToFetch <- ""
-      
-      #for(i in searchCheckboxes$checkboxes){
-      #  if(input[[i]] == TRUE) {
-      #    setToFetch <- unlist(str_split(i, "__"))[2]
-      #  }
-      #}
       selectedSets <- lapply(searchCheckboxes$checkboxes, function(i){
 
         if(is.null(input[[i]]) == FALSE) {
@@ -331,20 +297,13 @@ shinyServer(function(input, output, session) {
       } else {
       
         setToFetch <- selectedSets[1]
-  
         params <- read.table(paste0("./www/tmp/transaction/", setToFetch), sep="\t", comment.char="", stringsAsFactors = FALSE)
-        
-        print("=================================================")
-        print(params)
-        print("=================================================")
-  
         originalMode <- params[1, 1]
         mode <- params[1, 2]
         transactionId <- params[1, 3]
         annoSelectStr <- params[1, 4]
         nodeCutoff <- params[1, 5]
         colorsList <- params[1, 9]
-        
         
         # Check if result (Input/Output) files exist on the server
         resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="exists", query=list(transactionId=transactionId))
@@ -361,7 +320,7 @@ shinyServer(function(input, output, session) {
             #error here
             shinyjs::show(id="warningSearchColumn")
             output$searchWarning <- renderUI({
-              HTML(paste0("<div class=\"text-danger\">Error: The results for this request are missing on the Tox21 Enricher server.</div>"))
+              HTML(paste0("<div class=\"text-danger\">Error: The results for this request are missing on the Tox21 Enricher server. The files may have been deleted, or the request may have failed. Please try again.</div>"))
             })
             return(FALSE)
           }
@@ -416,9 +375,7 @@ shinyServer(function(input, output, session) {
           innerSet <- innerSet[!sapply(innerSet, is.null)]
         })
         names(enrichmentSets) <- setNames
-        
         originalNames <- unlist(str_split(params[1, 7], "\\|"))
-        
         reenrichResults <- NULL
         if(!is.na(params[1, 8])){
           reenrichResultsSets <- unlist(str_split(params[1, 8], "\\|"))
@@ -429,8 +386,6 @@ shinyServer(function(input, output, session) {
             innerList <- lapply(2:length(x), function(y){ # start at 2 to skip set name
               return(unlist(str_split(x[y], ";")))
             })
-            print("innerList")
-            print(innerList)
             # if similarity
             if(length(innerList) == 7){
               return(data.frame("casrn"=innerList[[1]], "m"=innerList[[2]], "similarity"=innerList[[3]], "cyanide"=innerList[[4]], "isocyanate"=innerList[[5]], "aldehyde"=innerList[[6]], "epoxide"=innerList[[7]], stringsAsFactors=FALSE))
@@ -443,7 +398,6 @@ shinyServer(function(input, output, session) {
           reenrichResultsNames <- lapply(reenrichResultsCols, function(x){
             return(x[1])
           })
-      
           reenrichResults <- reenrichResultsMats
           names(reenrichResults) <- reenrichResultsNames
         }
@@ -981,12 +935,7 @@ shinyServer(function(input, output, session) {
       } else {
         queuePos <- content(resp)  
       }
-      
       waitingData <- inputSetList$inputSet
-      
-      print("=== waitingData ===")
-      print(waitingData)
-
       enrichmentDisplayType <- waitingData[1,"Mode"]
       splitAnnotationsString <- waitingData[1,"Selected.Annotations"]
       cutoff <- waitingData[1,"Node.Cutoff"]
@@ -1140,21 +1089,12 @@ shinyServer(function(input, output, session) {
     setColors <- reactiveValues(color = NULL)
     
     performEnrichment <- function(casrnBox, reenrichFlag=FALSE, originalNamesToReturn=NULL) {
-      
-        print("DEBUG MODE")
-        print(enrichmentType$enrichType)
-        print("DEBUG FLAG")
-        print(reenrichFlag)
-
         # If reenriching, always do CASRN
         if(reenrichFlag == FALSE){
           reenrichFlagReactive$reenrichFlagReactive <- FALSE
           originalEnrichModeList$originalEnrichMode <- enrichmentType$enrichType
         }
-        print("DEBUG ORIGINAL MODE")
-        print(originalEnrichModeList$originalEnrichMode)
-        
-        if(reenrichFlag == TRUE){
+        else {
           reenrichFlagReactive$reenrichFlagReactive <- TRUE
           enrichmentType$enrichType <- "casrn"
         }
@@ -1177,10 +1117,7 @@ shinyServer(function(input, output, session) {
         
         # Disable View previous results button
         shinyjs::disable(id="searchButton")
-      
-        # Show loading spinner
-        #shinyjs::show(id="resultsContainer")
-        
+
         # Hide any previous errors
         shinyjs::hide(id="errorBox")
       
@@ -1190,13 +1127,6 @@ shinyServer(function(input, output, session) {
         } else {
           cutoff <- input$nodeCutoff
         }
-      
-        print("ENRICH TYPE =======================")
-        print(enrichmentType$enrichType)
-      
-        # Get user-submitted CASRNS from box
-        #casrnBox <- input$submitted_chemicals
-        
         
         # Initialize list to hold result chemicals for reenrichment (Substructure & Similarity only)
         reenrichResults <- list()
@@ -1233,27 +1163,14 @@ shinyServer(function(input, output, session) {
             # Remove empty elements
             enrichmentSets <- lapply(enrichmentSets, function(i) return(i[lapply(i, nchar) > 0]))
 
-            print("enrichmentSets")
-            print(enrichmentSets)
-            print(length(enrichmentSets))
-            
             # If re-enriching, create reenrichResults list
             if(originalEnrichModeList$originalEnrichMode == "substructure" | originalEnrichModeList$originalEnrichMode == "similarity"){
               reenrichResults <- lapply(1:length(enrichmentSets), function(casrnSet){
                 innerCasrnSet <- sapply(enrichmentSets[[casrnSet]], function(casrn){
                   queryReenrichCasrns <- NULL
                   if(originalEnrichModeList$originalEnrichMode == "substructure"){
-                    #queryReenrichCasrns <- sqlInterpolate(ANSI(), paste0("SELECT * FROM mols_2 WHERE casrn='", casrn, "';"), id = "smilesResults")
-                    #outpReenrichCasrns <- tryCatch({
-                    #  dbGetQuery(pool, queryReenrichCasrns)
-                    #}, error=function(e){
-                    #  return(NULL)
-                    #})
                     # Query API to get list of annotation classes and types
-                    # TODO: fix this
                     resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="substructure", query=list(input=casrn, reenrich=TRUE))
-                    print("resp")
-                    
                     if(resp$status_code != 200){
                       return(NULL)
                     }
@@ -1316,21 +1233,14 @@ shinyServer(function(input, output, session) {
                     }))
                     
                     reenrichSimilarityResults <- data.frame(casrn=outputSimCasrns, m=outputSimM, similarity=outputSimSimilarity, cyanide=outputSimCyanide, isocyanate=outputSimIsocyanate, aldehyde=outputSimAldehyde, epoxide=outputSimEpoxide, stringsAsFactors=FALSE)
-                    
-                    print("reenrichSimilarityResults")
-                    print(reenrichSimilarityResults)
-                    
-                      reenrichSimilarityResultsReturn <- unlist(sapply(1:nrow(reenrichSimilarityResults), function(j){
-                        if(reenrichSimilarityResults[j, "casrn"] == casrn) {
-                          return(reenrichSimilarityResults[j,])
-                        } else {
-                          return(NULL)
-                        }
-                      }))
-                      reenrichSimilarityResultsReturn <- reenrichSimilarityResultsReturn[!sapply(reenrichSimilarityResultsReturn, is.null)]
-                    #}, error=function(e){
-                    #  return(NULL)
-                    #})
+                    reenrichSimilarityResultsReturn <- unlist(sapply(1:nrow(reenrichSimilarityResults), function(j){
+                      if(reenrichSimilarityResults[j, "casrn"] == casrn) {
+                        return(reenrichSimilarityResults[j,])
+                      } else {
+                        return(NULL)
+                      }
+                    }))
+                    reenrichSimilarityResultsReturn <- reenrichSimilarityResultsReturn[!sapply(reenrichSimilarityResultsReturn, is.null)]
                   }
                   
                 })
@@ -1345,61 +1255,17 @@ shinyServer(function(input, output, session) {
             setName <- ""
 
             reenrichResults <- lapply(casrnBoxSplit, function(i){
-                # First, check if we have any InChIs, and convert to SMILES
-                #if (grepl("InChI=", i, fixed=TRUE)) {
-                #    resp <- GET(url="http://localhost:8000/", path="convertInchi", query=list(inchi=i))
-                    
-                    # Ignore if bad InChI
-                #    if (resp$status_code != 200) {
-                #      return(NULL)
-                #    }
-                    
-                #    setName <- unlist(content(resp))
-                    
-                    #queryInchi <- sqlInterpolate(ANSI(), paste0("SELECT smiles FROM chemical_detail WHERE inchis = '", i, "';"),
-                    #                             id = "smilesResults")
-                    
-                    ## Check if valid InChI string
-                    #outpInchi <- tryCatch({
-                    #  dbGetQuery(pool, queryInchi)
-                    #}, error=function(e){
-                    #  return(FALSE)
-                    #})
-
-                    #if(nrow(outpInchi) > 0) {
-                    #  setName <- outpInchi[[1]]   
-                    #}
-
-                #} else {
-                    setName <- i
-                #}
-
+                setName <- i
                 if(setName != ""){
                   outpSmiles <- NULL
                   if (enrichmentType$enrichType == "substructure") {
-                      #querySmiles <- sqlInterpolate(ANSI(), paste0("SELECT * FROM mols_2 WHERE m @> CAST('", setName, "' AS mol);"),
-                      #                        id = "smilesResults")
-                      ## Check if valid SMILES string
-                      #outpSmiles <- tryCatch({
-                      #  dbGetQuery(pool, querySmiles)
-                      #}, error=function(e){
-                      #  return(NULL)
-                      #})
-                      
                       resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="substructure", query=list(input=setName, reenrich=FALSE))
-                      print("resp")
-                      print("vvv")
-                      print(content(resp))
-
                       if(resp$status_code != 200){
                         return(NULL)
                       }
-                      
                       if(length(content(resp)) < 1){
-                        print("bad")
                         return(NULL)
                       }
-
                       outputSubCasrns <- unlist(lapply(content(resp), function(x){
                         return(x$casrn)
                       }))
@@ -1422,23 +1288,9 @@ shinyServer(function(input, output, session) {
                       outpSmiles <- data.frame(casrn=outputSubCasrns, m=outputSubM, cyanide=outputSubCyanide, isocyanate=outputSubIsocyanate, aldehyde=outputSubAldehyde, epoxide=outputSubEpoxide, stringsAsFactors=FALSE)
                       
                   } else {
-                      #querySmiles <- sqlInterpolate(ANSI(), paste0("SELECT * FROM get_mfp2_neighbors('", setName, "');"),
-                      #                        id = "smilesResults")
-                      ## Check if valid SMILES string
-                      #outpSmiles <- tryCatch({
-                      #  dbGetQuery(pool, querySmiles)
-                      #}, error=function(e){
-                      #  return(NULL)
-                      #})
-                    
                     # Set Tanimoto threshold for similarity search
                     threshold <- as.numeric(input$tanimotoThreshold)/100
-                    #queryTanimoto <- sqlInterpolate(ANSI(), paste0("set rdkit.tanimoto_threshold=", threshold, ";"), id = "tanimotoResults")
-                    #outpTanimoto <- dbGetQuery(pool, queryTanimoto)
-                    
                     resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="similarity", query=list(input=setName, threshold=threshold))
-                    print("resp")
-                    
                     if(resp$status_code != 200){
                       return(NULL)
                     }
@@ -1464,10 +1316,8 @@ shinyServer(function(input, output, session) {
                     outputSimEpoxide <- unlist(lapply(content(resp), function(x){
                       return(x$epoxide)
                     }))
-                    
                     outpSmiles <- data.frame(casrn=outputSimCasrns, m=outputSimM, similarity=outputSimSimilarity, cyanide=outputSimCyanide, isocyanate=outputSimIsocyanate, aldehyde=outputSimAldehyde, epoxide=outputSimEpoxide, stringsAsFactors=FALSE)
                   }
-                  
                   
                   # Throw error if we have no good sets
                   if(is.null(outpSmiles) == TRUE) {
@@ -1535,15 +1385,7 @@ shinyServer(function(input, output, session) {
         }))
         names(colorsAllSets) <- names(enrichmentSets)
         setColors$color <- colorsAllSets
-        
-        print("reenrichResults =====================================")
-        print(reenrichResults)
-        
-        print("enrichmentSets =====================================")
-        print(enrichmentSets)
-        
         reenrichResultsList$reenrichResults <- reenrichResults
-        
         enrichmentSetsList$enrichmentSets <- enrichmentSets
         
         # Get list of original input names for InChIs/SMILES and set names to display later
@@ -1560,7 +1402,6 @@ shinyServer(function(input, output, session) {
         outDirWeb <- paste0("Output/", transactionId, "/")
 
         # Get selected annotation classes
-        # TODO: use map() to make this more R-like
         annoSelectStr <- ""
         for (i in input$checkboxPubChem) {
             annoSelectStr <- paste0(annoSelectStr, i, "=checked,")
@@ -1577,11 +1418,7 @@ shinyServer(function(input, output, session) {
         for (i in input$checkboxOther) {
             annoSelectStr <- paste0(annoSelectStr, i, "=checked,")
         }
-        
-        print("==================================")
-        print("annoSelectStr")
-        print(annoSelectStr)
-        
+
         # Convert enrichmentSets into a form that is API-friendly
         enrichmentSetsSanitized <- lapply(names(enrichmentSets), function(enrichmentSet){
           paste0(paste0(enrichmentSets[[enrichmentSet]], collapse=paste0("__", enrichmentSet, "\n")), "__", enrichmentSet)
@@ -1704,10 +1541,6 @@ shinyServer(function(input, output, session) {
         
         # if enrichment runs into an error on the API side, cancel and show error on main UI
         if (resp$status_code != 200){
-          print("error performing enrichment")
-          print(resp)
-          print(content(resp, as="text"))
-          
           # Hide original form when done with enrichment
           shinyjs::show(id="enrichmentForm")
           
@@ -1750,10 +1583,6 @@ shinyServer(function(input, output, session) {
         
         # Clean up column name formatting
         colnames(waitingData) <- list("Queue Position", "Request Mode", "Request UUID", "Selected Annotations", "Node Cutoff", "User Input")
-        
-        print("waitingData")
-        print(waitingData)
-        
         output[["waitingTable"]] <- renderUI(
           column(12,
                  DT::datatable({waitingData}, 
@@ -1771,9 +1600,6 @@ shinyServer(function(input, output, session) {
         
         # if enrichment runs into an error while performing the enrichment in the queue, cancel and show error on main UI
         if(unlist(content(resp)) != FALSE | resp$status_code != 200){
-          print("error performing enrichment")
-          print(resp)
-          print(content(resp, as="text"))
           
           # Hide original form when done with enrichment
           shinyjs::show(id="enrichmentForm")
@@ -1860,9 +1686,6 @@ shinyServer(function(input, output, session) {
       # Query the API to see if process is done
       resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="finishedRequest", query=list(transactionId=transactionId))
       
-      print("RESP CONTENT")
-      print(unlist(content(resp)))
-      
       # Show warning message if request fails
       if(resp$status_code != 200){
         output$results_error_box <- renderText(paste0("There was an error determining the status of your request. Please try again later."))
@@ -1874,9 +1697,7 @@ shinyServer(function(input, output, session) {
           output$results_error_box <- renderUI(HTML(paste0("<div class=\"text-danger\">Your request has not completed yet. Please wait for it to complete before accessing results.</div>")))
         } else {
           # Else if done, get results
-          #future({
-            enrichmentResults(mode, transactionId, annoSelectStr, nodeCutoff)
-          #})
+          enrichmentResults(mode, transactionId, annoSelectStr, nodeCutoff)
         }
       }
       # Re-enable buttons
@@ -1937,9 +1758,6 @@ shinyServer(function(input, output, session) {
       
       # Query the API to cancel enrichment
       resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="cancelEnrichment", query=list(transactionId=reactiveTransactionId$id))
-      print("canceling:")
-      print(resp$status_code)
-      print(content(resp))
       return(FALSE)
       
       
@@ -2079,24 +1897,16 @@ shinyServer(function(input, output, session) {
               return(NULL)
             }
             setFiles <- unlist(content(resp))
-          
-            print("setFiles")
-            print(setFiles)
-          
             setFilesSplit <- lapply(setFiles, function(setFile){
               tmpSplit <- unlist(str_split(setFile, "/"))
               return(tmpSplit[length(tmpSplit)])
             })
             setFilesSplit <- unlist(setFilesSplit, recursive=FALSE)
           
-            print("setFilesSplit")
-            print(setFilesSplit)
-          
             # Event listener for per set results onclick
             lapply(1:length(setFiles), function(setFile){
               # If not the FullMatrix file or the zipped results archive, create observer for individual CASRN file links
               if( !grepl(paste0("__FullMatrix.txt"), setFilesSplit[setFile], fixed=TRUE) & !grepl(paste0(".zip"), setFilesSplit[setFile], fixed=TRUE)){
-                print(paste0("created observer for: ", paste0(setFilesSplit[setFile], "__link")))
                 observeEvent(input[[paste0(setFilesSplit[setFile], "__link")]], {
                   # Create directory for request
                   dir.create(paste0("./www/tmp/output/", transactionId, "/"))
@@ -2111,28 +1921,6 @@ shinyServer(function(input, output, session) {
             })
           
           lapply(names(enrichmentSets), function(i) {
-          #  # Fetch setFiles from server via API
-          #  resp <- GET(url="http://localhost:8000/", path="getResults", query=list(transactionId=transactionId))
-            
-            
-            #TODO: error check
-          #  if(resp$status_code != 200){
-          #    return(NULL)
-          #  }
-          #  setFiles <- unlist(content(resp))
-            
-          #  print("setFiles")
-          #  print(setFiles)
-            
-          #  setFilesSplit <- lapply(setFiles, function(setFile){
-          #    tmpSplit <- unlist(str_split(setFile, "/"))
-          #    return(tmpSplit[length(tmpSplit)])
-          #  })
-          #  setFilesSplit <- unlist(setFilesSplit, recursive=FALSE)
-            
-          #  print("setFilesSplit")
-          #  print(setFilesSplit)
-            
             # Full matrix
             observeEvent(input[[paste0(i, "__FullMatrix.txt__link")]], {
               # Create directory for request
@@ -2262,9 +2050,6 @@ shinyServer(function(input, output, session) {
           })
 
           lapply(names(enrichmentSets), function(i) {
-              
-            print(paste0("NAME: ", i))      
-            
                   # Fetch setFiles from server via API
                   resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="readGct", query=list(transactionId=transactionId, cutoff=cutoff, mode="set", set=i))
                   #TODO: error check
@@ -2272,13 +2057,6 @@ shinyServer(function(input, output, session) {
                     return(NULL)
                   }
                   resp2 <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="getResults", query=list(transactionId=transactionId, setName=i))
-                  
-                  print(" ======================= content(resp) here =======================")
-                  print(is.null(resp))
-                  print(resp$status_code)
-                  print(content(resp))
-                  print("resp2")
-                  print(content(resp2))
 
                   # TODO: Clean this up!
                   gctFile <- sapply(content(resp), function(x){
@@ -2328,9 +2106,6 @@ shinyServer(function(input, output, session) {
                   colnames(gctFile) <- gctFileColNames
                   row.names(gctFile) <- gctFileRowNames
                   
-                  print(">>>>>>>>>>>>>>>>>> is.null(gctFile) =========================")
-                  print(is.null(gctFile))
-                  
                   if(is.null(gctFile) == FALSE){
                     gctFileMatrix <- data.matrix(gctFile)
                     gctCASRNNames <- rownames(gctFile)
@@ -2338,7 +2113,6 @@ shinyServer(function(input, output, session) {
                     
                     # Get list of paths to result files for each set
                     #TODO: Error check this
-                    
                     # Fetch setFiles from server via API
                     resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="getResults", query=list(transactionId=transactionId, setName=i))
                     #TODO: error check
@@ -2610,16 +2384,12 @@ shinyServer(function(input, output, session) {
                   
                   
                   resultImages <- lapply(reenrichResults[[i]][, "casrn"], function(casrnName) {
-                    print(casrnName)
-                    print(unlist(structuresSvg[casrnName][[1]]))
                     # TODO: this is kind of a hacky way to resize the SVG images generated by rdkit, but it works...
                     resizedSvg <- str_replace(unlist(structuresSvg[casrnName][[1]]) , "width='250px'", "width='100px'")
                     resizedSvg <- str_replace(resizedSvg , "height='200px'", "height='100px'")
                     
-                    #return(HTML(paste0( tipify( div(HTML(paste0(resizedSvg))), paste0("Chemical structure for ", casrnName, "."), placement="right") )))
                     # Add tooltip saying CASRN on hover, as well as magnify the structure image on hover
                     # https://www.w3schools.com/jsref/dom_obj_style.asp (for reference)
-                    #return(HTML(paste0( tipify( div(HTML(paste0("<div id='", casrnName, "' style=\"transition-duration: 0.5s;\" onmouseover=\"getElementById('", casrnName, "').style.transform='scale(4,4)'; getElementById('", casrnName, "').style.boxShadow='2px 2px 2px grey'\" onmouseout=\"getElementById('", casrnName, "').style.transform='scale(1,1)'; getElementById('", casrnName, "').style.boxShadow='0px 0px 0px grey'\" > ", resizedSvg, "</div>"))), paste0("Chemical structure for ", casrnName, "."), placement="right") )))
                     return(HTML(paste0( tipify( div(HTML(paste0("<div id='", casrnName, "' style=\"transition-duration: 0.5s;\" onmouseover=\"getElementById('", casrnName, "').style.transform='scale(4,4)'; getElementById('", casrnName, "').style.boxShadow='2px 2px 2px grey'; getElementById('", casrnName, "').style.border='0.2px solid grey'; getElementById('", casrnName, "').style.zIndex='9999'\" onmouseout=\"getElementById('", casrnName, "').style.transform='scale(1,1)'; getElementById('", casrnName, "').style.boxShadow='0px 0px 0px grey'; getElementById('", casrnName, "').style.borderWidth='0px 0px 0px 0px'\" > ", resizedSvg, "</div>"))), paste0("Chemical structure for ", casrnName, "."), placement="bottom") )))
                   })
                   
@@ -2628,8 +2398,6 @@ shinyServer(function(input, output, session) {
                   # Get additional information for each CASRN from database and add to table
                   expandedInfo <- t(sapply(reenrichResults[[i]][,"casrn"], function(casrn){
                     resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="casrnData", query=list(input=casrn))
-                    print("resp")
-                    
                     if(resp$status_code != 200){
                       return(NULL)
                     }
@@ -2665,13 +2433,6 @@ shinyServer(function(input, output, session) {
                   }))
                   expandedInfo <- data.frame(expandedInfo)
                   row.names(expandedInfo) <- t(sapply(reenrichResults[[i]][,"casrn"], function(casrn) casrn))
-                  print("========= expandedInfo =========")
-                  print(expandedInfo)
-                  print("^^^ expandedInfo here?")
-                  
-                  print("========= reenrichResults =========")
-                  print(reenrichResults)
-                  print("^^^ reenrichResults here?")
                   
                   # Create final data frame
                   fullTableTmp <- t(sapply(row.names(expandedInfo), function(casrn){
@@ -2679,7 +2440,6 @@ shinyServer(function(input, output, session) {
                       if(reenrichResults[[i]][row,"casrn"] == casrn){
                         finalTable <- NULL
                         if (mode == "similarity" | originalEnrichMode == "similarity") {
-                          print("final table in here")
                           finalTable <- data.frame(
                             "Chemical_Structure"  = resultImages[row], 
                             "DTXSID"              = expandedInfo[casrn,"dtxsid"], 
@@ -2764,8 +2524,6 @@ shinyServer(function(input, output, session) {
                   
                   # Check if any warnings were generated
                   warningCheck <- lapply(fullTableWarnings, function(x){
-                    print("== x")
-                    print(x)
                     if(x == "<p>None</p>"){
                       return(NULL)
                     }
@@ -2775,7 +2533,6 @@ shinyServer(function(input, output, session) {
                   
                   # Save warningCheck to reactive value so we can reference outside of this scope
                   warningList$warnings[[i]] <- warningCheck
-
                   
                   # Create checkbox column to display
                   selectList <- lapply(checkboxes[[i]], function(x) {
@@ -3309,11 +3066,7 @@ shinyServer(function(input, output, session) {
         selectAllSetButtonStatus$option = "deselect"
         updateActionButton(session, "selectAllSetButton", label="Deselect All Chemicals for this Set")
         for (i in checkboxList$checkboxes) {
-          print("i: ")
-          print(i)
           for(j in names(i)){
-            print("j: ")
-            print(j)
             if(unlist(str_split(j, "__"))[2] == input$tab){
               input[[j]] == TRUE
               updateCheckboxInput(session, j, value = TRUE)
@@ -3389,10 +3142,7 @@ shinyServer(function(input, output, session) {
     
     # Shared code to create networks
     generateNetwork <- function(transactionId, cutoff, networkMode, inputNetwork, qval){
-      
       inputNetwork <- paste0(inputNetwork, collapse="#")
-      print("NETWORK INPUT SETS")
-      print(inputNetwork)
       
       # Error handling
       resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="generateNetwork", query=list(transactionId=transactionId, cutoff=cutoff, mode=networkMode, input=inputNetwork, qval=qval))
@@ -3522,10 +3272,6 @@ shinyServer(function(input, output, session) {
       for (i in 1:length(enrichmentSetsList$enrichmentSets)){
         updateNetworkBox <- paste0(updateNetworkBox, "#", names(enrichmentSetsList$enrichmentSets)[i], "\n", paste0(enrichmentSetsList$enrichmentSets[[i]], collapse="\n"), "\n")
       }
-      
-      print("updateNetworkBox")
-      print(updateNetworkBox)
-      
       performEnrichment(updateNetworkBox, reenrichFlag=TRUE) 
       
     })
@@ -3535,7 +3281,6 @@ shinyServer(function(input, output, session) {
       if (is.null(classColors[annoClass]) == FALSE) {
         return(paste0("rgb(", paste0(classColors[[annoClass]], collapse=", "), ")"))
       } else {
-        print("classColors[annoClass] does not exist")
         return(NULL)
       }
     }
@@ -3590,8 +3335,9 @@ shinyServer(function(input, output, session) {
     
     # Generate specific colors for network edges based on jaccard index
     generateJaccardColor <- function(jaccard) {
-      if (jaccard < 0.0)
-        print("Invalid jaccard (below 0)")
+      if (jaccard < 0.0) {
+        # invalid
+      }
       else if (jaccard >= 0.0 & jaccard < 0.1) {
         return("rgb(132, 232, 246)")
       }
@@ -3623,7 +3369,7 @@ shinyServer(function(input, output, session) {
         return("rgb(34, 41, 135)")
       }
       else {
-        print(paste0("Invalid jaccard (above 1): ", jaccard))
+        # invalid
         return("-1")
       }
     }
@@ -3703,10 +3449,6 @@ shinyServer(function(input, output, session) {
           # Add additional plots to bar graph if more than 1 valid input set
           if(length(tmpBgCleaned) > 0){
             for(i in 1:length(tmpBgCleaned)){
-              
-              print("THIS ===")
-              print(colorsList[names(tmpBgCleaned[i])])
-              
               bgDisplay <- bgDisplay %>% add_trace(x = tmpBgCleaned[[i]], name = names(tmpBgCleaned)[i], marker = list(color = colorsList[names(tmpBgCleaned[i])])  )
             }
           }

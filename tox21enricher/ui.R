@@ -16,7 +16,6 @@ js_code <- "
 
 # Theme toggle js
 # vvv solution from here: https://stackoverflow.com/questions/61632272/r-shiny-light-dark-mode-switch vvv
-#tags$script(
 js_theme <-  "
         shinyjs.toggleTheme = function() {
         
@@ -72,7 +71,6 @@ js_theme <-  "
                 })
           }
         "
-#),
 
 # Define UI for Tox21Enricher application
 shinyUI(fluidPage(
@@ -89,15 +87,12 @@ shinyUI(fluidPage(
     title = "Tox21 Enricher",
     titlePanel("Tox21 Enricher"),
     
-
     # Sidebar
     sidebarLayout(
-        
         sidebarPanel(width=2,
             useShinyjs(),
             extendShinyjs(text = js_code, functions = 'browseURL'),
             extendShinyjs(text = js_theme, functions = 'toggleTheme'),
-            #p("Please see this ", tags$a(href="docs/Tox21Enricher_Manual_v3.0.pdf", "link", target="_blank"), "for instructions on using this application and the descriptions about the chemical / biological categories. Other resources from the Tox21 toolbox can be viewed", tags$a(href="https://ntp.niehs.nih.gov/results/tox21/tbox/","here.")),
             p("Welcome to Tox21 Enricher! Please see this ", actionLink(inputId="manualLink", label="link"), "for instructions on using this application and the descriptions about the chemical / biological categories. Other resources from the Tox21 toolbox can be viewed", tags$a(href="https://ntp.niehs.nih.gov/results/tox21/tbox/","here."), "A sufficiently robust internet connection and JavaScript are required to use all of this application's features."),
             # Display API connection status
             uiOutput("apiConnection"),
