@@ -793,7 +793,6 @@ generateNetwork <- function(res, req, transactionId, cutoff, mode, input, qval){
   termsStringPlaceholder <- paste0(chartNetworkUIDs, collapse=",")
   
   # Connect to db
-  
   poolNetwork <- dbPool(
     drv = dbDriver("PostgreSQL", max.con = 100),
     dbname = tox21config$database,
@@ -825,6 +824,29 @@ generateNetwork <- function(res, req, transactionId, cutoff, mode, input, qval){
   
   return(outpNetwork)
   #})
+}
+
+#* Access database to get additional information from the supplied CASRN
+#* @param casrn CASRN ID
+#* @get /getChemicalDetails
+getChemicalDetails <- function(res, req, casrn){
+  # Connect to db
+  poolCasrns <- dbPool(
+    drv = dbDriver("PostgreSQL", max.con = 100),
+    dbname = tox21config$database,
+    host = tox21config$host,
+    user = tox21config$uid,
+    password = tox21config$pwd,
+    idleTimeout = 3600000
+  )
+  # Query database
+  queryCasrns <- sqlInterpolate(ANSI(), paste0( "SELECT * FROM chemical_detail WHERE casrn='", casrn, "';" ), id="chemDetails")
+  outpCasrns <- dbGetQuery(poolCasrns, queryCasrns)
+  
+  # Close pool
+  poolClose(poolCasrns)
+  
+  return(outpCasrns)
 }
 
 #######################################################################################
