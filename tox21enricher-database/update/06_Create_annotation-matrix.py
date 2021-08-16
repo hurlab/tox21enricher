@@ -1,6 +1,6 @@
 import re
 mat = open("chem_annotation_matrix_v1.0.txt","r")
-out = open("out.txt", "w+")
+out = open("annotation-matrix.sql", "w+")
 
 matrix = mat.readlines()
 mat.close()
