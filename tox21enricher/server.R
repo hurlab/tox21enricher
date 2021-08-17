@@ -232,6 +232,7 @@ shinyServer(function(input, output, session) {
                                  rownames = FALSE,
                                  class = "row-border stripe compact",
                                  style = "bootstrap",
+                                 select = "none",
                                  options = list( 
                                    paging = TRUE,
                                    #autoWidth = FALSE,
@@ -968,7 +969,8 @@ shinyServer(function(input, output, session) {
                              escape = FALSE,
                              rownames = FALSE,
                              class = "row-border stripe compact",
-                             style = "bootstrap"
+                             style = "bootstrap",
+                             select = "none"
                )
         )
       )
@@ -1565,7 +1567,8 @@ shinyServer(function(input, output, session) {
                                escape = FALSE,
                                rownames = FALSE,
                                class = "row-border stripe compact",
-                               style = "bootstrap"
+                               style = "bootstrap",
+                               select = "none"
                  )
           )
         )
@@ -2362,69 +2365,6 @@ shinyServer(function(input, output, session) {
                     )))
                   })
                   
-                  # Dynamically create matching observers for zoomed in views of chemical structures
-                  lapply(names(reenrichResults),function(i) {
-                    resultImageObservers <- lapply(reenrichResults[[i]][, "casrn"], function(casrnName) {
-                      # Access database and fetch chemical details
-                      resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="getChemicalDetails", query=list(casrn=casrnName))
-                      chemDetail <- unlist(content(resp), recursive=FALSE)
-                      
-                      testsubstanceChemname <- chemDetail[["testsubstance_chemname"]]
-                      formula <- chemDetail[["molecular_formular"]]
-                      iupacName <- chemDetail[["iupac_name"]]
-                      inchi <- chemDetail[["inchis"]]
-                      inchiKey <- chemDetail[["inchikey"]]
-                      smiles <- chemDetail[["smiles"]]
-                      dtxsid <- chemDetail[["dtxsid"]]
-                      dtxrid <- chemDetail[["dtxrid"]]
-                      weight <- chemDetail[["mol_weight"]]
-                      cid <- chemDetail[["cid"]]
-
-                      # Resize structural image
-                      svgExpanded <- paste0(svgImagesList[paste0(casrnName, "__", i)])
-                      svgExpanded <- str_replace(svgExpanded , "width='100px'", "width='600px'")
-                      svgExpanded <- str_replace(svgExpanded , "height='80px'", "height='480px'")
-
-                      # Create observer
-                      observeEvent(input[[paste0("ab__img__", casrnName, "__", i)]], {
-                        showModal(
-                          modalDialog(
-                            title=casrnName,
-                            footer=modalButton("Close"),
-                            size="l",
-                            fluidRow(
-                              HTML(paste0(svgExpanded)),
-                              column(6, HTML("<b>DTXSID</b>")),
-                              column(6, HTML(dtxsid)),
-                              column(6, HTML("<b>DTXRID</b>")),
-                              column(6, HTML(dtxrid)),
-                              column(6, HTML("<b>Chemical Name</b>")),
-                              column(6, HTML(testsubstanceChemname)),
-                              column(6, HTML("<b>IUPAC Name</b>")),
-                              column(6, HTML(iupacName)),
-                              column(6, HTML("<b>CASRN</b>")),
-                              column(6, HTML(casrnName)),
-                              column(6, HTML("<b>SMILES</b>")),
-                              column(6, HTML(smiles)),
-                              column(6, HTML("<b>InChI</b>")),
-                              column(6, HTML(inchi)),
-                              column(6, HTML("<b>InChI Key</b>")),
-                              column(6, HTML(inchiKey)),
-                              column(6, HTML("<b>Molecular Formula</b>")),
-                              column(6, HTML(formula)),
-                              column(6, HTML("<b>Molecular Weight</b>")),
-                              column(6, HTML(weight)),
-                              column(6, HTML( paste0("<a href=\"https://comptox.epa.gov/dashboard/dsstoxdb/results?search=", dtxsid, "&abbreviation=TOX21SL\">View at EPA</a>") )),
-                              column(6, HTML( paste0("<a href=\"https://pubchem.ncbi.nlm.nih.gov/compound/", cid, "\">View at PubChem</a>") ))
-                            ),
-                            br(),
-                            br(),
-                          )
-                        )
-                      })
-                    })
-                  })
-                  
                   # Get additional information for each CASRN from database and add to table
                   expandedInfo <- t(sapply(reenrichResults[[i]][,"casrn"], function(casrn){
                     resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="casrnData", query=list(input=casrn))
@@ -2432,32 +2372,60 @@ shinyServer(function(input, output, session) {
                       return(NULL)
                     }
                     
-                    outputIupac <- unlist(lapply(content(resp), function(x){
-                      return(x$iupac_name)
-                    }))
-                    outputSmiles <- unlist(lapply(content(resp), function(x){
-                      return(x$smiles)
-                    }))
-                    outputDtxsid <- unlist(lapply(content(resp), function(x){
-                      return(x$dtxsid)
-                    }))
-                    outputDtxrid <- unlist(lapply(content(resp), function(x){
-                      return(x$dtxrid)
-                    }))
-                    outputFormula <- unlist(lapply(content(resp), function(x){
-                      return(x$mol_formula)
-                    }))
-                    outputWeight <- unlist(lapply(content(resp), function(x){
-                      return(x$mol_weight)
-                    }))
-                    outputInchi <- unlist(lapply(content(resp), function(x){
-                      return(x$inchis)
-                    }))
-                    outputInchikey <- unlist(lapply(content(resp), function(x){
-                      return(x$inchikey)
-                    }))
+                    # Dynamically create matching observers for zoomed in views of chemical structures
+                    chemDetail <- unlist(content(resp), recursive=FALSE)
+                    outputTestsubstanceChemname <- chemDetail[["testsubstance_chemname"]]
+                    outputFormula <- chemDetail[["mol_formula"]]
+                    outputIupac <- chemDetail[["iupac_name"]]
+                    outputInchi <- chemDetail[["inchis"]]
+                    outputInchikey <- chemDetail[["inchikey"]]
+                    outputSmiles <- chemDetail[["smiles"]]
+                    outputDtxsid <- chemDetail[["dtxsid"]]
+                    outputDtxrid <- chemDetail[["dtxrid"]]
+                    outputWeight <- chemDetail[["mol_weight"]]
+                    outputCid <- chemDetail[["cid"]]
                     
-                    infoOutp <- data.frame(iupac_name=outputIupac, smiles=outputSmiles, dtxsid=outputDtxsid, dtxrid=outputDtxrid, mol_formula=outputFormula, mol_weight=outputWeight, inchis=outputInchi, inchikey=outputInchikey, stringsAsFactors=FALSE)
+                    # Resize structural image
+                    svgExpanded <- paste0(svgImagesList[paste0(casrn, "__", i)])
+                    svgExpanded <- str_replace(svgExpanded , "width='100px'", "width='600px'")
+                    svgExpanded <- str_replace(svgExpanded , "height='80px'", "height='480px'")
+
+                    # Create observer
+                    observeEvent(input[[paste0("ab__img__", casrn, "__", i)]], {
+                      showModal(
+                        modalDialog(
+                          title=casrn,
+                          footer=modalButton("Close"),
+                          size="l",
+                          fluidRow(
+                            HTML(paste0(svgExpanded)),
+                            column(6, HTML("<b>DTXSID</b>")),
+                            column(6, HTML(outputDtxsid)),
+                            column(6, HTML("<b>DTXRID</b>")),
+                            column(6, HTML(outputDtxrid)),
+                            column(6, HTML("<b>Chemical Name</b>")),
+                            column(6, HTML(outputTestsubstanceChemname)),
+                            column(6, HTML("<b>IUPAC Name</b>")),
+                            column(6, HTML(outputIupac)),
+                            column(6, HTML("<b>CASRN</b>")),
+                            column(6, HTML(casrn)),
+                            column(6, HTML("<b>SMILES</b>")),
+                            column(6, HTML(outputSmiles)),
+                            column(6, HTML("<b>InChI</b>")),
+                            column(6, HTML(outputInchi)),
+                            column(6, HTML("<b>InChI Key</b>")),
+                            column(6, HTML(outputInchikey)),
+                            column(6, HTML("<b>Molecular Formula</b>")),
+                            column(6, HTML(outputFormula)),
+                            column(6, HTML("<b>Molecular Weight</b>")),
+                            column(6, HTML(outputWeight)),
+                            column(6, HTML(paste0("<a href=\"https://comptox.epa.gov/dashboard/dsstoxdb/results?search=", outputDtxsid, "&abbreviation=TOX21SL\">View at EPA</a>"))),
+                            column(6, HTML(paste0("<a href=\"https://pubchem.ncbi.nlm.nih.gov/compound/", outputCid, "\">View at PubChem</a>")))
+                          )
+                        )
+                      )
+                    })
+                    infoOutp <- data.frame("iupac_name"=outputIupac, "smiles"=outputSmiles, "dtxsid"=outputDtxsid, "dtxrid"=outputDtxrid, "mol_formula"=outputFormula, "mol_weight"=outputWeight, "inchis"=outputInchi, "inchikey"=outputInchikey, stringsAsFactors=FALSE)
                     return(infoOutp)
   
                   }))
@@ -2656,6 +2624,7 @@ shinyServer(function(input, output, session) {
                           class = "row-border stripe compact",
                           rownames = FALSE,
                           style = "bootstrap",
+                          select = "none",
                           options = list( 
                             paging=TRUE,
                             preDrawCallback = JS('function() { Shiny.unbindAll(this.api().table().node()); }'), 

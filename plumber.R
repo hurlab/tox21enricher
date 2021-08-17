@@ -452,8 +452,7 @@ casrnData <- function(res, req, input){
     password = tox21config$pwd,
     idleTimeout = 3600000
   )
-
-  casrnQuery <- sqlInterpolate(ANSI(), paste0("SELECT iupac_name, smiles, dtxsid, dtxrid, mol_formula, mol_weight, inchis, inchikey FROM chemical_detail WHERE CASRN LIKE '", input, "';"), id = "casrnResults")
+  casrnQuery <- sqlInterpolate(ANSI(), paste0("SELECT iupac_name, smiles, dtxsid, dtxrid, mol_formula, mol_weight, inchis, inchikey, cid, testsubstance_chemname FROM chemical_detail WHERE CASRN LIKE '", input, "';"), id = "casrnResults")
   casrnOutp <- dbGetQuery(poolCasrn, casrnQuery)
   poolClose(poolCasrn)
   return(casrnOutp)
@@ -824,29 +823,6 @@ generateNetwork <- function(res, req, transactionId, cutoff, mode, input, qval){
   
   return(outpNetwork)
   #})
-}
-
-#* Access database to get additional information from the supplied CASRN
-#* @param casrn CASRN ID
-#* @get /getChemicalDetails
-getChemicalDetails <- function(res, req, casrn){
-  # Connect to db
-  poolCasrns <- dbPool(
-    drv = dbDriver("PostgreSQL", max.con = 100),
-    dbname = tox21config$database,
-    host = tox21config$host,
-    user = tox21config$uid,
-    password = tox21config$pwd,
-    idleTimeout = 3600000
-  )
-  # Query database
-  queryCasrns <- sqlInterpolate(ANSI(), paste0( "SELECT * FROM chemical_detail WHERE casrn='", casrn, "';" ), id="chemDetails")
-  outpCasrns <- dbGetQuery(poolCasrns, queryCasrns)
-  
-  # Close pool
-  poolClose(poolCasrns)
-  
-  return(outpCasrns)
 }
 
 #######################################################################################
