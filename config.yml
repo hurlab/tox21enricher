@@ -10,7 +10,7 @@ default:
     port: 5432
     database: 'tox21enricher'
     ### Version of application ###
-    appversion: "3.0"
+    appversion: "1.0"
     ### Directories/pathing ###
     # The application's home directory
     appdir: "/home/username/tox21enricher/"

@@ -10,6 +10,9 @@
 # Define server logic
 shinyServer(function(input, output, session) {
   
+    # List of observers
+    setFilesObservers <- reactiveValues(observers = list())
+  
     # Theme info
     theme <- reactiveValues(textcolor = "#000000")
   
@@ -22,7 +25,7 @@ shinyServer(function(input, output, session) {
     # Display enrichment type on title
     titleStatus <- reactiveValues(option = character())
     observeEvent(input$enrich_from, {
-      if(input$enrich_from == "View Annotations for Tox21 Chemicals") {
+      if(input$enrich_from == "View annotations for Tox21 chemicals") {
         # for grammatical reasons
         output$selected_enrich_from <- renderText({
           paste(input$enrich_from)
@@ -99,7 +102,7 @@ shinyServer(function(input, output, session) {
         shinyjs::enable(id = "searchForm")
         shinyjs::disable(id = "enrichmentForm")
         shinyjs::disable(id = "enrich_from")
-        updateActionButton(session, "searchButton", label = "Perform Enrichment")  
+        updateActionButton(session, "searchButton", label = "Perform enrichment", icon=icon("undo"))  
         searchStatus$option <- "enrich"
         
         # Load search previous enrichment menu
@@ -206,7 +209,7 @@ shinyServer(function(input, output, session) {
             # Clean up annoSelectStr
             annoSelectStr <- unlist(str_split(annoSelectStr, ","))
             annoSelectStr <- paste0(annoSelectStr, collapse=", ")
-            
+            annoSelectStr <- gsub("=checked", "", annoSelectStr)
             
             searchCheckbox <- paste0(checkboxInput(inputId = paste0("cb_search__", transactionId), label=NULL, width="4px"))
             
@@ -247,9 +250,7 @@ shinyServer(function(input, output, session) {
                    )
             )
           )
-          
         }
-        
       } else {
         # Show main page and hide search page
         shinyjs::hide(id = "searchForm")
@@ -257,7 +258,8 @@ shinyServer(function(input, output, session) {
         shinyjs::disable(id = "searchForm")
         shinyjs::enable(id = "enrichmentForm")
         shinyjs::enable(id = "enrich_from")
-        updateActionButton(session, "searchButton", label = "View Previous Results", icon=icon("search"))  
+        shinyjs::reset(id = "searchForm")
+        updateActionButton(session, "searchButton", label = "View previous results", icon=icon("search"))  
         searchStatus$option <- "search"
       }
     }
@@ -266,7 +268,6 @@ shinyServer(function(input, output, session) {
     observeEvent(input$searchPrevButton, {
       setToFetch <- ""
       selectedSets <- lapply(searchCheckboxes$checkboxes, function(i){
-
         if(is.null(input[[i]]) == FALSE) {
           if(input[[i]] == TRUE) {
             return(unlist(str_split(i, "__"))[2])
@@ -427,7 +428,7 @@ shinyServer(function(input, output, session) {
           fluidRow(
             column(12, 
               h4("Clear Local Cache"),
-              actionButton(inputId="clearCacheButton", label="Clear Local Cache", icon=icon("trash")),
+              actionButton(inputId="clearCacheButton", label="Clear local cache", icon=icon("trash")),
               br(),
               p("This will clear the Tox21 Enricher client application's local storage and delete files like enrichment results and the manual. These files will have to be redownloaded in the future. This cannot be undone.")       
             )
@@ -555,7 +556,6 @@ shinyServer(function(input, output, session) {
     selectedSetsReactive <- reactiveValues(sets=NULL)
     # Delete records for selected requests
     observeEvent(input$searchDeleteSelected, {
-
       selectedSets <- lapply(searchCheckboxes$checkboxes, function(i){
         if(input[[i]] == TRUE) {
           return(unlist(str_split(i, "__"))[2])
@@ -795,7 +795,7 @@ shinyServer(function(input, output, session) {
     
     # Display chemical input type
     output$input_type <- renderText({
-        if(input$enrich_from == "User-Provided CASRN List" | input$enrich_from == "View Annotations for Tox21 Chemicals") {
+        if(input$enrich_from == "user-provided CASRN list" | input$enrich_from == "View annotations for Tox21 chemicals") {
             paste("Input CASRNs")
         } else {
             paste("Input SMILE/InChI Strings")
@@ -804,7 +804,7 @@ shinyServer(function(input, output, session) {
     
     # Change enrichment settings
     observeEvent(input$enrich_from, {
-        if(input$enrich_from == "User-Provided CASRN List") {
+        if(input$enrich_from == "user-provided CASRN list") {
           enrichmentType$enrichType <- "casrn"
           shinyjs::show(id = "casrnExamples")
           shinyjs::hide(id = "smilesExamples")
@@ -812,10 +812,10 @@ shinyServer(function(input, output, session) {
           shinyjs::hide(id = "tanimotoThreshold")
           
           output[["inputInstructions"]] <- renderUI(
-            p("Add \"#SetName\" before each set, if using multiple sets at once.")
+            p("Add \"#SetName\" before each set if using multiple sets at once. Set names may only be alphanumeric characters (A-Z, a-z, and 0-9) and spaces are ignored.")
           )
           
-        } else if (input$enrich_from == "View Annotations for Tox21 Chemicals") {
+        } else if (input$enrich_from == "View annotations for Tox21 chemicals") {
           enrichmentType$enrichType <- "annotation"
           shinyjs::show(id = "casrnExamples")
           shinyjs::hide(id = "smilesExamples")
@@ -824,11 +824,11 @@ shinyServer(function(input, output, session) {
           shinyjs::hide(id = "tanimotoThreshold")
           
           output[["inputInstructions"]] <- renderUI(
-            p("Enter the CASRNs for ", tags$a(href="https://comptox.epa.gov/dashboard/chemical_lists/TOX21SL", "chemicals in the Tox21 screening library"),  " (one per line) to view each of their associated annotations in Tox21 Enricher.")
+            p("Enter the CASRNs for ", tags$a(href="https://comptox.epa.gov/dashboard/chemical_lists/TOX21SL", "chemicals in the Tox21 screening library"),  " (one per line) to view each of their associated annotations in Tox21 Enricher. Add \"#SetName\" before each set if using multiple sets at once. Set names may only be alphanumeric characters (A-Z, a-z, and 0-9) and spaces are ignored.")
           )
           
         } else {
-          if(input$enrich_from == "Chemicals with Shared Substructures") {
+          if(input$enrich_from == "chemicals with shared substructures") {
             enrichmentType$enrichType <- "substructure"
             shinyjs::hide(id = "tanimotoThreshold")
           } else {
@@ -863,7 +863,7 @@ shinyServer(function(input, output, session) {
             updateCheckboxGroupInput(session, "checkboxDrugBank", selected = "")
             updateCheckboxGroupInput(session, "checkboxCTD", selected = "")
             updateCheckboxGroupInput(session, "checkboxOther", selected = "")
-            updateActionButton(session, "select_all_annotations", label = "Select All")
+            updateActionButton(session, "select_all_annotations", label = "Select all")
             selectStatus$option <- "select"
         } else {
             updateCheckboxGroupInput(session, "checkboxPubChem", selected = annoClassList[[1]])
@@ -871,7 +871,7 @@ shinyServer(function(input, output, session) {
             updateCheckboxGroupInput(session, "checkboxDrugBank", selected = annoClassList[[3]])
             updateCheckboxGroupInput(session, "checkboxCTD", selected = annoClassList[[4]])
             updateCheckboxGroupInput(session, "checkboxOther", selected = annoClassList[[5]])
-            updateActionButton(session, "select_all_annotations", label = "Deselect All")
+            updateActionButton(session, "select_all_annotations", label = "Deselect all")
             selectStatus$option <- "deselect"
         }
         
@@ -909,7 +909,7 @@ shinyServer(function(input, output, session) {
         }
         else {
             shinyjs::hide("jsmeInput")
-            updateActionButton(session, "jsme_button", label = "Draw Molecules with JSME")
+            updateActionButton(session, "jsme_button", label = "Draw molecules with JSME")
             jsmeState$jsmeShowState <- "show"
         }
     })
@@ -938,21 +938,21 @@ shinyServer(function(input, output, session) {
       # Cleaned enrichment type strings
       if(reenrichFlag == TRUE){
         if(originalEnrichModeList$originalEnrichMode == "similarity") {
-          enrichmentDisplayType <- "Re-enrich from Chemicals with Structural Similarity" 
+          enrichmentDisplayType <- "Re-enrich from chemicals with structural similarity" 
         } else if (originalEnrichModeList$originalEnrichMode == "substructure") { # substructure
-          enrichmentDisplayType <- "Re-enrich from Chemicals with Shared Substructures"
+          enrichmentDisplayType <- "Re-enrich from chemicals with shared substructures"
         } else { #casrn network node update
-          enrichmentDisplayType <- "Enrich from User-Provided CASRN List"
+          enrichmentDisplayType <- "Enrich from user-provided CASRN list"
         }
       } else {
         if(enrichmentDisplayType == "casrn") {
-          enrichmentDisplayType <- "Enrich from User-Provided CASRN List"
+          enrichmentDisplayType <- "Enrich from user-provided CASRN list"
         } else if(enrichmentDisplayType == "annotation") {
-          enrichmentDisplayType <- "View Annotations for Tox21 Chemicals"
+          enrichmentDisplayType <- "View annotations for Tox21 chemicals"
         } else if(enrichmentDisplayType == "similarity") {
-          enrichmentDisplayType <- "Enrich from Chemicals with Structural Similarity"
+          enrichmentDisplayType <- "Enrich from chemicals with structural similarity"
         } else { # substructure
-          enrichmentDisplayType <- "Enrich from Chemicals with Shared Substructures"
+          enrichmentDisplayType <- "Enrich from chemicals with shared substructures"
         }
       }
         
@@ -979,45 +979,52 @@ shinyServer(function(input, output, session) {
     
     # Copies transaction ID to user's clipboard
     output$clipboard <- renderUI({
-      rclipButton("copyUUIDButton", "Copy UUID to Clipboard", reactiveTransactionId$id, icon("clipboard"))
+      rclipButton("copyUUIDButton", "Copy UUID to clipboard", reactiveTransactionId$id, icon("clipboard"))
     })
     
     # Refresh enrichment form
     observeEvent(input$refresh, {
         # Initialize all annotation classes to checked and button mode to "deselect"
-        annoClassList = annoClasses$classes
-        updateCheckboxGroupInput(session, "checkboxPubChem", selected = annoClassList[[1]])
-        updateCheckboxGroupInput(session, "checkboxDrugMatrix", selected = annoClassList[[2]])
-        updateCheckboxGroupInput(session, "checkboxDrugBank", selected = annoClassList[[3]])
-        updateCheckboxGroupInput(session, "checkboxCTD", selected = annoClassList[[4]])
-        updateCheckboxGroupInput(session, "checkboxOther", selected = annoClassList[[5]])
-        updateActionButton(session, "select_all_annotations", label = "Deselect All")
-        selectStatus$option <- "deselect"
-        shinyjs::reset("enrichmentForm")
-        shinyjs::show("enrichmentForm")
-        shinyjs::enable("enrichmentForm")
-        shinyjs::reset("select_all_annotations")
+        #annoClassList = annoClasses$classes
+        #updateCheckboxGroupInput(session, "checkboxPubChem", selected = annoClassList[[1]])
+        #updateCheckboxGroupInput(session, "checkboxDrugMatrix", selected = annoClassList[[2]])
+        #updateCheckboxGroupInput(session, "checkboxDrugBank", selected = annoClassList[[3]])
+        #updateCheckboxGroupInput(session, "checkboxCTD", selected = annoClassList[[4]])
+        #updateCheckboxGroupInput(session, "checkboxOther", selected = annoClassList[[5]])
+        #updateActionButton(session, "select_all_annotations", label = "Deselect all")
+        #selectStatus$option <- "deselect"
+        #shinyjs::reset(id = "enrichmentForm")
+        #shinyjs::reset(id = "resultsContainer")
+        #shinyjs::show(id = "enrichmentForm")
+        #shinyjs::enable(id = "enrichmentForm")
+        #shinyjs::reset(id = "select_all_annotations")
         
         # Clear the chemical submission text area
-        updateTextAreaInput(session, "submitted_chemicals", value="")
+        #updateTextAreaInput(session, "submitted_chemicals", value="")
         
         # Allow user to change enrichment type
-        shinyjs::enable("enrich_from")
+        #shinyjs::enable(id = "enrich_from")
         
         # Hide the refresh button
-        shinyjs::hide("refresh")
+        #shinyjs::hide(id = "refresh")
         
         # Re-enable View previous results button
-        shinyjs::enable(id="searchButton")
-        updateActionButton(session, "searchButton", label = "View Previous Results", icon=icon("search"))
-        searchStatus$option <- "search"
+        #shinyjs::enable(id="searchButton")
+        #updateActionButton(session, "searchButton", label = "View previous results", icon=icon("search"))
+        #searchStatus$option <- "search"
+        
+        # Reset reenrichResultsList$reenrichResults
+        #reenrichResultsList$reenrichResults <- NULL
         
         # clear the previous enrichment's results and hide
-        shinyjs::hide("resultsContainer")
-        shinyjs::reset("resultsContainer")
-        output[["resultsTabset"]] <- renderUI(
-            div(id="resultsTmp")
-        )
+        #shinyjs::hide("resultsContainer")
+        #shinyjs::reset("resultsContainer")
+        #output[["resultsTabset"]] <- renderUI(
+        #    div(id="resultsTmp")
+        #)
+
+        # refresh session entirely
+        session$reload()
     })
     
     # Keep track of what enrichment type is currently selected
@@ -1027,6 +1034,9 @@ shinyServer(function(input, output, session) {
     
     # Perform CASRN enrichment analysis when submit button is pressed
     observeEvent(input$submit, {
+      output$error_box <- renderUI({
+        p()
+      })
       # First, check if user filled out text input form  
       # Remove whitespace for checking
       validatedInput <- gsub("\\s*", "", input$submitted_chemicals)
@@ -1038,7 +1048,57 @@ shinyServer(function(input, output, session) {
         return(FALSE)
       }
       
-      performEnrichment(input$submitted_chemicals, reenrichFlag=FALSE)  
+      casrnValidatedInput <- ""
+      errorCasrns <- list()
+      inputToSubmit <- input$submitted_chemicals
+      
+      # Validate Input
+      
+      # 1) strip horizontal whitespace and condense multiple newlines
+      casrnValidatedInput <- gsub(" ", "", input$submitted_chemicals)
+      casrnValidatedInput <- gsub("\\t", "", casrnValidatedInput)
+      casrnValidatedInput <- gsub("\\n+", "\n", casrnValidatedInput)
+      
+      # If CASRN input, do the following:
+      if(enrichmentType$enrichType == "casrn" | enrichmentType$enrichType == "annotation") {
+
+        # 2a) check if of the form ###-###-### or setname
+        casrnValidatedInput <- unlist(str_split(casrnValidatedInput, "\n"))
+        errorCasrnsIndex <- 1
+        for(i in 1:length(casrnValidatedInput)) {
+          if(!grepl("^#[A-Za-z0-9]+|[0-9]+-[0-9]+-[0-9]+", casrnValidatedInput[i], ignore.case=TRUE)) {
+            errorCasrns[errorCasrnsIndex] <- i
+            errorCasrnsIndex <- errorCasrnsIndex + 1
+          }
+        }
+        # If there are errors
+        if(length(errorCasrns) > 0){
+          shinyjs::show(id="errorBox")
+          output$error_box <- renderUI({
+            HTML(paste0("<div class=\"text-danger\">Error: Incorrect CASRN or set name formatting on input line(s): <b>", paste0(errorCasrns, collapse=", "), "</b>. Please check your input and try again.</div>")) 
+          })
+          return(FALSE) 
+        }
+        inputToSubmit <- paste0(casrnValidatedInput, collapse="\n")
+        
+        # 3a) check if missing first set name, if you are using set names
+        usingSetNames <- FALSE
+        for(i in 1:length(casrnValidatedInput)) {
+          if(grepl("^#[A-Za-z0-9]+", casrnValidatedInput[i], ignore.case=TRUE)) { # Detect if we are using set names
+            usingSetNames <- TRUE
+            break
+          }
+        }
+        if(!grepl("^#[A-Za-z0-9]+", casrnValidatedInput[1], ignore.case=TRUE) & usingSetNames == TRUE) {
+          shinyjs::show(id="errorBox")
+          output$error_box <- renderUI({
+            HTML(paste0("<div class=\"text-danger\">Error: It appears you are using set names but have not provided a name for the first input set. Please check your input and try again.</div>")) 
+          })
+          return(FALSE)
+        }
+      }
+      
+      performEnrichment(inputToSubmit, reenrichFlag=FALSE)  
     })
     
     # Create reactive variable to store chemicals to re-enrich
@@ -1074,6 +1134,7 @@ shinyServer(function(input, output, session) {
     setColors <- reactiveValues(color = NULL)
     
     performEnrichment <- function(casrnBox, reenrichFlag=FALSE, originalNamesToReturn=NULL) {
+      
         # If reenriching, always do CASRN
         if(reenrichFlag == FALSE){
           reenrichFlagReactive$reenrichFlagReactive <- FALSE
@@ -1105,6 +1166,9 @@ shinyServer(function(input, output, session) {
 
         # Hide any previous errors
         shinyjs::hide(id="errorBox")
+        
+        # Reset checkboxList$checkboxes
+        checkboxList$checkboxes <- NULL
       
         # Get node cutoff. If re-enriching, set cutoff to value set by re-enrichment slider
         if(reenrichFlag == TRUE){
@@ -1120,7 +1184,6 @@ shinyServer(function(input, output, session) {
         # Split CASRNBox to get each line and organize into sets
         if (enrichmentType$enrichType == "casrn" | enrichmentType$enrichType == "annotation") {
             enrichmentSets <- list()
-            
             if (grepl("#", casrnBox, fixed=TRUE)) { # If more than 1 set
                 setName <- ""
                 enrichmentSets <- unlist(str_split(casrnBox, "#"))
@@ -1305,7 +1368,6 @@ shinyServer(function(input, output, session) {
                   } else if(nrow(outpSmiles) < 1) {
                     return(NULL)
                   }
-
                   if(nrow(outpSmiles) > 0){
                     return(outpSmiles)
                   }
@@ -1376,6 +1438,42 @@ shinyServer(function(input, output, session) {
 
         # Generate UUID for this query
         transactionId <- UUIDgenerate()
+        # Access filesystem to see if UUID already exists
+        resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="checkId")
+        if(resp$status_code != 200){
+          # Hide original form when done with enrichment
+          shinyjs::show(id="enrichmentForm")
+          # Disable changing input type when button is clicked
+          shinyjs::enable(id="enrich_from")
+          # Show 'Restart' button, disable by default so user can't interfere with enrichment process
+          shinyjs::hide(id="refresh")
+          shinyjs::enable(id="refresh")
+          # Hide loading spinner
+          shinyjs::hide(id="resultsContainer")
+          # Show error message on main page
+          shinyjs::show(id="errorBox")
+          output$error_box <- renderUI({
+            HTML(paste0("<div class=\"text-danger\">Error: Problem generating input UUID for enrichment.</div>"))
+          })
+          return(FALSE)
+        } else {
+          fullIDs <- unlist(content(resp), recursive=FALSE)
+          fullIDs <- unlist(lapply(fullIDs, function(x){
+            # Get just the ID
+            return(unlist(str_split(x, "Output/"))[2])
+          }))
+          goodID <- FALSE
+          while(goodID == FALSE){
+            if(transactionId %in% fullIDs){
+              # Regenerate UUID
+              transactionId <- UUIDgenerate()
+            } else {
+              goodID <- TRUE
+            }
+          }
+        }
+        
+        # If UUID is good, assign to reactiveValue
         reactiveTransactionId$id <- transactionId
 
         inDirWeb <- paste0("Input/", transactionId, "/")
@@ -1494,21 +1592,21 @@ shinyServer(function(input, output, session) {
         enrichmentDisplayType <- ""
         if(reenrichFlag == TRUE){
           if(originalEnrichModeList$originalEnrichMode == "similarity") {
-            enrichmentDisplayType <- "Re-enrich from Chemicals with Structural Similarity" 
+            enrichmentDisplayType <- "Re-enrich from chemicals with structural similarity" 
           } else if (originalEnrichModeList$originalEnrichMode == "substructure") { # substructure
-            enrichmentDisplayType <- "Re-enrich from Chemicals with Shared Substructures"
+            enrichmentDisplayType <- "Re-enrich from chemicals with shared substructures"
           } else { #casrn network node update
-            enrichmentDisplayType <- "Enrich from User-Provided CASRN List"
+            enrichmentDisplayType <- "Enrich from user-provided CASRN list"
           }
         } else {
           if(enrichmentType$enrichType == "casrn") {
-            enrichmentDisplayType <- "Enrich from User-Provided CASRN List"
+            enrichmentDisplayType <- "Enrich from user-provided CASRN list"
           } else if(enrichmentType$enrichType == "annotation") {
-            enrichmentDisplayType <- "View Annotations for Tox21 Chemicals"
+            enrichmentDisplayType <- "View annotations for Tox21 chemicals"
           } else if(enrichmentType$enrichType == "similarity") {
-            enrichmentDisplayType <- "Enrich from Chemicals with Structural Similarity"
+            enrichmentDisplayType <- "Enrich from chemicals with structural similarity"
           } else { # substructure
-            enrichmentDisplayType <- "Enrich from Chemicals with Shared Substructures"
+            enrichmentDisplayType <- "Enrich from chemicals with shared substructures"
           }
         }
         
@@ -1731,6 +1829,9 @@ shinyServer(function(input, output, session) {
       # Show error message on main page
       shinyjs::show(id="errorBox")
       
+      # Reset results page
+      #shinyjs::reset(id="resultsContainer")
+      
       output$error_box <- renderUI({
         HTML(paste0("<div class=\"text-danger\">Request cancelled.</div>"))
       })
@@ -1740,7 +1841,12 @@ shinyServer(function(input, output, session) {
       return(FALSE)
     })
     
+    
+    
     enrichmentResults <- function(mode, transactionId, annoSelectStr, cutoff, enrichmentSets, originalNames, reenrichResults, originalEnrichMode, colorsList){
+        # Reset checkboxList$checkboxes
+        checkboxList$checkboxes <- NULL
+
         # Update cache file for completed enrichment
         # Create local file so we can reference later
         tmpDir <- paste0("./www/tmp/transaction/")
@@ -1853,7 +1959,7 @@ shinyServer(function(input, output, session) {
               ),
               fluidRow(
                 column(12,
-                       actionButton(inputId="downloadButton", label="Download Results", icon=icon("download"))       
+                       actionButton(inputId="downloadButton", label="Download results", icon=icon("download"))       
                 )
               )
             )
@@ -1876,31 +1982,33 @@ shinyServer(function(input, output, session) {
           lapply(1:length(setFiles), function(setFile){
             # If not the FullMatrix file or the zipped results archive, create observer for individual CASRN file links
             if( !grepl(paste0("__FullMatrix.txt"), setFilesSplit[setFile], fixed=TRUE) & !grepl(paste0(".zip"), setFilesSplit[setFile], fixed=TRUE)){
-              observeEvent(input[[paste0(setFilesSplit[setFile], "__link")]], {
-                # Create directory for request
-                dir.create(paste0("./www/tmp/output/", transactionId, "/"))
-                if(file.exists(paste0("./www/tmp/output/", transactionId, "/", setFilesSplit[setFile])) == FALSE){
-                  # TODO: error check if download fails
-                  download.file(paste0("http://", API_HOST, ":", API_PORT, "/serveFileText?transactionId=", transactionId, "&filename=", setFilesSplit[setFile], "&subDir=Output"), destfile=paste0("./www/tmp/output/", transactionId, "/", setFilesSplit[setFile]))
-                }
-                # Next, use custom JavaScript to open manual from disk in new tab
-                js$browseURL(paste0("tmp/output/", transactionId, "/", setFilesSplit[setFile]))
-              })
+              if(is.null(setFilesObservers$observers[[paste0("casrn", setFilesSplit[setFile], "Observer__", setFile)]])){
+                setFilesObservers$observers[[paste0("casrn", setFilesSplit[setFile], "Observer__", setFile)]] <- observeEvent(input[[paste0(setFilesSplit[setFile], "__link")]], {
+                  # Create directory for request
+                  dir.create(paste0("./www/tmp/output/", transactionId, "/"))
+                  if(file.exists(paste0("./www/tmp/output/", transactionId, "/", setFilesSplit[setFile])) == FALSE){
+                    # TODO: error check if download fails
+                    download.file(paste0("http://", API_HOST, ":", API_PORT, "/serveFileText?transactionId=", transactionId, "&filename=", setFilesSplit[setFile], "&subDir=Output"), destfile=paste0("./www/tmp/output/", transactionId, "/", setFilesSplit[setFile]))
+                  }
+                  js$browseURL(paste0("tmp/output/", transactionId, "/", setFilesSplit[setFile]))
+                }, ignoreInit = TRUE)
+              }
             }
           })
           
           lapply(names(enrichmentSets), function(i) {
             # Full matrix
-            observeEvent(input[[paste0(i, "__FullMatrix.txt__link")]], {
-              # Create directory for request
-              dir.create(paste0("./www/tmp/output/", transactionId, "/"))
-              if(file.exists(paste0("./www/tmp/output/", transactionId, "/", i, "__FullMatrix.txt")) == FALSE){
-                # TODO: error check if download fails
-                download.file(paste0("http://", API_HOST, ":", API_PORT, "/serveFileText?transactionId=", transactionId, "&filename=", i, "__FullMatrix.txt&subDir=Output"), destfile=paste0("./www/tmp/output/", transactionId, "/", i, "__FullMatrix.txt"))
-              }
-              # Next, use custom JavaScript to open manual from disk in new tab
-              js$browseURL(paste0("tmp/output/", transactionId, "/", i, "__FullMatrix.txt"))
-            })
+            if(is.null(setFilesObservers$observers[[paste0("fullMatrixObserver__", i)]])){
+              setFilesObservers$observers[[paste0("fullMatrixObserver__", i)]] <- observeEvent(input[[paste0(i, "__FullMatrix.txt__link")]], {
+                # Create directory for request
+                dir.create(paste0("./www/tmp/output/", transactionId, "/"))
+                if(file.exists(paste0("./www/tmp/output/", transactionId, "/", i, "__FullMatrix.txt")) == FALSE){
+                  # TODO: error check if download fails
+                  download.file(paste0("http://", API_HOST, ":", API_PORT, "/serveFileText?transactionId=", transactionId, "&filename=", i, "__FullMatrix.txt&subDir=Output"), destfile=paste0("./www/tmp/output/", transactionId, "/", i, "__FullMatrix.txt"))
+                }
+                js$browseURL(paste0("tmp/output/", transactionId, "/", i, "__FullMatrix.txt"))
+              }, ignoreInit = TRUE)
+            }
             
             output[[paste0("outTab_", i)]] <- renderUI(
               column(12,
@@ -1912,12 +2020,9 @@ shinyServer(function(input, output, session) {
                       fluidRow(
                         column(id=paste0(setFilesSplit[setFile]), 3, 
                           if(unlist(str_split(setFilesSplit[setFile], "__"))[2] == "FullMatrix.txt"){
-                            #tipify( tags$a(href=paste0(outDirWeb, setFilesSplit[setFile]), target="_blank", setFilesSplit[setFile]), "A matrix displaying all of the annotations and their corresponding chemicals for this set (.txt format).", placement="right")
-                            #tipify( actionLink(inputId=paste0(i, "__FullMatrix.txt__link"), label=setFilesSplit[setFile]), "A matrix displaying all of the annotations and their corresponding chemicals for this set (.txt format).", placement="right")
                             tipify( div(actionLink(inputId=paste0(i, "__FullMatrix.txt__link"), label=setFilesSplit[setFile])), "A matrix displaying all of the annotations and their corresponding chemicals for this set (.txt format).", placement="bottom")
                           }
                           else { # CASRN file
-                            #tipify( tags$a(href=paste0(outDirWeb, setFilesSplit[setFile]), target="_blank", setFilesSplit[setFile]), "A list of annotations in the Tox21 Enricher database for this chemical with respect to the given annotation classes (.txt format).", placement="right")
                             tipify( div(actionLink(inputId=paste0(setFilesSplit[setFile], "__link"), label=setFilesSplit[setFile])), "A list of annotations in the Tox21 Enricher database for this chemical with respect to the given annotation classes (.txt format).", placement="bottom")
                           }
                         )
@@ -1930,31 +2035,36 @@ shinyServer(function(input, output, session) {
           })
 
           # Event handler for download full results
-          observeEvent(input[["downloadButton"]], {
-            # Create directory for request
-            dir.create(paste0("./www/tmp/output/", transactionId, "/"))
-            if(file.exists(paste0("./www/tmp/output/", transactionId, "/tox21enricher_", transactionId, ".zip")) == FALSE){
-              # TODO: error check if download fails
-              download.file(paste0("http://", API_HOST, ":", API_PORT, "/serveFileText?transactionId=", transactionId, "&filename=tox21enricher_", transactionId, ".zip&subDir=Output"), destfile=paste0("./www/tmp/output/", transactionId, "/tox21enricher_", transactionId, ".zip"))
-            }
-            # Next, use custom JavaScript to open manual from disk in new tab
-            js$browseURL(paste0("tmp/output/", transactionId, "/tox21enricher_", transactionId, ".zip"))
-          })
+          if(is.null(setFilesObservers$observers[[paste0("downloadObserver__")]])){
+            setFilesObservers$observers[[paste0("downloadObserver__")]] <- observeEvent(input[["downloadButton"]], {
+              # Create directory for request
+              dir.create(paste0("./www/tmp/output/", transactionId, "/"))
+              if(file.exists(paste0("./www/tmp/output/", transactionId, "/tox21enricher_", transactionId, ".zip")) == FALSE){
+                # TODO: error check if download fails
+                download.file(paste0("http://", API_HOST, ":", API_PORT, "/serveFileText?transactionId=", transactionId, "&filename=tox21enricher_", transactionId, ".zip&subDir=Output"), destfile=paste0("./www/tmp/output/", transactionId, "/tox21enricher_", transactionId, ".zip"))
+              }
+              # Next, use custom JavaScript to open manual from disk in new tab
+              js$browseURL(paste0("tmp/output/", transactionId, "/tox21enricher_", transactionId, ".zip"))
+            }, ignoreInit = TRUE)
+          }
         
         } else { # Render enrichment results
           
           # Download button
           # Event handler for download full results
-          observeEvent(input[["downloadButton"]], {
-            # Create directory for request
-            dir.create(paste0("./www/tmp/output/", transactionId, "/"))
-            if(file.exists(paste0("./www/tmp/output/", transactionId, "/tox21enricher_", transactionId, ".zip")) == FALSE){
-              # TODO: error check if download fails
-              download.file(paste0("http://", API_HOST, ":", API_PORT, "/serveFileText?transactionId=", transactionId, "&filename=tox21enricher_", transactionId, ".zip&subDir=Output"), destfile=paste0("./www/tmp/output/", transactionId, "/tox21enricher_", transactionId, ".zip"))
-            }
-            # Next, use custom JavaScript to open manual from disk in new tab
-            js$browseURL(paste0("tmp/output/", transactionId, "/tox21enricher_", transactionId, ".zip"))
-          })
+          
+          if(is.null(setFilesObservers$observers[[paste0("downloadObserver__")]])){
+            setFilesObservers$observers[[paste0("downloadObserver__")]] <- observeEvent(input[["downloadButton"]], {
+              # Create directory for request
+              dir.create(paste0("./www/tmp/output/", transactionId, "/"))
+              if(file.exists(paste0("./www/tmp/output/", transactionId, "/tox21enricher_", transactionId, ".zip")) == FALSE){
+                # TODO: error check if download fails
+                download.file(paste0("http://", API_HOST, ":", API_PORT, "/serveFileText?transactionId=", transactionId, "&filename=tox21enricher_", transactionId, ".zip&subDir=Output"), destfile=paste0("./www/tmp/output/", transactionId, "/tox21enricher_", transactionId, ".zip"))
+              }
+              # Next, use custom JavaScript to open manual from disk in new tab
+              js$browseURL(paste0("tmp/output/", transactionId, "/tox21enricher_", transactionId, ".zip"))
+            }, ignoreInit = TRUE)
+          }
           
           # Choice names for radio buttons
           radioNames <- lapply(names(enrichmentSets), function(setName){
@@ -1977,7 +2087,7 @@ shinyServer(function(input, output, session) {
                   fluidRow(
                     column(12,
                       # Download results button
-                      actionButton(inputId="downloadButton", label="Download Results", icon=icon("download"))
+                      actionButton(inputId="downloadButton", label="Download results", icon=icon("download"))
                     )
                   ),
                   fluidRow(
@@ -2006,8 +2116,8 @@ shinyServer(function(input, output, session) {
                     column(12,
                       h3("Significant P-value per Annotation Category"),
                       column(2,
-                        radioButtons(inputId="radioBargraph", label="Order P-values with Respect to Input Set", choiceNames=radioNames, choiceValues=names(enrichmentSets), selected=names(enrichmentSets)[1]),
-                        actionButton(inputId="updateBargraphButton", label="Update Plot")
+                        radioButtons(inputId="radioBargraph", label="Order P-values with respect to input set", choiceNames=radioNames, choiceValues=names(enrichmentSets), selected=names(enrichmentSets)[1]),
+                        actionButton(inputId="updateBargraphButton", label="Update plot")
                       ),
                       column(10,
                         uiOutput("bargraph") %>% withSpinner()
@@ -2104,102 +2214,116 @@ shinyServer(function(input, output, session) {
                     
                     # Dynamically create observers for result file links
                     # Input
-                    observeEvent(input[[paste0(i, "__", i, ".txt__link")]], {
-                      # Create directory for request
-                      dir.create(paste0("./www/tmp/input/", transactionId, "/"))
-                      if(file.exists(paste0("./www/tmp/input/", transactionId, "/", i, ".txt")) == FALSE){
-                        # TODO: error check if download fails
-                        download.file(paste0("http://", API_HOST, ":", API_PORT, "/serveFileText?transactionId=", transactionId, "&filename=", i, ".txt&subDir=Input"), destfile=paste0("./www/tmp/input/", transactionId, "/", i, ".txt"))
-                      }
-                      # Next, use custom JavaScript to open manual from disk in new tab
-                      js$browseURL(paste0("tmp/input/", transactionId, "/", i, ".txt"))
-                    })
+                    if(is.null(setFilesObservers$observers[[paste0("inputObserver__", i)]])){
+                      setFilesObservers$observers[[paste0("inputObserver__", i)]] <- observeEvent(input[[paste0(i, "__", i, ".txt__link")]], {
+                        # Create directory for request
+                        dir.create(paste0("./www/tmp/input/", transactionId, "/"))
+                        if(file.exists(paste0("./www/tmp/input/", transactionId, "/", i, ".txt")) == FALSE){
+                          # TODO: error check if download fails
+                          download.file(paste0("http://", API_HOST, ":", API_PORT, "/serveFileText?transactionId=", transactionId, "&filename=", i, ".txt&subDir=Input"), destfile=paste0("./www/tmp/input/", transactionId, "/", i, ".txt"))
+                        }
+                        # Next, use custom JavaScript to open manual from disk in new tab
+                        js$browseURL(paste0("tmp/input/", transactionId, "/", i, ".txt"))
+                      }, ignoreInit = TRUE)
+                    }
                     
                     # Chart.txt
-                    observeEvent(input[[paste0(i, "__Chart.txt__link")]], {
-                      # Create directory for request
-                      dir.create(paste0("./www/tmp/output/", transactionId, "/"))
-                      if(file.exists(paste0("./www/tmp/output/", transactionId, "/", i, "__Chart.txt")) == FALSE){
-                        # TODO: error check if download fails
-                        download.file(paste0("http://", API_HOST, ":", API_PORT, "/serveFileText?transactionId=", transactionId, "&filename=", i, "__Chart.txt&subDir=Output"), destfile=paste0("./www/tmp/output/", transactionId, "/", i, "__Chart.txt"))
-                      }
-                      # Next, use custom JavaScript to open manual from disk in new tab
-                      js$browseURL(paste0("tmp/output/", transactionId, "/", i, "__Chart.txt"))
-                    })
-                    
+                    if(is.null(setFilesObservers$observers[[paste0("chartTxtObserver__", i)]])){
+                      setFilesObservers$observers[[paste0("chartTxtObserver__", i)]] <- observeEvent(input[[paste0(i, "__Chart.txt__link")]], {
+                        # Create directory for request
+                        dir.create(paste0("./www/tmp/output/", transactionId, "/"))
+                        if(file.exists(paste0("./www/tmp/output/", transactionId, "/", i, "__Chart.txt")) == FALSE){
+                          # TODO: error check if download fails
+                          download.file(paste0("http://", API_HOST, ":", API_PORT, "/serveFileText?transactionId=", transactionId, "&filename=", i, "__Chart.txt&subDir=Output"), destfile=paste0("./www/tmp/output/", transactionId, "/", i, "__Chart.txt"))
+                        }
+                        # Next, use custom JavaScript to open manual from disk in new tab
+                        js$browseURL(paste0("tmp/output/", transactionId, "/", i, "__Chart.txt"))
+                      }, ignoreInit = TRUE)
+                    }
+
                     # Chart.xlsx
-                    observeEvent(input[[paste0(i, "__Chart.xlsx__link")]], {
-                      # Create directory for request
-                      dir.create(paste0("./www/tmp/output/", transactionId, "/"))
-                      if(file.exists(paste0("./www/tmp/output/", transactionId, "/", i, "__Chart.xlsx")) == FALSE){
-                        # TODO: error check if download fails
-                        download.file(paste0("http://", API_HOST, ":", API_PORT, "/serveFileText?transactionId=", transactionId, "&filename=", i, "__Chart.xlsx&subDir=Output"), destfile=paste0("./www/tmp/output/", transactionId, "/", i, "__Chart.xlsx"))
-                      }
-                      # Next, use custom JavaScript to open manual from disk in new tab
-                      js$browseURL(paste0("tmp/output/", transactionId, "/", i, "__Chart.xlsx"))
-                    })
+                    if(is.null(setFilesObservers$observers[[paste0("chartXlsxObserver__", i)]])){
+                      setFilesObservers$observers[[paste0("chartXlsxObserver__", i)]] <- observeEvent(input[[paste0(i, "__Chart.xlsx__link")]], {
+                        # Create directory for request
+                        dir.create(paste0("./www/tmp/output/", transactionId, "/"))
+                        if(file.exists(paste0("./www/tmp/output/", transactionId, "/", i, "__Chart.xlsx")) == FALSE){
+                          # TODO: error check if download fails
+                          download.file(paste0("http://", API_HOST, ":", API_PORT, "/serveFileText?transactionId=", transactionId, "&filename=", i, "__Chart.xlsx&subDir=Output"), destfile=paste0("./www/tmp/output/", transactionId, "/", i, "__Chart.xlsx"))
+                        }
+                        # Next, use custom JavaScript to open manual from disk in new tab
+                        js$browseURL(paste0("tmp/output/", transactionId, "/", i, "__Chart.xlsx"))
+                      }, ignoreInit = TRUE)
+                    }
                     
                     # ChartSimple.txt
-                    observeEvent(input[[paste0(i, "__ChartSimple.txt__link")]], {
-                      # Create directory for request
-                      dir.create(paste0("./www/tmp/output/", transactionId, "/"))
-                      if(file.exists(paste0("./www/tmp/output/", transactionId, "/", i, "__ChartSimple.txt")) == FALSE){
-                        # TODO: error check if download fails
-                        download.file(paste0("http://", API_HOST, ":", API_PORT, "/serveFileText?transactionId=", transactionId, "&filename=", i, "__ChartSimple.txt&subDir=Output"), destfile=paste0("./www/tmp/output/", transactionId, "/", i, "__ChartSimple.txt"))
-                      }
-                      # Next, use custom JavaScript to open manual from disk in new tab
-                      js$browseURL(paste0("tmp/output/", transactionId, "/", i, "__ChartSimple.txt"))
-                    })
+                    if(is.null(setFilesObservers$observers[[paste0("chartSimpleTxtObserver__", i)]])){
+                      setFilesObservers$observers[[paste0("chartSimpleTxtObserver__", i)]] <- observeEvent(input[[paste0(i, "__ChartSimple.txt__link")]], {
+                        # Create directory for request
+                        dir.create(paste0("./www/tmp/output/", transactionId, "/"))
+                        if(file.exists(paste0("./www/tmp/output/", transactionId, "/", i, "__ChartSimple.txt")) == FALSE){
+                          # TODO: error check if download fails
+                          download.file(paste0("http://", API_HOST, ":", API_PORT, "/serveFileText?transactionId=", transactionId, "&filename=", i, "__ChartSimple.txt&subDir=Output"), destfile=paste0("./www/tmp/output/", transactionId, "/", i, "__ChartSimple.txt"))
+                        }
+                        # Next, use custom JavaScript to open manual from disk in new tab
+                        js$browseURL(paste0("tmp/output/", transactionId, "/", i, "__ChartSimple.txt"))
+                      }, ignoreInit = TRUE)
+                    }
                     
                     # ChartSimple.xlsx
-                    observeEvent(input[[paste0(i, "__ChartSimple.xlsx__link")]], {
-                      # Create directory for request
-                      dir.create(paste0("./www/tmp/output/", transactionId, "/"))
-                      if(file.exists(paste0("./www/tmp/output/", transactionId, "/", i, "__ChartSimple.xlsx")) == FALSE){
-                        # TODO: error check if download fails
-                        download.file(paste0("http://", API_HOST, ":", API_PORT, "/serveFileText?transactionId=", transactionId, "&filename=", i, "__ChartSimple.xlsx&subDir=Output"), destfile=paste0("./www/tmp/output/", transactionId, "/", i, "__ChartSimple.xlsx"))
-                      }
-                      # Next, use custom JavaScript to open manual from disk in new tab
-                      js$browseURL(paste0("tmp/output/", transactionId, "/", i, "__ChartSimple.xlsx"))
-                    })
+                    if(is.null(setFilesObservers$observers[[paste0("chartSimpleXlsxObserver__", i)]])){
+                      setFilesObservers$observers[[paste0("chartSimpleXlsxObserver__", i)]] <- observeEvent(input[[paste0(i, "__ChartSimple.xlsx__link")]], {
+                        # Create directory for request
+                        dir.create(paste0("./www/tmp/output/", transactionId, "/"))
+                        if(file.exists(paste0("./www/tmp/output/", transactionId, "/", i, "__ChartSimple.xlsx")) == FALSE){
+                          # TODO: error check if download fails
+                          download.file(paste0("http://", API_HOST, ":", API_PORT, "/serveFileText?transactionId=", transactionId, "&filename=", i, "__ChartSimple.xlsx&subDir=Output"), destfile=paste0("./www/tmp/output/", transactionId, "/", i, "__ChartSimple.xlsx"))
+                        }
+                        # Next, use custom JavaScript to open manual from disk in new tab
+                        js$browseURL(paste0("tmp/output/", transactionId, "/", i, "__ChartSimple.xlsx"))
+                      }, ignoreInit = TRUE)
+                    }
                     
                     # Cluster.txt
-                    observeEvent(input[[paste0(i, "__Cluster.txt__link")]], {
-                      # Create directory for request
-                      dir.create(paste0("./www/tmp/output/", transactionId, "/"))
-                      if(file.exists(paste0("./www/tmp/output/", transactionId, "/", i, "__Cluster.txt")) == FALSE){
-                        # TODO: error check if download fails
-                        download.file(paste0("http://", API_HOST, ":", API_PORT, "/serveFileText?transactionId=", transactionId, "&filename=", i, "__Cluster.txt&subDir=Output"), destfile=paste0("./www/tmp/output/", transactionId, "/", i, "__Cluster.txt"))
-                      }
-                      # Next, use custom JavaScript to open manual from disk in new tab
-                      js$browseURL(paste0("tmp/output/", transactionId, "/", i, "__Cluster.txt"))
-                    })
+                    if(is.null(setFilesObservers$observers[[paste0("clusterTxtObserver__", i)]])){
+                      setFilesObservers$observers[[paste0("clusterTxtObserver__", i)]] <- observeEvent(input[[paste0(i, "__Cluster.txt__link")]], {
+                        # Create directory for request
+                        dir.create(paste0("./www/tmp/output/", transactionId, "/"))
+                        if(file.exists(paste0("./www/tmp/output/", transactionId, "/", i, "__Cluster.txt")) == FALSE){
+                          # TODO: error check if download fails
+                          download.file(paste0("http://", API_HOST, ":", API_PORT, "/serveFileText?transactionId=", transactionId, "&filename=", i, "__Cluster.txt&subDir=Output"), destfile=paste0("./www/tmp/output/", transactionId, "/", i, "__Cluster.txt"))
+                        }
+                        # Next, use custom JavaScript to open manual from disk in new tab
+                        js$browseURL(paste0("tmp/output/", transactionId, "/", i, "__Cluster.txt"))
+                      }, ignoreInit = TRUE)
+                    }
                     
                     # Cluster.xlsx
-                    observeEvent(input[[paste0(i, "__Cluster.xlsx__link")]], {
-                      # Create directory for request
-                      dir.create(paste0("./www/tmp/output/", transactionId, "/"))
-                      if(file.exists(paste0("./www/tmp/output/", transactionId, "/", i, "__Cluster.xlsx")) == FALSE){
-                        # TODO: error check if download fails
-                        download.file(paste0("http://", API_HOST, ":", API_PORT, "/serveFileText?transactionId=", transactionId, "&filename=", i, "__Cluster.xlsx&subDir=Output"), destfile=paste0("./www/tmp/output/", transactionId, "/", i, "__Cluster.xlsx"))
-                      }
-                      # Next, use custom JavaScript to open manual from disk in new tab
-                      js$browseURL(paste0("tmp/output/", transactionId, "/", i, "__Cluster.xlsx"))
-                    })
+                    if(is.null(setFilesObservers$observers[[paste0("clusterXlsxObserver__", i)]])){
+                      setFilesObservers$observers[[paste0("clusterXlsxObserver__", i)]] <- observeEvent(input[[paste0(i, "__Cluster.xlsx__link")]], {
+                        # Create directory for request
+                        dir.create(paste0("./www/tmp/output/", transactionId, "/"))
+                        if(file.exists(paste0("./www/tmp/output/", transactionId, "/", i, "__Cluster.xlsx")) == FALSE){
+                          # TODO: error check if download fails
+                          download.file(paste0("http://", API_HOST, ":", API_PORT, "/serveFileText?transactionId=", transactionId, "&filename=", i, "__Cluster.xlsx&subDir=Output"), destfile=paste0("./www/tmp/output/", transactionId, "/", i, "__Cluster.xlsx"))
+                        }
+                        # Next, use custom JavaScript to open manual from disk in new tab
+                        js$browseURL(paste0("tmp/output/", transactionId, "/", i, "__Cluster.xlsx"))
+                      }, ignoreInit = TRUE)
+                    }
                     
                     # Matrix.txt
-                    observeEvent(input[[paste0(i, "__Matrix.txt__link")]], {
-                      # Create directory for request
-                      dir.create(paste0("./www/tmp/output/", transactionId, "/"))
-                      if(file.exists(paste0("./www/tmp/output/", transactionId, "/", i, "__Matrix.txt")) == FALSE){
-                        # TODO: error check if download fails
-                        download.file(paste0("http://", API_HOST, ":", API_PORT, "/serveFileText?transactionId=", transactionId, "&filename=", i, "__Matrix.txt&subDir=Output"), destfile=paste0("./www/tmp/output/", transactionId, "/", i, "__Matrix.txt"))
-                      }
-                      # Next, use custom JavaScript to open manual from disk in new tab
-                      js$browseURL(paste0("tmp/output/", transactionId, "/", i, "__Matrix.txt"))
-                    })
-                    
-                    
+                    if(is.null(setFilesObservers$observers[[paste0("matrixObserver__", i)]])){
+                      setFilesObservers$observers[[paste0("matrixObserver__", i)]] <- observeEvent(input[[paste0(i, "__Matrix.txt__link")]], {
+                        # Create directory for request
+                        dir.create(paste0("./www/tmp/output/", transactionId, "/"))
+                        if(file.exists(paste0("./www/tmp/output/", transactionId, "/", i, "__Matrix.txt")) == FALSE){
+                          # TODO: error check if download fails
+                          download.file(paste0("http://", API_HOST, ":", API_PORT, "/serveFileText?transactionId=", transactionId, "&filename=", i, "__Matrix.txt&subDir=Output"), destfile=paste0("./www/tmp/output/", transactionId, "/", i, "__Matrix.txt"))
+                        }
+                        # Next, use custom JavaScript to open manual from disk in new tab
+                        js$browseURL(paste0("tmp/output/", transactionId, "/", i, "__Matrix.txt"))
+                      }, ignoreInit = TRUE)
+                    }
                     
                     # Render result file links
                     output[[paste0("outTab_", i)]] <- renderUI(
@@ -2228,7 +2352,6 @@ shinyServer(function(input, output, session) {
                                         # Add links to result files with corresponding tooltips
                                         # Chart.txt
                                         if(paste0(unlist(str_split(resultFile, outDirWeb))[2]) == paste0(i, "__Chart.txt")){
-                                          #tipify( tags$a(href=paste0(resultFile), target="_blank", paste0(unlist(str_split(resultFile, outDirWeb))[2])), "A list of all significant annotations (.txt format).", placement="right")
                                           tipify( div(actionLink(inputId=paste0(i, "__Chart.txt__link"), label=paste0(unlist(str_split(resultFile, outDirWeb))[2]))), "A list of all significant annotations (.txt format).", placement="bottom")
                                         },
                                         # Chart.xlsx
@@ -2237,7 +2360,7 @@ shinyServer(function(input, output, session) {
                                         },
                                         # ChartSimple.txt
                                         if(paste0(unlist(str_split(resultFile, outDirWeb))[2]) == paste0(i, "__ChartSimple.txt")){
-                                          tipify( div(actionLink(inputId=paste0(i, "__ChartSimple.txt__link"), label=paste0(unlist(str_split(resultFile, outDirWeb))[2]))), "A list of the top 10 most signicant annotations for each annotation class (.txt format).", placement="bottom")
+                                          tipify( div(actionLink(inputId=paste0(i, "__ChartSimple.txt__link"), label=paste0(unlist(str_split(resultFile, outDirWeb))[2]))), "A list of the top 10 most significant annotations for each annotation class (.txt format).", placement="bottom")
                                         },
                                         # ChartSimple.xlsx
                                         if(paste0(unlist(str_split(resultFile, outDirWeb))[2]) == paste0(i, "__ChartSimple.xlsx")){
@@ -2353,15 +2476,17 @@ shinyServer(function(input, output, session) {
                     svgImagesList[paste0(casrnName, "__", i)] <<- resizedSvg
                     
                     # Add tooltip saying CASRN on hover
-                    return(HTML(paste0( 
-                      tipify(
-                        actionButton(
-                          inputId=paste0("ab__img__", casrnName, "__", i), 
-                          label=HTML(paste0(resizedSvg))
-                        ),
-                        title=paste0("Chemical structure for ", casrnName, ". Click to expand image with more info."),
-                        placement="bottom"
-                      ) 
+                    return(HTML(paste0(
+                      tags$div(  
+                        tipify(
+                          actionButton(
+                            inputId=paste0("ab__img__", casrnName, "__", i), 
+                            label=HTML(paste0(resizedSvg))
+                          ),
+                          title=paste0("Chemical structure for ", casrnName, ". Click to expand image with more info."),
+                          placement="bottom"
+                        )
+                      , id=paste0("div__ab__img__", casrnName, "__", i))
                     )))
                   })
                   
@@ -2391,43 +2516,69 @@ shinyServer(function(input, output, session) {
                     svgExpanded <- str_replace(svgExpanded , "height='80px'", "height='480px'")
 
                     # Create observer
-                    observeEvent(input[[paste0("ab__img__", casrn, "__", i)]], {
-                      showModal(
-                        modalDialog(
-                          title=casrn,
-                          footer=modalButton("Close"),
-                          size="l",
-                          fluidRow(
-                            HTML(paste0(svgExpanded)),
-                            column(6, HTML("<b>DTXSID</b>")),
-                            column(6, HTML(outputDtxsid)),
-                            column(6, HTML("<b>DTXRID</b>")),
-                            column(6, HTML(outputDtxrid)),
-                            column(6, HTML("<b>Chemical Name</b>")),
-                            column(6, HTML(outputTestsubstanceChemname)),
-                            column(6, HTML("<b>IUPAC Name</b>")),
-                            column(6, HTML(outputIupac)),
-                            column(6, HTML("<b>CASRN</b>")),
-                            column(6, HTML(casrn)),
-                            column(6, HTML("<b>SMILES</b>")),
-                            column(6, HTML(outputSmiles)),
-                            column(6, HTML("<b>InChI</b>")),
-                            column(6, HTML(outputInchi)),
-                            column(6, HTML("<b>InChI Key</b>")),
-                            column(6, HTML(outputInchikey)),
-                            column(6, HTML("<b>Molecular Formula</b>")),
-                            column(6, HTML(outputFormula)),
-                            column(6, HTML("<b>Molecular Weight</b>")),
-                            column(6, HTML(outputWeight)),
-                            column(6, HTML(paste0("<a href=\"https://comptox.epa.gov/dashboard/dsstoxdb/results?search=", outputDtxsid, "&abbreviation=TOX21SL\">View at EPA</a>"))),
-                            column(6, HTML(paste0("<a href=\"https://pubchem.ncbi.nlm.nih.gov/compound/", outputCid, "\">View at PubChem</a>")))
+                    if(is.null(setFilesObservers$observers[[paste0("svgObserver__", casrn, "__", i)]])){
+                      print(">>>>>>>> CREATING")
+                      setFilesObservers$observers[[paste0("svgObserver__", casrn, "__", i)]] <- observeEvent(input[[paste0("ab__img__", casrn, "__", i)]], {
+                        print(paste0("ab__img__", casrn, "__", i))
+                        print(input[[paste0("ab__img__", casrn, "__", i)]])
+                        showModal(
+                          modalDialog(
+                            title=casrn,
+                            footer=modalButton("Close"),
+                            size="l",
+                            fluidRow(
+                              column(12, HTML(paste0(svgExpanded)))
+                            ),
+                            fluidRow(
+                              column(3, HTML("<b>DTXSID</b>")),
+                              column(9, HTML(outputDtxsid))
+                            ),
+                            fluidRow(
+                              column(3, HTML("<b>DTXRID</b>")),
+                              column(9, HTML(outputDtxrid))
+                            ),
+                            fluidRow(
+                              column(3, HTML("<b>Chemical Name</b>")),
+                              column(9, HTML(outputTestsubstanceChemname))
+                            ),
+                            fluidRow(
+                              column(3, HTML("<b>IUPAC Name</b>")),
+                              column(9, HTML(outputIupac))
+                            ),
+                            fluidRow(
+                              column(3, HTML("<b>CASRN</b>")),
+                              column(9, HTML(casrn))
+                            ),
+                            fluidRow(
+                              column(3, HTML("<b>SMILES</b>")),
+                              column(9, HTML(outputSmiles))
+                            ),
+                            fluidRow(
+                              column(3, HTML("<b>InChI</b>")),
+                              column(9, HTML(outputInchi))
+                            ),
+                            fluidRow(
+                              column(3, HTML("<b>InChI Key</b>")),
+                              column(9, HTML(outputInchikey))
+                            ),
+                            fluidRow(
+                              column(3, HTML("<b>Molecular Formula</b>")),
+                              column(9, HTML(outputFormula))
+                            ),
+                            fluidRow(
+                              column(3, HTML("<b>Molecular Weight</b>")),
+                              column(9, HTML(outputWeight))
+                            ),
+                            fluidRow(
+                              column(3, HTML(paste0("<a href=\"https://comptox.epa.gov/dashboard/dsstoxdb/results?search=", outputDtxsid, "&abbreviation=TOX21SL\">View at EPA</a>"))),
+                              column(9, HTML(paste0("<a href=\"https://pubchem.ncbi.nlm.nih.gov/compound/", outputCid, "\">View at PubChem</a>")))
+                            )
                           )
                         )
-                      )
-                    })
+                      }, ignoreInit=TRUE)
+                    }
                     infoOutp <- data.frame("iupac_name"=outputIupac, "smiles"=outputSmiles, "dtxsid"=outputDtxsid, "dtxrid"=outputDtxrid, "mol_formula"=outputFormula, "mol_weight"=outputWeight, "inchis"=outputInchi, "inchikey"=outputInchikey, stringsAsFactors=FALSE)
                     return(infoOutp)
-  
                   }))
                   expandedInfo <- data.frame(expandedInfo)
                   row.names(expandedInfo) <- t(sapply(reenrichResults[[i]][,"casrn"], function(casrn) casrn))
@@ -2477,32 +2628,25 @@ shinyServer(function(input, output, session) {
                       }
                     }
                   }))
-                  
                   fullTableTmp <- data.frame(fullTableTmp)
                   
-                  # TODO: replace with chem structure images and add more info
                   imgPath1 <- '<img src="images/warnings/'
                   imgPath2 <- ' height="50" width="100"></img>'
                   
                   # Simplify reactive structure columns into one warning column
                   fullTableWarnings <- lapply(1:nrow(fullTableTmp), function(tableRow){
-                    #warningToDisplay <- '<p style="color:red;">'
                     warningToDisplay <- ""
                     
-                    #if(fullTableTmp[tableRow, "Cyanide"] == 1) {
+                    #TODO make this not dependent on number of columns
                     if(fullTableTmp[tableRow, (ncol(fullTableTmp)-3)] == 1) {
-                      #warningToDisplay <- paste0(warningToDisplay, "Cyanide ")
                       warningToDisplay <- paste0(tipify(div( HTML(paste0(warningToDisplay, imgPath1, 'nitrile.png"', imgPath2))   ), "Nitrile (Cyanide) group.", placement="right"))
                     }
-                    #if(fullTableTmp[tableRow, "Isocyanate"] == 1) {
                     if(fullTableTmp[tableRow, (ncol(fullTableTmp)-2)] == 1) {
                       warningToDisplay <- paste0(tipify(div( HTML(paste0(warningToDisplay, imgPath1, 'isocyanate.png"', imgPath2)) ), "Isocyanate group.", placement="right"))
                     }
-                    #if(fullTableTmp[tableRow, "Aldehyde"] == 1) {
                     if(fullTableTmp[tableRow, (ncol(fullTableTmp)-1)] == 1) {
                       warningToDisplay <- paste0(tipify(div( HTML(paste0(warningToDisplay, imgPath1, 'aldehyde.png"', imgPath2))   ),  "Aldehyde group.", placement="right"))
                     }
-                    #if(fullTableTmp[tableRow, "Epoxide"] == 1) {
                     if(fullTableTmp[tableRow, (ncol(fullTableTmp))] == 1) {
                       warningToDisplay <- paste0(tipify(div( HTML(paste0(warningToDisplay, imgPath1, 'epoxide.png"', imgPath2))     ), "Epoxide group.", placement="right"))
                     }
@@ -2649,7 +2793,7 @@ shinyServer(function(input, output, session) {
                   fluidRow(
                     h3("Adjust Network Node Cutoff"),
                     bsTooltip(id="nodeCutoffRe", title="This will determine the maximum number of results per data set and may affect how many nodes are generated during network generation. (default = 10). Higher values may cause the enrichment process to take longer (Not available when viewing annotations for Tox21 chemicals).", placement="right", trigger="hover"),
-                    sliderInput(inputId = "nodeCutoffRe", label="Re-enrichment Cutoff", value=10, min=1, max=100, step=1, width="85%")
+                    sliderInput(inputId = "nodeCutoffRe", label="Re-enrichment Cutoff", value=10, min=1, max=50, step=1, width="85%")
                     
                   ),
                   hr()
@@ -2663,7 +2807,7 @@ shinyServer(function(input, output, session) {
                   fluidRow(
                     column(id=paste0("selectAllSet__", i), 6, 
                       if(mode != "casrn" | (originalEnrichMode == "substructure" | originalEnrichMode == "similarity")) {
-                        actionButton("selectAllSetButton", "Deselect All Chemicals for this Set")   
+                        actionButton("selectAllSetButton", "Deselect all chemicals for this set")   
                       }
                     )
                   ),
@@ -2671,15 +2815,14 @@ shinyServer(function(input, output, session) {
                     # Deselect all chemicals in all sets
                     column(id=paste0("selectAllReenrich", i), 6, 
                       if(mode != "casrn" | (originalEnrichMode == "substructure" | originalEnrichMode == "similarity")) {
-                        actionButton("selectAllReenrichButton", "Deselect All Chemicals")   
+                        actionButton("selectAllReenrichButton", "Deselect all chemicals")   
                       }
                     ),
                     # Deselect all chemicals with warnings
                     column(id=paste0("selectAllWarningsReenrich", i), 6,
-                      #if(length(unlist(warningList$warnings, recursive=FALSE)) > 0){
                       if(length(unlist(warningList$warnings[[i]], recursive=FALSE)) > 0){
                         if(mode != "casrn" | (originalEnrichMode == "substructure" | originalEnrichMode == "similarity")) {
-                          actionButton("selectAllWarningsReenrichButton", HTML("<div class=\"text-danger\">Deselect All Chemicals with Warnings</div>"))
+                          actionButton("selectAllWarningsReenrichButton", HTML("<div class=\"text-danger\">Deselect all chemicals with warnings</div>"))
                         }
                       }
                     )
@@ -2688,14 +2831,13 @@ shinyServer(function(input, output, session) {
                   fluidRow(
                     column(id=paste0("reenrichButtonCol", i), 12, 
                       if(mode != "casrn" | (originalEnrichMode == "substructure" | originalEnrichMode == "similarity")) {
-                        actionButton("reenrichButton", "Reenrich Selected Chemicals", icon=icon("arrow-alt-circle-right"))    
+                        actionButton("reenrichButton", "Reenrich selected chemicals", icon=icon("arrow-alt-circle-right"))    
                       } else {
-                        actionButton("updateNetworkButton", "Update Network", icon=icon("arrow-alt-circle-right"))    
+                        actionButton("updateNetworkButton", "Update network", icon=icon("arrow-alt-circle-right"))    
                       },
                       hidden(
                         uiOutput("reenrich_error_box")
                       )
-                      
                     )
                   ),
                   hr()
@@ -2866,7 +3008,9 @@ shinyServer(function(input, output, session) {
                           h4("Edge Selection Criteria"),
                           numericInput(inputId="chartqval", label="Q-value", value=0.05, step=0.01, max=1.00, min=0.00),
                           checkboxGroupInput( label="Selected Input Sets", inputId="chartNetworkChoices", choices=names(enrichmentSets), selected=names(enrichmentSets) ),
-                          actionButton(inputId="chartNetworkUpdateButton", label="Update Network")
+                          HTML("<h5><b>Other Options</b></h5>"),
+                          checkboxInput(inputId="physicsEnabledChart", label="Enable physics?", value=FALSE),
+                          actionButton(inputId="chartNetworkUpdateButton", label="Update network"),
                         )
                       ), 
                       column(9,
@@ -2897,7 +3041,9 @@ shinyServer(function(input, output, session) {
                           h4("Edge Selection Criteria"),
                           numericInput(inputId="clusterqval", label="Q-value", value=0.05, step=0.01, max=1.00, min=0.00),
                           checkboxGroupInput( label="Selected Input Sets", inputId="clusterNetworkChoices", choices=names(enrichmentSets), selected=names(enrichmentSets) ),
-                          actionButton(inputId="clusterNetworkUpdateButton", label="Update Network")
+                          HTML("<h5><b>Other Options</b></h5>"),
+                          checkboxInput(inputId="physicsEnabledCluster", label="Enable physics?", value=FALSE),
+                          actionButton(inputId="clusterNetworkUpdateButton", label="Update network"),
                         )
                       ), 
                       column(9,
@@ -3014,121 +3160,133 @@ shinyServer(function(input, output, session) {
             return(beChartFullInner)
           })
           names(bgChartFull) <- bgChartAllCategories
-          
           bgChartFullReactive$bgChartFull <- bgChartFull
           bgChartAllCategoriesReactive$bgChartAllCategories <- bgChartAllCategories
           
           # For each unique class name, render a bar plot
           createBargraph(bgChartFull=bgChartFull, bgChartAllCategories=bgChartAllCategories, orderSet=names(enrichmentSets)[1], colorsList=colorsList)
-          
+        }
+        
+        # Select/Deselect all chemicals for reenrichment
+        selectAllReenrichButtonStatus <- reactiveValues(option = "deselect")
+        if(is.null(setFilesObservers$observers[["selectAllReenrichButtonObserver"]])){
+          setFilesObservers$observers[["selectAllReenrichButtonObserver"]] <- observeEvent(input$selectAllReenrichButton, {
+            
+            for (i in checkboxList$checkboxes) {
+              for(j in names(i)){
+                testVal <- !input[[j]]
+                updateCheckboxInput(session, j, value = testVal)
+              }
+            }
+            
+            #print(paste0("IN HERE NOW WITH VALUE: ", selectAllReenrichButtonStatus$option))
+            #if(selectAllReenrichButtonStatus$option == "select") { # Selecting
+            #  selectAllReenrichButtonStatus$option = "deselect"
+            #  updateActionButton(session, "selectAllReenrichButton", label="Deselect all chemicals")
+            #  for (i in checkboxList$checkboxes) {
+            #    for(j in names(i)){
+            #      print(j)
+            #      print(paste0("before: ", input[[j]]))
+            #      updateCheckboxInput(session, j, value = TRUE)
+            #      #js$check(paste0(j))
+            #      print(paste0("after: ", input[[j]]))
+            #    }
+            #  }
+            #} else { # Deselecting
+            #  selectAllReenrichButtonStatus$option = "select"
+            #  updateActionButton(session, "selectAllReenrichButton", label="Select all chemicals")
+            #  for (i in checkboxList$checkboxes) {
+            #    for(j in names(i)){
+            #      print(j)
+            #      print(paste0("before: ", input[[j]]))
+            #      updateCheckboxInput(session, j, value = FALSE)
+            #      #js$check(paste0(j))
+            #      print(paste0("after: ", input[[j]]))
+            #    }
+            #  }
+            #}
+
+          }, ignoreInit=TRUE)
+        }
+        
+        # Select/Deselect all chemicals for a single set
+        selectAllSetButtonStatus <- reactiveValues(option = "deselect")
+        if(is.null(setFilesObservers$observers[["selectAllSetButtonObserver"]])){
+          setFilesObservers$observers[["selectAllSetButtonObserver"]] <- observeEvent(input$selectAllSetButton, {
+            #if(selectAllSetButtonStatus$option == "select") { # Selecting
+            #  selectAllSetButtonStatus$option = "deselect"
+            #  updateActionButton(session, "selectAllSetButton", label="Deselect all chemicals for this set")
+            #  for (i in checkboxList$checkboxes) {
+            #    for(j in names(i)){
+            #      if(unlist(str_split(j, "__"))[2] == input$tab){
+            #        updateCheckboxInput(session, j, value = TRUE)
+            #      }
+            #    }
+            #  }
+            #} else { # Deselecting
+            #  selectAllSetButtonStatus$option = "select"
+            #  updateActionButton(session, "selectAllSetButton", label="Select all chemicals for this set")
+            #  for (i in checkboxList$checkboxes) {
+            #    for(j in names(i)){
+            #      if(unlist(str_split(j, "__"))[2] == input$tab){
+            #        updateCheckboxInput(session, j, value = FALSE)
+            #      }
+            #    }
+            #  }
+            #}
+          }, ignoreInit=TRUE)
+        }
+        
+        # Select/Deselect all chemicals with warnings for reenrichment
+        selectAllWarningsReenrichButtonStatus <- reactiveValues(option = "deselect")
+        if(is.null(setFilesObservers$observers[["selectAllWarningsReenrichButtonObserver"]])){
+          setFilesObservers$observers[["selectAllWarningsReenrichButtonObserver"]] <- observeEvent(input$selectAllWarningsReenrichButton, {
+            # Get list of all the chemicals with warnings per set
+            #chemicalsWithWarnings <- lapply(finalTableToDisplay$table, function(dataset){
+            #  chemicalsWithWarningsInner <- lapply(1:nrow(dataset), function(line){
+            #    if(is.null(dataset[line, "warning"]) == FALSE){
+            #      if(dataset[line, "warning"] != "None") {
+            #        return(paste0(dataset[line, "CASRN"]))
+            #      }
+            #    }
+            #  })
+            #  return(unlist(chemicalsWithWarningsInner))
+            #})
+            #chemicalsWithWarningsList <- unlist(lapply(names(chemicalsWithWarnings), function(dataset){
+            #  for(casrn in chemicalsWithWarnings[dataset]) {
+            #    return(paste0(casrn, "__", dataset))
+            #  }
+            #}))
+            
+            #if(selectAllWarningsReenrichButtonStatus$option == "select") { # Selecting
+            #  selectAllWarningsReenrichButtonStatus$option = "deselect"
+            #  updateActionButton(session, "selectAllWarningsReenrichButton", label="<div class=\"text-danger\">Deselect all chemicals with warnings</div>")
+            #  for (i in checkboxList$checkboxes) {
+            #    for(j in names(i)){
+            #      if(j %in% chemicalsWithWarningsList){
+            #        updateCheckboxInput(session, j, value = TRUE)  
+            #      }
+            #    }
+            #  }
+            #} else { # Deselecting
+            #  selectAllWarningsReenrichButtonStatus$option = "select"
+            #  updateActionButton(session, "selectAllWarningsReenrichButton", label="<div class=\"text-danger\">Select all chemicals with warnings</div>")
+            #  for (i in checkboxList$checkboxes) {
+            #    for(j in names(i)){
+            #      if(j %in% chemicalsWithWarningsList){
+            #        updateCheckboxInput(session, j, value=FALSE)  
+            #      }
+            #    }
+            #  }
+            #}
+          }, ignoreInit=TRUE)
         }
         
         # Re-enable refresh button
         shinyjs::enable(id="refresh")
-        
         # Re-enable results page
         shinyjs::enable(id="enrichmentResults")
     }
-    
-    # Select/Deselect all chemicals for reenrichment
-    selectAllReenrichButtonStatus <- reactiveValues(option = "deselect")
-    observeEvent(input$selectAllReenrichButton, {
-      if(selectAllReenrichButtonStatus$option == "select") { # Selecting
-        selectAllReenrichButtonStatus$option = "deselect"
-        updateActionButton(session, "selectAllReenrichButton", label="Deselect All Chemicals")
-        for (i in checkboxList$checkboxes) {
-          for(j in names(i)){
-            input[[j]] == TRUE
-            updateCheckboxInput(session, j, value = TRUE)
-          }
-        }
-      } else { # Deselecting
-        selectAllReenrichButtonStatus$option = "select"
-        updateActionButton(session, "selectAllReenrichButton", label="Select All Chemicals")
-        for (i in checkboxList$checkboxes) {
-          for(j in names(i)){
-            input[[j]] == FALSE
-            updateCheckboxInput(session, j, value = FALSE)
-          }
-        }
-      }
-    })
-    
-    # Select/Deselect all chemicals for a single set
-    selectAllSetButtonStatus <- reactiveValues(option = "deselect")
-    observeEvent(input$selectAllSetButton, {
-      if(selectAllSetButtonStatus$option == "select") { # Selecting
-        selectAllSetButtonStatus$option = "deselect"
-        updateActionButton(session, "selectAllSetButton", label="Deselect All Chemicals for this Set")
-        for (i in checkboxList$checkboxes) {
-          for(j in names(i)){
-            if(unlist(str_split(j, "__"))[2] == input$tab){
-              input[[j]] == TRUE
-              updateCheckboxInput(session, j, value = TRUE)
-            }
-          }
-        }
-      } else { # Deselecting
-        selectAllSetButtonStatus$option = "select"
-        updateActionButton(session, "selectAllSetButton", label="Select All Chemicals for this Set")
-        for (i in checkboxList$checkboxes) {
-          for(j in names(i)){
-            if(unlist(str_split(j, "__"))[2] == input$tab){
-              input[[j]] == FALSE
-              updateCheckboxInput(session, j, value = FALSE)
-            }
-          }
-        }
-      }
-    })
-
-    
-    
-    # Select/Deselect all chemicals with warnings for reenrichment
-    selectAllWarningsReenrichButtonStatus <- reactiveValues(option = "deselect")
-    observeEvent(input$selectAllWarningsReenrichButton, {
-      
-      # Get list of all the chemicals with warnings per set
-      chemicalsWithWarnings <- lapply(finalTableToDisplay$table, function(dataset){
-        chemicalsWithWarningsInner <- lapply(1:nrow(dataset), function(line){
-          if(is.null(dataset[line, "warning"]) == FALSE){
-            if(dataset[line, "warning"] != "None") {
-              return(paste0(dataset[line, "CASRN"]))
-            }
-          }
-        })
-        return(unlist(chemicalsWithWarningsInner))
-      })
-      chemicalsWithWarningsList <- unlist(lapply(names(chemicalsWithWarnings), function(dataset){
-        for(casrn in chemicalsWithWarnings[dataset]) {
-          return(paste0(casrn, "__", dataset))
-        }
-      }))
-      
-      if(selectAllWarningsReenrichButtonStatus$option == "select") { # Selecting
-        selectAllWarningsReenrichButtonStatus$option = "deselect"
-        updateActionButton(session, "selectAllWarningsReenrichButton", label="<div class=\"text-danger\">Deselect All Chemicals with Warnings</div>")
-        for (i in checkboxList$checkboxes) {
-          for(j in names(i)){
-            if(j %in% chemicalsWithWarningsList){
-              input[[j]] == TRUE
-              updateCheckboxInput(session, j, value = TRUE)  
-            }
-          }
-        }
-      } else { # Deselecting
-        selectAllWarningsReenrichButtonStatus$option = "select"
-        updateActionButton(session, "selectAllWarningsReenrichButton", label="<div class=\"text-danger\">Select All Chemicals with Warnings</div>")
-        for (i in checkboxList$checkboxes) {
-          for(j in names(i)){
-            if(j %in% chemicalsWithWarningsList){
-              input[[j]] == FALSE
-              updateCheckboxInput(session, j, value=FALSE)  
-            }
-          }
-        }
-      }
-    })
     
     # Re-order bar graphs with respect to given input set
     observeEvent(input$updateBargraphButton, {
@@ -3136,7 +3294,7 @@ shinyServer(function(input, output, session) {
     })
     
     # Shared code to create networks
-    generateNetwork <- function(transactionId, cutoff, networkMode, inputNetwork, qval){
+    generateNetwork <- function(transactionId, cutoff, networkMode, inputNetwork, qval, physicsEnabled=FALSE){
       inputNetwork <- paste0(inputNetwork, collapse="#")
       
       # Error handling
@@ -3216,7 +3374,7 @@ shinyServer(function(input, output, session) {
       fullNetwork <- visNetwork(networkFullNodes, networkFullEdges, height="500px", width="100%") %>%
         visOptions(highlightNearest=TRUE, nodesIdSelection=TRUE, selectedBy="group") %>%
         visLayout(randomSeed=runif(1)) %>%
-        visPhysics(solver="forceAtlas2Based", enabled=FALSE, stabilization=list(enabled=FALSE, iterations=1000, updateInterval=25)) %>%
+        visPhysics(solver="forceAtlas2Based", enabled=physicsEnabled, stabilization=list(enabled=FALSE, iterations=1000, updateInterval=25)) %>%
         visEdges(smooth=TRUE) %>%
         visInteraction(navigationButtons=TRUE, keyboard=FALSE, selectable=TRUE)
       
@@ -3226,7 +3384,13 @@ shinyServer(function(input, output, session) {
         fullNetwork <- fullNetwork %>% visGroups(groupname=x, color=groupColor)
       }
       fullNetwork <- fullNetwork %>% visLegend()
-      return(fluidRow(id=paste0(networkMode,"NetworkContainer"), fullNetwork))
+      
+      fullNetworkExport <- visExport(
+        graph=fullNetwork,
+        type="png"
+      )
+      
+      return(fluidRow(id=paste0(networkMode,"NetworkContainer"), fullNetworkExport))
     }
     
     # Re-generate chart network
@@ -3237,7 +3401,7 @@ shinyServer(function(input, output, session) {
       if(length(input$chartNetworkChoices) == 0){
         output$chartNetwork <- renderUI(HTML("<p class=\"text-danger\"><b>Error:</b> No input sets selected.</p>"))
       } else {
-        chartFullNetwork <- generateNetwork(transactionId=reactiveTransactionId$id, cutoff=input$nodeCutoffRe, networkMode="chart", inputNetwork=input$chartNetworkChoices, qval=input$chartqval)
+        chartFullNetwork <- generateNetwork(transactionId=reactiveTransactionId$id, cutoff=input$nodeCutoffRe, networkMode="chart", inputNetwork=input$chartNetworkChoices, qval=input$chartqval, physicsEnabled=input$physicsEnabledChart)
         # Render networks
         output$chartNetwork <- renderUI(chartFullNetwork) 
       }
@@ -3251,7 +3415,7 @@ shinyServer(function(input, output, session) {
       if(length(input$clusterNetworkChoices) == 0){
         output$clusterNetwork <- renderUI(HTML("<p class=\"text-danger\"><b>Error:</b> No input sets selected.</p>"))
       } else {
-        clusterFullNetwork <- generateNetwork(transactionId=reactiveTransactionId$id, cutoff=input$nodeCutoffRe, networkMode="cluster", inputNetwork=input$clusterNetworkChoices, qval=input$clusterqval)
+        clusterFullNetwork <- generateNetwork(transactionId=reactiveTransactionId$id, cutoff=input$nodeCutoffRe, networkMode="cluster", inputNetwork=input$clusterNetworkChoices, qval=input$clusterqval, physicsEnabled=input$physicsEnabledCluster)
         # Render networks
         output$clusterNetwork <- renderUI(clusterFullNetwork)
       }
@@ -3446,6 +3610,15 @@ shinyServer(function(input, output, session) {
         })))
       )
     }
+    
+    # Debug: fix from https://www.r-bloggers.com/2020/02/shiny-add-removing-modules-dynamically/
+    remove_shiny_inputs <- function(id, .input) {
+      invisible(
+        lapply(grep(id, names(.input), value = TRUE), function(i) {
+          .subset2(.input, "impl")$.values$remove(i)
+        })
+      )
+    }
 
     # Perform re-enrichment on selected result chemicals
     observeEvent(input$reenrichButton, {
@@ -3482,6 +3655,7 @@ shinyServer(function(input, output, session) {
           }
         }
       }
+      
       if(reenrichCASRNBox == ""){
         # error if nothing selected
         # Show error msg
@@ -3492,7 +3666,7 @@ shinyServer(function(input, output, session) {
         return(FALSE)
       }
 
-      # This is to preserve original names if we want to re-enrich similarity
+      # This is to preserve original names if we want to re-enrich similarity/substructure
       originalNamesToReturn <- lapply(originalNamesList$originalNames, function(originalName){
         tmpSplit <- unlist(str_split(originalName, "__"))
         return(tmpSplit[1])
@@ -3502,9 +3676,61 @@ shinyServer(function(input, output, session) {
         return(tmpSplit[2])
       })
       
+      # Reset reenrichResultsList$reenrichResults and enrichmentSetsList$enrichmentSets
+      reenrichResultsList$reenrichResults <- NULL
+      enrichmentSetsList$enrichmentSets <- NULL
+      
+      # debug
+      #print("INPUT NAMES")
+      #print(names(input))
+      
+      # Destroy dynamic observers
+      #print("destroying...")
+      #print(setFilesObservers$observers)
+
+      #selectAllReenrichButtonObserver$destroy()
+      #selectAllSetButtonObserver$destroy()
+      #selectAllWarningsReenrichButtonObserver$destroy()
+      
+      #for(x in setFilesObservers$observers) {
+        #print(">>")
+        #print(x)
+        #x$suspend()
+      #}
+      #setFilesObservers$observers <- list()
+      
+      # debug: remove svg img buttons
+      #for(x in names(input)){
+      #  if(grepl("ab__img__*", x)){
+      #    print(paste0("REMOVING: #div__", x))
+      #    removeUI(selector=paste0("#div__", x), multiple=TRUE)
+      #  }
+      #}
+      #print("... deleted.")
+      #print(setFilesObservers$observers)
+      
+      #print("INPUT NAMES 2")
+      #print(names(input))
+      
+      for(i in checkboxList$checkboxes){
+        for(j in names(i)){
+          remove_shiny_inputs(j, input) 
+        }
+      }
+      print("NAMES NAMES NAMES")
+      print(names(input))
+      
+      
+      # Remove existing table
+      #output[["resultsTabset"]] <- renderUI(NULL)
+      #output[["resultsTabset"]] <- NULL
+      
       # Perform enrichment again
       performEnrichment(reenrichCASRNBox, reenrichFlag=TRUE, originalNamesToReturn=originalNamesToReturn)
     })
+    
+    
+    
     
 })
 

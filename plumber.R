@@ -562,6 +562,14 @@ serveManual <- function(res, req){
   #})
 }
 
+#* Check if randomly-generated UUID already exists. This should be extremely rare, but not impossible
+#* @get /checkId
+checkId <- function(res, req){
+  outDir <- paste0(APP_DIR, "/Output/")
+  transactions <- Sys.glob(paste0(outDir, "*"))
+  return(transactions)
+}
+
 #* Create input files on filesystem
 #* @param transactionId UUID for given request
 #* @param enrichmentSets User's input sets

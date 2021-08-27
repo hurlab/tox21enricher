@@ -14,6 +14,16 @@ js_code <- "
         }
       "
 
+# Custom javascript for checking/unchecking checkboxes
+js_cbx <- "
+        shinyjs.check = function(cbx){
+          document.getElementById(cbx).checked = true;
+        }
+        shinyjs.uncheck = function(cbx){
+          document.getElementById(cbx).checked = false;
+        }
+      "
+
 # Theme toggle js
 # vvv solution from here: https://stackoverflow.com/questions/61632272/r-shiny-light-dark-mode-switch vvv
 js_theme <-  "
@@ -93,6 +103,7 @@ shinyUI(fluidPage(
             useShinyjs(),
             extendShinyjs(text = js_code, functions = 'browseURL'),
             extendShinyjs(text = js_theme, functions = 'toggleTheme'),
+            extendShinyjs(text = js_cbx, functions = c('check', 'uncheck')),
             p("Welcome to Tox21 Enricher! Please see this ", actionLink(inputId="manualLink", label="link"), "for instructions on using this application and the descriptions about the chemical / biological categories. Other resources from the Tox21 toolbox can be viewed", tags$a(href="https://ntp.niehs.nih.gov/results/tox21/tbox/","here."), "A sufficiently robust internet connection and JavaScript are required to use all of this application's features."),
             # Display API connection status
             uiOutput("apiConnection"),
@@ -101,17 +112,17 @@ shinyUI(fluidPage(
             # Settings button
             actionButton(inputId="settingsButton", label="Settings", icon=icon("cog")),
             # Search enrichments button
-            actionButton(inputId="searchButton", label="View Previous Enrichment", icon=icon("search")),
+            actionButton(inputId="searchButton", label="View previous enrichment", icon=icon("search")),
             # Theme toggle
-            checkboxInput(inputId="changeThemeToggle", label=HTML(paste0(icon("moon"), " Dark Theme"))),
+            checkboxInput(inputId="changeThemeToggle", label=HTML(paste0(icon("moon"), " Dark theme"))),
             # Enrichment type selection
-            selectInput("enrich_from", h4("1) Select Enrichment Type"),
-                        choices = list("User-Provided CASRN List" = "User-Provided CASRN List",
-                                       "Chemicals with Shared Substructures" = "Chemicals with Shared Substructures",
-                                       "Chemicals with Structural Similarity" = "Chemicals with Structural Similarity",
-                                       "View Annotations for Tox21 Chemicals" = "View Annotations for Tox21 Chemicals")),
+            selectInput("enrich_from", h4("Select Input Type"),
+                        choices = list("User-provided CASRN list" = "user-provided CASRN list",
+                                       "Chemicals with shared substructures" = "chemicals with shared substructures",
+                                       "Chemicals with structural similarity" = "chemicals with structural similarity",
+                                       "View annotations for Tox21 chemicals" = "View annotations for Tox21 chemicals")),
             hidden(
-                actionButton("refresh", "Restart", icon=icon("undo"))
+                actionButton("refresh", "Start over", icon=icon("undo"))
             )
         ),
         
@@ -121,11 +132,17 @@ shinyUI(fluidPage(
                 h1("View Results from Previous Enrichment"),
                 fluidRow(
                   h3("Select Request to View Results for"),
-                  fluidRow(
-                    column(6, actionButton("searchPrevButton", label="Search", icon=icon("search"))),
-                    column(3, actionButton("searchDeleteSelected", label="Delete Selected", icon=icon("trash"))),
-                    column(3, actionButton("searchDeleteAll", label="Delete All", icon=icon("dumpster")))
-                  ),
+                  
+                  #HTML(paste0("<div style=\"position:fixed;z-index:9999;\">",
+                    fluidRow(
+                      column(3, actionButton("searchPrevButton", label="View results", icon=icon("search"))),
+                      column(3, actionButton("searchDeleteSelected", label="Delete selected", icon=icon("trash"))),
+                      column(6, actionButton("searchDeleteAll", label="Delete all", icon=icon("dumpster")))
+                    ),
+                    br(),
+                  #  br()
+                  #, "</div>")),
+                  
                   hidden(
                     column(id="warningSearchColumn", 12,
                            uiOutput("searchWarning")
@@ -141,9 +158,9 @@ shinyUI(fluidPage(
                 h1(textOutput("selected_enrich_from")),
                 # Annotation selection
                 fluidRow(
-                    h3("2) ", "Select Chemical/Biological Annotation Categories"),
+                    h3("Select Chemical/Biological Annotation Categories"),
                     column(2,
-                        actionButton("select_all_annotations", "Deselect All")
+                        actionButton("select_all_annotations", "Deselect all")
                     ),
                     column(10,
                         HTML("<p><b>Note</b>: Selecting no annotation categories will cause enrichment to just use the default categories.</p>")
@@ -155,9 +172,9 @@ shinyUI(fluidPage(
                 ),
                 hr(),
                 fluidRow(
-                    h3("3) ", "Select Enrichment Cutoff"),
+                    h3("Select Enrichment Cutoff"),
                     bsTooltip(id="nodeCutoff", title="This will determine the maximum number of results per data set and may affect how many nodes are generated during network generation. (default = 10). Higher values may cause the enrichment process to take longer (Not available when viewing annotations for Tox21 chemicals).", placement="right", trigger="hover"),
-                    sliderInput(inputId = "nodeCutoff", label="Select enrichment cutoff", value=10, min=1, max=100, step=1, width="85%"),
+                    sliderInput(inputId = "nodeCutoff", label="Select enrichment cutoff", value=10, min=1, max=50, step=1, width="85%"),
                     
                     hidden(
                         sliderInput(inputId = "tanimotoThreshold", label="Select Tanimoto similarity threshold (%)", value=50, min=1, max=100, step=1, width="85%")
@@ -167,22 +184,22 @@ shinyUI(fluidPage(
                 hr(),
                 # Chemical input
                 fluidRow(
-                    h3("4) ", textOutput("input_type")),
+                    h3(textOutput("input_type")),
                     fluidRow(id = "casrnExamples",
                         column(3,
-                            actionButton("example_casrns", "CASRNs Example Single Set"),
-                            actionButton("example_casrnsMulti", "CASRNs Example Multiple Sets"))
+                            actionButton("example_casrns", "CASRNs example single set"),
+                            actionButton("example_casrnsMulti", "CASRNs example multiple sets"))
                     ),
                     hidden( #hide SMILES example button by default
                         fluidRow(id = "smilesExamples",
                             column(3,
-                                actionButton("example_smiles", "SMILES/InChI Example Set"),
-                                actionButton("jsme_button", "Draw Molecules with JSME")),
+                                actionButton("example_smiles", "SMILES/InChI example set"),
+                                actionButton("jsme_button", "Draw molecules with JSME")),
                         )
                     ),
                     fluidRow(
                         column(3,
-                            actionButton("clear_casrns", "Clear Input Box")),
+                            actionButton("clear_casrns", "Clear input box")),
                     ),
                     hidden(
                         fluidRow(id="jsmeInput",
@@ -203,7 +220,7 @@ shinyUI(fluidPage(
                         uiOutput("inputInstructions"),
                     ),
                     column(12,
-                        tags$textarea(id = "submitted_chemicals", rows=12,cols=100,""),
+                        tags$textarea(id="submitted_chemicals", rows=12,cols=100,""),
                     )
                 ),
                 hidden( # hide error box; only display if there's an error
@@ -230,13 +247,13 @@ shinyUI(fluidPage(
                             actionButton("fetchResults", "Results", icon=icon("arrow-alt-circle-right"))
                         ),
                         column(3, 
-                               actionButton("refreshWaitingPageButton", "Refresh", icon=icon("redo"))
+                               actionButton("refreshWaitingPageButton", "Refresh queue", icon=icon("redo"))
                         ),
                         column(3, 
                                uiOutput("clipboard")
                         ),
                         column(3, 
-                            actionButton("cancelEnrichment", "Cancel Enrichment", icon=icon("times-circle"))
+                            actionButton("cancelEnrichment", "Cancel enrichment", icon=icon("times-circle"))
                         )
                     ),
                     column(12,
