@@ -129,6 +129,11 @@ shinyServer(function(input, output, session) {
         shinyjs::enable(id = "searchForm")
         shinyjs::disable(id = "enrichmentForm")
         shinyjs::disable(id = "enrich_from")
+        
+        # Hide Select enrichment type selector and show buttons
+        shinyjs::hide(id = "enrich_from")
+        shinyjs::show(id = "searchButtonsMenu")
+        
         updateActionButton(session, "searchButton", label = "Perform enrichment", icon=icon("undo"))  
         searchStatus$option <- "enrich"
         
@@ -286,6 +291,11 @@ shinyServer(function(input, output, session) {
         shinyjs::enable(id = "enrichmentForm")
         shinyjs::enable(id = "enrich_from")
         shinyjs::reset(id = "searchForm")
+        
+        # Show Select enrichment type selector and hide buttons
+        shinyjs::hide(id = "searchButtonsMenu")
+        shinyjs::show(id = "enrich_from")
+        
         updateActionButton(session, "searchButton", label = "View previous results", icon=icon("search"))  
         searchStatus$option <- "search"
       }

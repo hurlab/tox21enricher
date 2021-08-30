@@ -100,6 +100,7 @@ shinyUI(fluidPage(
     # Sidebar
     sidebarLayout(
         sidebarPanel(width=2,
+            style="position: fixed; overflow: visible; width: 15%",
             useShinyjs(),
             extendShinyjs(text = js_code, functions = 'browseURL'),
             extendShinyjs(text = js_theme, functions = 'toggleTheme'),
@@ -125,28 +126,26 @@ shinyUI(fluidPage(
                                        "Chemicals with shared substructures" = "chemicals with shared substructures",
                                        "Chemicals with structural similarity" = "chemicals with structural similarity",
                                        "View annotations for Tox21 chemicals" = "View annotations for Tox21 chemicals")),
+            # Hidden buttons for View previous enrichment menu
             hidden(
-                actionButton("refresh", "Start over", icon=icon("undo"))
+              fluidRow(id = "searchButtonsMenu",
+                column(12, actionButton("searchPrevButton", label="View results", icon=icon("search"))),
+                column(12, actionButton("searchDeleteSelected", label="Delete selected", icon=icon("trash"))),
+                column(12, actionButton("searchDeleteAll", label="Delete all", icon=icon("dumpster")))
+              )
+            ),
+            hidden(
+              actionButton("refresh", "Start over", icon=icon("undo"))
             )
         ),
         
         mainPanel(id = "enrichmentPanel", width=10,
+            style="width: 80%;",
             hidden(
               column(id = "searchForm", 12,
                 h1("View Results from Previous Enrichment"),
                 fluidRow(
                   h3("Select Request to View Results for"),
-                  
-                  #HTML(paste0("<div style=\"position:fixed;z-index:9999;\">",
-                    fluidRow(
-                      column(3, actionButton("searchPrevButton", label="View results", icon=icon("search"))),
-                      column(3, actionButton("searchDeleteSelected", label="Delete selected", icon=icon("trash"))),
-                      column(6, actionButton("searchDeleteAll", label="Delete all", icon=icon("dumpster")))
-                    ),
-                    br(),
-                  #  br()
-                  #, "</div>")),
-                  
                   hidden(
                     column(id="warningSearchColumn", 12,
                            uiOutput("searchWarning")
