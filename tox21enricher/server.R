@@ -3146,14 +3146,12 @@ shinyServer(function(input, output, session) {
                     tabPanel("Chart Network", 
                       fluidRow(
                         column(3, 
-                          fluidRow(
-                            h4("Edge Selection Criteria"),
-                            numericInput(inputId="chartqval", label="Q-value", value=0.05, step=0.01, max=1.00, min=0.00),
-                            checkboxGroupInput( label="Selected Input Sets", inputId="chartNetworkChoices", choices=names(enrichmentSets), selected=names(enrichmentSets) ),
-                            HTML("<h5><b>Other Options</b></h5>"),
-                            checkboxInput(inputId="physicsEnabledChart", label="Enable physics?", value=FALSE),
-                            actionButton(inputId="chartNetworkUpdateButton", label="Update network"),
-                          )
+                          h4("Edge Selection Criteria"),
+                          numericInput(inputId="chartqval", label="Q-value", value=0.05, step=0.01, max=1.00, min=0.00),
+                          checkboxGroupInput( label="Selected Input Sets", inputId="chartNetworkChoices", choices=names(enrichmentSets), selected=names(enrichmentSets) ),
+                          HTML("<h5><b>Other Options</b></h5>"),
+                          checkboxInput(inputId="physicsEnabledChart", label="Enable physics?", value=FALSE),
+                          actionButton(inputId="chartNetworkUpdateButton", label="Update network"),
                         ), 
                         column(9,
                           uiOutput("chartNetwork") %>% withSpinner()
@@ -3180,14 +3178,12 @@ shinyServer(function(input, output, session) {
                     tabPanel("Cluster Network", 
                       fluidRow(
                         column(3, 
-                          fluidRow(
-                            h4("Edge Selection Criteria"),
-                            numericInput(inputId="clusterqval", label="Q-value", value=0.05, step=0.01, max=1.00, min=0.00),
-                            checkboxGroupInput( label="Selected Input Sets", inputId="clusterNetworkChoices", choices=names(enrichmentSets), selected=names(enrichmentSets) ),
-                            HTML("<h5><b>Other Options</b></h5>"),
-                            checkboxInput(inputId="physicsEnabledCluster", label="Enable physics?", value=FALSE),
-                            actionButton(inputId="clusterNetworkUpdateButton", label="Update network"),
-                          )
+                          h4("Edge Selection Criteria"),
+                          numericInput(inputId="clusterqval", label="Q-value", value=0.05, step=0.01, max=1.00, min=0.00),
+                          checkboxGroupInput( label="Selected Input Sets", inputId="clusterNetworkChoices", choices=names(enrichmentSets), selected=names(enrichmentSets) ),
+                          HTML("<h5><b>Other Options</b></h5>"),
+                          checkboxInput(inputId="physicsEnabledCluster", label="Enable physics?", value=FALSE),
+                          actionButton(inputId="clusterNetworkUpdateButton", label="Update network"),
                         ), 
                         column(9,
                                uiOutput("clusterNetwork") %>% withSpinner()
