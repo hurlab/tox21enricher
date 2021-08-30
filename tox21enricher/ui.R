@@ -143,7 +143,7 @@ shinyUI(fluidPage(
             style="width: 80%;",
             hidden(
               column(id = "searchForm", 12,
-                h1("View Results from Previous Enrichment"),
+                h1("View Results from Previous Request"),
                 fluidRow(
                   h3("Select Request to View Results for"),
                   hidden(

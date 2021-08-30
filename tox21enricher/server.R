@@ -1392,14 +1392,19 @@ shinyServer(function(input, output, session) {
                           if(resp$status_code != 200){
                             return(FALSE)
                           }
-                          return(TRUE)
                         }, error=function(cond){
                           return(FALSE)
                         }
                       )
-                      if(trySubstructure == FALSE){
-                        badConnectionFlag <<- TRUE
-                        return(NULL) 
+                      
+                      print("trySubstructure")
+                      print(trySubstructure)
+                      
+                      if(!is.null(trySubstructure)) {
+                        if(trySubstructure == FALSE){
+                          badConnectionFlag <<- TRUE
+                          return(NULL)
+                        }
                       }
                       
                       if(length(content(resp)) < 1){
@@ -1437,17 +1442,18 @@ shinyServer(function(input, output, session) {
                         if(resp$status_code != 200){
                           return(FALSE)
                         }    
-                        return(TRUE)
                       }, error=function(cond){
                         return(FALSE)
                       }
                     )
 
-                    if(trySimilarity == FALSE){
-                      badConnectionFlag <<- TRUE
-                      return(NULL)
+                    if(!is.null(trySimilarity)){
+                      if(trySimilarity == FALSE){
+                        badConnectionFlag <<- TRUE
+                        return(NULL)
+                      }
                     }
-                    
+
                     outputSimCasrns <- unlist(lapply(content(resp), function(x){
                       return(x$casrn)
                     }))
@@ -1559,12 +1565,12 @@ shinyServer(function(input, output, session) {
         tryGenerateUUID <- tryCatch(
           {
             resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="checkId")
-            return(TRUE)
           }, error=function(cond){
-            return(FALSE)
+            return(NULL)
           }
         )
-        if(tryGenerateUUID == FALSE){
+        
+        if(is.null(tryGenerateUUID)){
           # Hide original form when done with enrichment
           shinyjs::show(id="enrichmentForm")
           # Disable changing input type when button is clicked
@@ -2234,7 +2240,7 @@ shinyServer(function(input, output, session) {
                   ),
                   fluidRow(
                     column(12, 
-                           uiOutput("reenrichCutoff")
+                      uiOutput("reenrichCutoff")
                     )
                   ),
                   fluidRow(
@@ -2932,11 +2938,10 @@ shinyServer(function(input, output, session) {
               output[["reenrichCutoff"]] <- renderUI(
                 fluidRow(
                   # Re-enrichment cutoff slider
-                  fluidRow(
+                  column(12,
                     h3("Adjust Network Node Cutoff"),
                     bsTooltip(id="nodeCutoffRe", title="This will determine the maximum number of results per data set and may affect how many nodes are generated during network generation. (default = 10). Higher values may cause the enrichment process to take longer (Not available when viewing annotations for Tox21 chemicals).", placement="right", trigger="hover"),
                     sliderInput(inputId = "nodeCutoffRe", label="Re-enrichment Cutoff", value=10, min=1, max=50, step=1, width="85%")
-                    
                   ),
                   hr()
                 )
@@ -2946,40 +2951,34 @@ shinyServer(function(input, output, session) {
               output[["reenrichButtonOut"]] <- renderUI(
                 fluidRow(
                   # Deselect per set button
-                  fluidRow(
-                    column(id=paste0("selectAllSet__", i), 6, 
-                      if(mode != "casrn" | (originalEnrichMode == "substructure" | originalEnrichMode == "similarity")) {
-                        actionButton("selectAllSetButton", "Deselect all chemicals for this set")   
-                      }
-                    )
+                  column(id=paste0("selectAllSet__", i), 6, 
+                    if(mode != "casrn" | (originalEnrichMode == "substructure" | originalEnrichMode == "similarity")) {
+                      actionButton("selectAllSetButton", "Deselect all chemicals for this set")   
+                    }
                   ),
-                  fluidRow(
-                    # Deselect all chemicals in all sets
-                    column(id=paste0("selectAllReenrich", i), 6, 
+                  # Deselect all chemicals in all sets
+                  column(id=paste0("selectAllReenrich", i), 6, 
+                    if(mode != "casrn" | (originalEnrichMode == "substructure" | originalEnrichMode == "similarity")) {
+                      actionButton("selectAllReenrichButton", "Deselect all chemicals")   
+                    }
+                  ),
+                  # Deselect all chemicals with warnings
+                  column(id=paste0("selectAllWarningsReenrich", i), 6,
+                    if(length(unlist(warningList$warnings[[i]], recursive=FALSE)) > 0){
                       if(mode != "casrn" | (originalEnrichMode == "substructure" | originalEnrichMode == "similarity")) {
-                        actionButton("selectAllReenrichButton", "Deselect all chemicals")   
+                        actionButton("selectAllWarningsReenrichButton", HTML("<div class=\"text-danger\">Deselect all chemicals with warnings</div>"))
                       }
-                    ),
-                    # Deselect all chemicals with warnings
-                    column(id=paste0("selectAllWarningsReenrich", i), 6,
-                      if(length(unlist(warningList$warnings[[i]], recursive=FALSE)) > 0){
-                        if(mode != "casrn" | (originalEnrichMode == "substructure" | originalEnrichMode == "similarity")) {
-                          actionButton("selectAllWarningsReenrichButton", HTML("<div class=\"text-danger\">Deselect all chemicals with warnings</div>"))
-                        }
-                      }
-                    )
+                    }
                   ),
                   # Reenrich selected chemicals
-                  fluidRow(
-                    column(id=paste0("reenrichButtonCol", i), 12, 
-                      if(mode != "casrn" | (originalEnrichMode == "substructure" | originalEnrichMode == "similarity")) {
-                        actionButton("reenrichButton", "Reenrich selected chemicals", icon=icon("arrow-alt-circle-right"))    
-                      } else {
-                        actionButton("updateNetworkButton", "Update network", icon=icon("arrow-alt-circle-right"))    
-                      },
-                      hidden(
-                        uiOutput("reenrich_error_box")
-                      )
+                  column(id=paste0("reenrichButtonCol", i), 12, 
+                    if(mode != "casrn" | (originalEnrichMode == "substructure" | originalEnrichMode == "similarity")) {
+                      actionButton("reenrichButton", "Reenrich selected chemicals", icon=icon("arrow-alt-circle-right"))    
+                    } else {
+                      actionButton("updateNetworkButton", "Update network", icon=icon("arrow-alt-circle-right"))    
+                    },
+                    hidden(
+                      uiOutput("reenrich_error_box")
                     )
                   ),
                   hr()
@@ -3133,67 +3132,70 @@ shinyServer(function(input, output, session) {
           
           output[["chartHeatmap"]] <- renderUI(
               fluidRow(
-                tabsetPanel(
-                  tabPanel("Chart Heatmap", plot_ly(x = gctCASRNNamesChart, y = gctAnnoNamesChart, z = gctFileChartMatrix, colors = colorRamp(c("white", "red")), type="heatmap", xgap=2, ygap=2, colorbar=list(title=list(text='<b>-log<sub>10</sub> (BH P-value)</b>'))) %>% 
-                             layout(
-                               margin = list(l = 300, r = 200, b = 160), 
-                               xaxis=list(title="<b>Annotations</b>", tickfont=list(size=9), tickangle=15), 
-                               yaxis=list(title="<b>Input Sets</b>", type="category"),
-                               plot_bgcolor="transparent",
-                               paper_bgcolor="transparent",
-                               font=list(color=theme$textcolor)
-                              )), 
-                  tabPanel("Chart Network", 
-                    fluidRow(
-                      column(3, 
-                        fluidRow(
-                          h4("Edge Selection Criteria"),
-                          numericInput(inputId="chartqval", label="Q-value", value=0.05, step=0.01, max=1.00, min=0.00),
-                          checkboxGroupInput( label="Selected Input Sets", inputId="chartNetworkChoices", choices=names(enrichmentSets), selected=names(enrichmentSets) ),
-                          HTML("<h5><b>Other Options</b></h5>"),
-                          checkboxInput(inputId="physicsEnabledChart", label="Enable physics?", value=FALSE),
-                          actionButton(inputId="chartNetworkUpdateButton", label="Update network"),
+                column(12,
+                  tabsetPanel(
+                    tabPanel("Chart Heatmap", plot_ly(x = gctCASRNNamesChart, y = gctAnnoNamesChart, z = gctFileChartMatrix, colors = colorRamp(c("white", "red")), type="heatmap", xgap=2, ygap=2, colorbar=list(title=list(text='<b>-log<sub>10</sub> (BH P-value)</b>'))) %>% 
+                               layout(
+                                 margin = list(l = 300, r = 200, b = 160), 
+                                 xaxis=list(title="<b>Annotations</b>", tickfont=list(size=9), tickangle=15), 
+                                 yaxis=list(title="<b>Input Sets</b>", type="category"),
+                                 plot_bgcolor="transparent",
+                                 paper_bgcolor="transparent",
+                                 font=list(color=theme$textcolor)
+                                )), 
+                    tabPanel("Chart Network", 
+                      fluidRow(
+                        column(3, 
+                          fluidRow(
+                            h4("Edge Selection Criteria"),
+                            numericInput(inputId="chartqval", label="Q-value", value=0.05, step=0.01, max=1.00, min=0.00),
+                            checkboxGroupInput( label="Selected Input Sets", inputId="chartNetworkChoices", choices=names(enrichmentSets), selected=names(enrichmentSets) ),
+                            HTML("<h5><b>Other Options</b></h5>"),
+                            checkboxInput(inputId="physicsEnabledChart", label="Enable physics?", value=FALSE),
+                            actionButton(inputId="chartNetworkUpdateButton", label="Update network"),
+                          )
+                        ), 
+                        column(9,
+                          uiOutput("chartNetwork") %>% withSpinner()
                         )
-                      ), 
-                      column(9,
-                        uiOutput("chartNetwork") %>% withSpinner()
                       )
                     )
-                  )
-                ),
-                hr()
+                  ),
+                )
               )
           )
           output[["clusterHeatmap"]] <- renderUI(
               fluidRow(
-                tabsetPanel(
-                  tabPanel("Cluster Heatmap", plot_ly(x = gctCASRNNamesCluster, y = gctAnnoNamesCluster, z = gctFileClusterMatrix, colors = colorRamp(c("white", "red")), type="heatmap", xgap=2, ygap=2, colorbar=list(title=list(text='<b>-log<sub>10</sub> (BH P-value)</b>'))) %>% 
-                             layout(
-                               margin = list(l = 300, r = 200, b = 160), 
-                               xaxis=list(title="<b>Annotation Clusters</b>", tickfont=list(size=9), tickangle=15), 
-                               yaxis=list(title="<b>Input Sets</b>", type="category"),
-                               plot_bgcolor="transparent",
-                               paper_bgcolor="transparent",
-                               font=list(color=theme$textcolor)
-                              )),
-                  tabPanel("Cluster Network", 
-                    fluidRow(
-                      column(3, 
-                        fluidRow(
-                          h4("Edge Selection Criteria"),
-                          numericInput(inputId="clusterqval", label="Q-value", value=0.05, step=0.01, max=1.00, min=0.00),
-                          checkboxGroupInput( label="Selected Input Sets", inputId="clusterNetworkChoices", choices=names(enrichmentSets), selected=names(enrichmentSets) ),
-                          HTML("<h5><b>Other Options</b></h5>"),
-                          checkboxInput(inputId="physicsEnabledCluster", label="Enable physics?", value=FALSE),
-                          actionButton(inputId="clusterNetworkUpdateButton", label="Update network"),
+                column(12,
+                  tabsetPanel(
+                    tabPanel("Cluster Heatmap", plot_ly(x = gctCASRNNamesCluster, y = gctAnnoNamesCluster, z = gctFileClusterMatrix, colors = colorRamp(c("white", "red")), type="heatmap", xgap=2, ygap=2, colorbar=list(title=list(text='<b>-log<sub>10</sub> (BH P-value)</b>'))) %>% 
+                               layout(
+                                 margin = list(l = 300, r = 200, b = 160), 
+                                 xaxis=list(title="<b>Annotation Clusters</b>", tickfont=list(size=9), tickangle=15), 
+                                 yaxis=list(title="<b>Input Sets</b>", type="category"),
+                                 plot_bgcolor="transparent",
+                                 paper_bgcolor="transparent",
+                                 font=list(color=theme$textcolor)
+                                )),
+                    tabPanel("Cluster Network", 
+                      fluidRow(
+                        column(3, 
+                          fluidRow(
+                            h4("Edge Selection Criteria"),
+                            numericInput(inputId="clusterqval", label="Q-value", value=0.05, step=0.01, max=1.00, min=0.00),
+                            checkboxGroupInput( label="Selected Input Sets", inputId="clusterNetworkChoices", choices=names(enrichmentSets), selected=names(enrichmentSets) ),
+                            HTML("<h5><b>Other Options</b></h5>"),
+                            checkboxInput(inputId="physicsEnabledCluster", label="Enable physics?", value=FALSE),
+                            actionButton(inputId="clusterNetworkUpdateButton", label="Update network"),
+                          )
+                        ), 
+                        column(9,
+                               uiOutput("clusterNetwork") %>% withSpinner()
                         )
-                      ), 
-                      column(9,
-                             uiOutput("clusterNetwork") %>% withSpinner()
                       )
                     )
                   )
-                ),
+                )
               )
           )
           
