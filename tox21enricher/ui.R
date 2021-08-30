@@ -105,6 +105,10 @@ shinyUI(fluidPage(
             extendShinyjs(text = js_theme, functions = 'toggleTheme'),
             extendShinyjs(text = js_cbx, functions = c('check', 'uncheck')),
             p("Welcome to Tox21 Enricher! Please see this ", actionLink(inputId="manualLink", label="link"), "for instructions on using this application and the descriptions about the chemical / biological categories. Other resources from the Tox21 toolbox can be viewed", tags$a(href="https://ntp.niehs.nih.gov/results/tox21/tbox/","here."), "A sufficiently robust internet connection and JavaScript are required to use all of this application's features."),
+            # Manual link error output
+            hidden(
+              uiOutput("manualError")
+            ),
             # Display API connection status
             uiOutput("apiConnection"),
             # Display enrichment total count

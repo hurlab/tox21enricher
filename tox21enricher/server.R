@@ -43,6 +43,9 @@ shinyServer(function(input, output, session) {
     get_annotations <- function(){
         # Query API to get list of annotation classes and types
         resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="initAnnotations")
+        if(resp$status_code != 200){
+          return(list())
+        }
         outputAnnotationClass <- unlist(lapply(content(resp), function(x){
           return(x$annoclassname)
         }))
@@ -57,11 +60,20 @@ shinyServer(function(input, output, session) {
     }
     annoClasses <- reactiveValues(classes = c())
     
-    # Get total # of enrichments
+    # Get total # of requests
     getEnrichmentCount <- function(){
-      # Query API to get list of annotation classes and types
-      resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="total")
-      return(unname(unlist((content(resp)))))
+      tryEnrichmentCount <- tryCatch(
+        {
+          # Query API to get list of annotation classes and types
+          resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="total")
+          if(resp$status_code != 200){
+            return(0)
+          }
+          return(unname(unlist((content(resp)))))
+        }, error=function(cond){
+          return(0)
+        }
+      )
     }
     
     # Display number of total enrichments performed
@@ -73,7 +85,22 @@ shinyServer(function(input, output, session) {
     # Serve user manual
     observeEvent(input$manualLink, {
       # First, query API to get most recent version of manual
-      resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="getAppVersion")
+      resp <- NULL
+      tryManual <- tryCatch(
+        {
+          resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="getAppVersion")    
+          return(TRUE)
+        }, error=function(cond){
+          return(FALSE)
+        }
+      )
+      if(tryManual == FALSE){
+        shinyjs::show(id="manualError")
+        output$manualError<- renderUI({
+          HTML("<div class=\"text-danger\">Error: Could not retrieve manual from server.</div>")
+        })
+        return(FALSE)
+      }
       appVersion <- content(resp)
       # Next, check if we have previously downloaded the manual (Tox21 Enricher will cache previously-downloaded manuals). If yes, do nothing. If no, download the manual from the Plumber server
       # This should always get the most recent manual revision
@@ -302,7 +329,24 @@ shinyServer(function(input, output, session) {
         colorsList <- params[1, 9]
         
         # Check if result (Input/Output) files exist on the server
-        resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="exists", query=list(transactionId=transactionId))
+        resp <- NULL
+        tryPrevious <- tryCatch(
+          {
+            resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="exists", query=list(transactionId=transactionId))    
+            return(TRUE)
+          }, error=function(cond){
+            return(FALSE)
+          }
+        )
+        if(tryPrevious == FALSE){
+          # error here
+          shinyjs::show(id="warningSearchColumn")
+          output$searchWarning <- renderUI({
+            HTML(paste0("<div class=\"text-danger\">Error: Cannot connect to Tox21 Enricher server.</div>"))
+          })
+          return(FALSE)
+        }
+        
         # TODO: error check
         if(resp$status_code != 200){
           # error here
@@ -625,150 +669,169 @@ shinyServer(function(input, output, session) {
     
     
     # Display API connection status
-    resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="ping")
-    if(resp$status_code != 200) {
-      output$apiConnection <- renderUI({
-        HTML(paste0("<div class=\"text-danger\">Could not connect to Tox21 Enricher server!</div>"))
-      })
-    } else {
-      output$apiConnection <- renderUI({
-        HTML(paste0("<div class=\"text-success\">Connection with Tox21 Enricher server successfully established.</div>"))
-      })
-    }
+    pingAPI <- tryCatch(
+      {
+        resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="ping")
+        if(resp$status_code != 200) {
+          output$apiConnection <- renderUI({
+            HTML(paste0("<div class=\"text-danger\">Could not connect to Tox21 Enricher server!</div>"))
+          })
+        } else {
+          output$apiConnection <- renderUI({
+            HTML(paste0("<div class=\"text-success\">Connection with Tox21 Enricher server successfully established.</div>"))
+          })
+        } 
+      }, error=function(cond){
+        output$apiConnection <- renderUI({
+          HTML(paste0("<div class=\"text-danger\">Could not connect to Tox21 Enricher server!</div>"))
+        })
+      }
+    )
     
     # Display list of annotations to select
     output$annotations <- renderUI({
-        annoListFull <- get_annotations()
-        annoList <- annoListFull[1]
-        selectedAnnoList <- reactiveValues()
-        
-        # Lists for each class type
-        classPubChem <- annoListFull[annoListFull$annotype %in% c("PubChem Compound Annotation"), ]
-        classPubChem <- classPubChem[, "annoclassname"]
-        descPubChem <- annoListFull[annoListFull$annotype %in% c("PubChem Compound Annotation"), ]
-        descPubChem <- descPubChem[, "annodesc"]
-        descPubChem <- unlist(lapply(1:length(descPubChem), function(x){
-          return(paste0(descPubChem[x]))
-        }))
+      annoListFull <- list()
+      getAnnotationsFromServer <- tryCatch(
+        {
+          annoListFull <- get_annotations()   
+        }, error=function(cond){
+          return(HTML("<div class=\"text-danger\">Error: Could not load any annotation classes.</div>"))
+        }
+      )
+      if(length(annoListFull) < 1) {
+        return(HTML("<div class=\"text-danger\">Error: Could not load any annotation classes.</div>"))
+      }
+      
+      annoList <- annoListFull[1]
+      selectedAnnoList <- reactiveValues()
+      
+      # Lists for each class type
+      classPubChem <- annoListFull[annoListFull$annotype %in% c("PubChem Compound Annotation"), ]
+      classPubChem <- classPubChem[, "annoclassname"]
+      descPubChem <- annoListFull[annoListFull$annotype %in% c("PubChem Compound Annotation"), ]
+      descPubChem <- descPubChem[, "annodesc"]
+      descPubChem <- unlist(lapply(1:length(descPubChem), function(x){
+        return(paste0(descPubChem[x]))
+      }))
 
-        classDrugMatrix <- annoListFull[annoListFull$annotype %in% c("DrugMatrix Annotation"), ]
-        classDrugMatrix <- classDrugMatrix[, "annoclassname"]
-        descDrugMatrix <- annoListFull[annoListFull$annotype %in% c("DrugMatrix Annotation"), ]
-        descDrugMatrix <- descDrugMatrix[, "annodesc"]
-        descDrugMatrix <- unlist(lapply(1:length(descDrugMatrix), function(x){
-          return(paste0(descDrugMatrix[x]))
-        }))
-        
-        classDrugBank <- annoListFull[annoListFull$annotype %in% c("DrugBank Annotation"), ]
-        classDrugBank <- classDrugBank[, "annoclassname"]
-        descDrugBank <- annoListFull[annoListFull$annotype %in% c("DrugBank Annotation"), ]
-        descDrugBank <- descDrugBank[, "annodesc"]
-        descDrugBank <- unlist(lapply(1:length(descDrugBank), function(x){
-          return(paste0(descDrugBank[x]))
-        }))
-        
-        classCTD <- annoListFull[annoListFull$annotype %in% c("CTD Annotation"), ]
-        classCTD <- classCTD[, "annoclassname"]
-        descCTD <- annoListFull[annoListFull$annotype %in% c("CTD Annotation"), ]
-        descCTD <- descCTD[, "annodesc"]
-        descCTD <- unlist(lapply(1:length(descCTD), function(x){
-          return(paste0(descCTD[x]))
-        }))
-        
-        classOther <- annoListFull[annoListFull$annotype %in% c("Other"), ]
-        classOther <- classOther[, "annoclassname"]
-        descOther <- annoListFull[annoListFull$annotype %in% c("Other"), ]
-        descOther <- descOther[, "annodesc"]
-        descOther <- unlist(lapply(1:length(descOther), function(x){
-          return(paste0(descOther[x]))
-        }))
+      classDrugMatrix <- annoListFull[annoListFull$annotype %in% c("DrugMatrix Annotation"), ]
+      classDrugMatrix <- classDrugMatrix[, "annoclassname"]
+      descDrugMatrix <- annoListFull[annoListFull$annotype %in% c("DrugMatrix Annotation"), ]
+      descDrugMatrix <- descDrugMatrix[, "annodesc"]
+      descDrugMatrix <- unlist(lapply(1:length(descDrugMatrix), function(x){
+        return(paste0(descDrugMatrix[x]))
+      }))
+      
+      classDrugBank <- annoListFull[annoListFull$annotype %in% c("DrugBank Annotation"), ]
+      classDrugBank <- classDrugBank[, "annoclassname"]
+      descDrugBank <- annoListFull[annoListFull$annotype %in% c("DrugBank Annotation"), ]
+      descDrugBank <- descDrugBank[, "annodesc"]
+      descDrugBank <- unlist(lapply(1:length(descDrugBank), function(x){
+        return(paste0(descDrugBank[x]))
+      }))
+      
+      classCTD <- annoListFull[annoListFull$annotype %in% c("CTD Annotation"), ]
+      classCTD <- classCTD[, "annoclassname"]
+      descCTD <- annoListFull[annoListFull$annotype %in% c("CTD Annotation"), ]
+      descCTD <- descCTD[, "annodesc"]
+      descCTD <- unlist(lapply(1:length(descCTD), function(x){
+        return(paste0(descCTD[x]))
+      }))
+      
+      classOther <- annoListFull[annoListFull$annotype %in% c("Other"), ]
+      classOther <- classOther[, "annoclassname"]
+      descOther <- annoListFull[annoListFull$annotype %in% c("Other"), ]
+      descOther <- descOther[, "annodesc"]
+      descOther <- unlist(lapply(1:length(descOther), function(x){
+        return(paste0(descOther[x]))
+      }))
 
-        annodescList <- annoListFull[, "annodesc"]
-        names(annodescList) <- annoListFull[, "annoclassname"]
-        
-        
-        # Create list of annotation tooltips (help from https://stackoverflow.com/questions/36670065/tooltip-in-shiny-ui-for-help-text)
-        ttPubChem <- lapply(1:length(descPubChem), function(x){
-          tipify(bsButtonRight(paste0("tt_", classPubChem[x]), icon("question-circle"), style="inverse", size="extra-small"), descPubChem[x], placement="right")
-        })
-        ttDrugMatrix <- lapply(1:length(descDrugMatrix), function(x){
-          tipify(bsButtonRight(paste0("tt_", classDrugMatrix[x]), icon("question-circle"), style="inverse", size="extra-small"), descDrugMatrix[x], placement="right")
-        })
-        ttDrugBank <- lapply(1:length(descDrugBank), function(x){
-          tipify(bsButtonRight(paste0("tt_", classDrugBank[x]), icon("question-circle"), style="inverse", size="extra-small"), descDrugBank[x], placement="right")
-        })
-        ttCTD <- lapply(1:length(descCTD), function(x){
-          tipify(bsButtonRight(paste0("tt_", classCTD[x]), icon("question-circle"), style="inverse", size="extra-small"), descCTD[x], placement="right")
-        })
-        ttOther <- lapply(1:length(descOther), function(x){
-          tipify(bsButtonRight(paste0("tt_", classOther[x]), icon("question-circle"), style="inverse", size="extra-small"), descOther[x], placement="right")
-        })
-        
-        annoClassList = list()
-        annoClassList[[1]] <- classPubChem
-        annoClassList[[2]] <- classDrugMatrix
-        annoClassList[[3]] <- classDrugBank
-        annoClassList[[4]] <- classCTD
-        annoClassList[[5]] <- classOther
-        annoClasses$classes <- annoClassList
-        
-        # Need to handle CTD annotations a little differently so that GOFAT_BP is not selected by default
-        names(classCTD) <- lapply(1:length(classCTD), function(x){
-          # Show warning for CTD_GOFAT_BIOPROCESS
-          if(classCTD[[x]] == "CTD_GOFAT_BIOPROCESS"){
-            return(paste0("CTD_GOFAT_BIOPROCESS (Very slow, unchecked by default)"))
-          } else {
-            return(classCTD[[x]])
-          }
-        })
-        classCTDSelected <- lapply(names(classCTD), function(x){
-          if(classCTD[[x]] == "CTD_GOFAT_BIOPROCESS"){
-            return(NULL)
-          } else {
-            return(classCTD[[x]])
-          }
-        })
-        names(classCTDSelected) <- names(classCTD)
+      annodescList <- annoListFull[, "annodesc"]
+      names(annodescList) <- annoListFull[, "annoclassname"]
+      
+      
+      # Create list of annotation tooltips (help from https://stackoverflow.com/questions/36670065/tooltip-in-shiny-ui-for-help-text)
+      ttPubChem <- lapply(1:length(descPubChem), function(x){
+        tipify(bsButtonRight(paste0("tt_", classPubChem[x]), icon("question-circle"), style="inverse", size="extra-small"), descPubChem[x], placement="right")
+      })
+      ttDrugMatrix <- lapply(1:length(descDrugMatrix), function(x){
+        tipify(bsButtonRight(paste0("tt_", classDrugMatrix[x]), icon("question-circle"), style="inverse", size="extra-small"), descDrugMatrix[x], placement="right")
+      })
+      ttDrugBank <- lapply(1:length(descDrugBank), function(x){
+        tipify(bsButtonRight(paste0("tt_", classDrugBank[x]), icon("question-circle"), style="inverse", size="extra-small"), descDrugBank[x], placement="right")
+      })
+      ttCTD <- lapply(1:length(descCTD), function(x){
+        tipify(bsButtonRight(paste0("tt_", classCTD[x]), icon("question-circle"), style="inverse", size="extra-small"), descCTD[x], placement="right")
+      })
+      ttOther <- lapply(1:length(descOther), function(x){
+        tipify(bsButtonRight(paste0("tt_", classOther[x]), icon("question-circle"), style="inverse", size="extra-small"), descOther[x], placement="right")
+      })
+      
+      annoClassList = list()
+      annoClassList[[1]] <- classPubChem
+      annoClassList[[2]] <- classDrugMatrix
+      annoClassList[[3]] <- classDrugBank
+      annoClassList[[4]] <- classCTD
+      annoClassList[[5]] <- classOther
+      annoClasses$classes <- annoClassList
+      
+      # Need to handle CTD annotations a little differently so that GOFAT_BP is not selected by default
+      names(classCTD) <- lapply(1:length(classCTD), function(x){
+        # Show warning for CTD_GOFAT_BIOPROCESS
+        if(classCTD[[x]] == "CTD_GOFAT_BIOPROCESS"){
+          return(paste0("CTD_GOFAT_BIOPROCESS (Very slow, unchecked by default)"))
+        } else {
+          return(classCTD[[x]])
+        }
+      })
+      classCTDSelected <- lapply(names(classCTD), function(x){
+        if(classCTD[[x]] == "CTD_GOFAT_BIOPROCESS"){
+          return(NULL)
+        } else {
+          return(classCTD[[x]])
+        }
+      })
+      names(classCTDSelected) <- names(classCTD)
 
-        # Render checkboxes for each annotation class
-        column(12,
-            tabsetPanel(id="annotationClasses",
-                tabPanel("PubChem Compound Annotations", 
-                  fluidRow(
-                    column(12,
-                      extendedCheckboxGroupInput("checkboxPubChem", "PubChem Compound Annotations", choices=classPubChem, selected=classPubChem, extensions=ttPubChem)
-                    )
-                  )
-                ),
-                tabPanel("DrugMatrix Annotations",
-                  fluidRow(
-                    column(12,
-                      extendedCheckboxGroupInput("checkboxDrugMatrix", "DrugMatrix Annotations", choices=classDrugMatrix, selected=classDrugMatrix, extensions=ttDrugMatrix)
-                    )
-                  )
-                ),
-                tabPanel("DrugBank Annotations",
-                  fluidRow(
-                    column(12,
-                      extendedCheckboxGroupInput("checkboxDrugBank", "DrugBank Annotations", choices=classDrugBank, selected=classDrugBank, extensions=ttDrugBank)
-                    )
-                  )
-                ),
-                tabPanel("CTD Annotations",
-                  fluidRow(
-                    column(12,
-                      extendedCheckboxGroupInput("checkboxCTD", "CTD Annotations", width="500px", choices=classCTD, selected=classCTDSelected, extensions=ttCTD)
-                    )
-                  )
-                ),
-                tabPanel("Other Annotations",
-                  fluidRow(
-                    column(12,
-                      extendedCheckboxGroupInput("checkboxOther", "Other Annotations", choices=classOther, selected=classOther, extensions=ttOther)
-                    )
+      # Render checkboxes for each annotation class
+      column(12,
+          tabsetPanel(id="annotationClasses",
+              tabPanel("PubChem Compound Annotations", 
+                fluidRow(
+                  column(12,
+                    extendedCheckboxGroupInput("checkboxPubChem", "PubChem Compound Annotations", choices=classPubChem, selected=classPubChem, extensions=ttPubChem)
                   )
                 )
-            )
+              ),
+              tabPanel("DrugMatrix Annotations",
+                fluidRow(
+                  column(12,
+                    extendedCheckboxGroupInput("checkboxDrugMatrix", "DrugMatrix Annotations", choices=classDrugMatrix, selected=classDrugMatrix, extensions=ttDrugMatrix)
+                  )
+                )
+              ),
+              tabPanel("DrugBank Annotations",
+                fluidRow(
+                  column(12,
+                    extendedCheckboxGroupInput("checkboxDrugBank", "DrugBank Annotations", choices=classDrugBank, selected=classDrugBank, extensions=ttDrugBank)
+                  )
+                )
+              ),
+              tabPanel("CTD Annotations",
+                fluidRow(
+                  column(12,
+                    extendedCheckboxGroupInput("checkboxCTD", "CTD Annotations", width="500px", choices=classCTD, selected=classCTDSelected, extensions=ttCTD)
+                  )
+                )
+              ),
+              tabPanel("Other Annotations",
+                fluidRow(
+                  column(12,
+                    extendedCheckboxGroupInput("checkboxOther", "Other Annotations", choices=classOther, selected=classOther, extensions=ttOther)
+                  )
+                )
+              )
+          )
         )
     })
     
@@ -1097,7 +1160,6 @@ shinyServer(function(input, output, session) {
           return(FALSE)
         }
       }
-      
       performEnrichment(inputToSubmit, reenrichFlag=FALSE)  
     })
     
@@ -1177,10 +1239,13 @@ shinyServer(function(input, output, session) {
           cutoff <- input$nodeCutoff
         }
         
+        # If TRUE, signifies that client app cannot connect to API
+        badConnectionFlag <- FALSE
+        
         # Initialize list to hold result chemicals for reenrichment (Substructure & Similarity only)
         reenrichResults <- list()
         casrnBoxSplit <- unlist(str_split(casrnBox, "\n"))
-        
+
         # Split CASRNBox to get each line and organize into sets
         if (enrichmentType$enrichType == "casrn" | enrichmentType$enrichType == "annotation") {
             enrichmentSets <- list()
@@ -1217,11 +1282,19 @@ shinyServer(function(input, output, session) {
                 innerCasrnSet <- sapply(enrichmentSets[[casrnSet]], function(casrn){
                   queryReenrichCasrns <- NULL
                   if(originalEnrichModeList$originalEnrichMode == "substructure"){
+                    print("HERE?")
                     # Query API to get list of annotation classes and types
-                    resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="substructure", query=list(input=casrn, reenrich=TRUE))
-                    if(resp$status_code != 200){
-                      return(NULL)
-                    }
+                    resp <- NULL
+                    trySubstructure <- tryCatch(
+                      {
+                        resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="substructure", query=list(input=casrn, reenrich=TRUE))
+                        if(resp$status_code != 200){
+                          return(FALSE)
+                        }
+                      }, error=function(cond){
+                        return(FALSE)
+                      }
+                    )
                     
                     outputSubCasrns <- unlist(lapply(content(resp), function(x){
                       return(x$casrn)
@@ -1302,13 +1375,27 @@ shinyServer(function(input, output, session) {
                 if(setName != ""){
                   outpSmiles <- NULL
                   if (enrichmentType$enrichType == "substructure") {
-                      resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="substructure", query=list(input=setName, reenrich=FALSE))
-                      if(resp$status_code != 200){
-                        return(NULL)
+                      resp <- NULL
+                      trySubstructure <- tryCatch(
+                        {
+                          resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="substructure", query=list(input=setName, reenrich=FALSE))
+                          if(resp$status_code != 200){
+                            return(FALSE)
+                          }
+                          return(TRUE)
+                        }, error=function(cond){
+                          return(FALSE)
+                        }
+                      )
+                      if(trySubstructure == FALSE){
+                        badConnectionFlag <<- TRUE
+                        return(NULL) 
                       }
+                      
                       if(length(content(resp)) < 1){
                         return(NULL)
-                      }
+                      }    
+                      
                       outputSubCasrns <- unlist(lapply(content(resp), function(x){
                         return(x$casrn)
                       }))
@@ -1333,8 +1420,21 @@ shinyServer(function(input, output, session) {
                   } else {
                     # Set Tanimoto threshold for similarity search
                     threshold <- as.numeric(input$tanimotoThreshold)/100
-                    resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="similarity", query=list(input=setName, threshold=threshold))
-                    if(resp$status_code != 200){
+                    resp <- NULL
+                    trySimilarity <- tryCatch(
+                      {
+                        resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="similarity", query=list(input=setName, threshold=threshold))
+                        if(resp$status_code != 200){
+                          return(FALSE)
+                        }    
+                        return(TRUE)
+                      }, error=function(cond){
+                        return(FALSE)
+                      }
+                    )
+
+                    if(trySimilarity == FALSE){
+                      badConnectionFlag <<- TRUE
                       return(NULL)
                     }
                     
@@ -1394,9 +1494,15 @@ shinyServer(function(input, output, session) {
             # Show error message on main page
             shinyjs::show(id="errorBox")
             
-            output$error_box <- renderUI({
-              HTML(paste0("<div class=\"text-danger\">Error: No valid input sets.</div>"))
-            })
+            if(badConnectionFlag == TRUE){
+              output$error_box <- renderUI({
+                HTML(paste0("<div class=\"text-danger\">Error: Cannot connect to the Tox21 Enricher server.</div>"))
+              })
+            } else {
+              output$error_box <- renderUI({
+                HTML(paste0("<div class=\"text-danger\">Error: No valid input sets.</div>"))
+              })  
+            }
             return(FALSE)
           }
           
@@ -1439,7 +1545,33 @@ shinyServer(function(input, output, session) {
         # Generate UUID for this query
         transactionId <- UUIDgenerate()
         # Access filesystem to see if UUID already exists
-        resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="checkId")
+        resp <- NULL
+        tryGenerateUUID <- tryCatch(
+          {
+            resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="checkId")
+            return(TRUE)
+          }, error=function(cond){
+            return(FALSE)
+          }
+        )
+        if(tryGenerateUUID == FALSE){
+          # Hide original form when done with enrichment
+          shinyjs::show(id="enrichmentForm")
+          # Disable changing input type when button is clicked
+          shinyjs::enable(id="enrich_from")
+          # Show 'Restart' button, disable by default so user can't interfere with enrichment process
+          shinyjs::hide(id="refresh")
+          shinyjs::enable(id="refresh")
+          # Hide loading spinner
+          shinyjs::hide(id="resultsContainer")
+          # Show error message on main page
+          shinyjs::show(id="errorBox")
+          output$error_box <- renderUI({
+            HTML(paste0("<div class=\"text-danger\">Error: Cannot connect to Tox21 Enricher server.</div>"))
+          })
+          return(FALSE)
+        }
+        
         if(resp$status_code != 200){
           # Hide original form when done with enrichment
           shinyjs::show(id="enrichmentForm")
@@ -1879,7 +2011,7 @@ shinyServer(function(input, output, session) {
 
         # Write local info file so we can reference this request later
         tmpLocalFile <- file(paste0(tmpDir, transactionId), open="a")
-        cat(paste0("\t", beginTime, "\t", endTime), file=tmpLocalFile)
+        cat(paste0("\t", beginTime, "\t", endTime, "\r"), file=tmpLocalFile)
         close(tmpLocalFile)
       
         # Show results container
