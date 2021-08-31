@@ -262,24 +262,24 @@ shinyServer(function(input, output, session) {
           
           output[["enrichmentTable"]] <- renderUI(
             column(12,
-                   DT::datatable({enrichmentListDisplay}, 
-                                 escape = FALSE,
-                                 rownames = FALSE,
-                                 class = "row-border stripe compact",
-                                 style = "bootstrap",
-                                 select = "none",
-                                 options = list( 
-                                   paging = TRUE,
-                                   #autoWidth = FALSE,
-                                   #columnDefs = list(list(width="200px", targets="_all")),
-                                   preDrawCallback = JS('function() { Shiny.unbindAll(this.api().table().node()); }'), 
-                                   drawCallback = JS('function() { Shiny.bindAll(this.api().table().node()); } '),
-                                   dom = "Bfrtip",
-                                   buttons = list(list( extend="colvis", columns=as.vector(1:(ncol(enrichmentListDisplay)-1)) ))  
-                                   #                                                           ^^ this is so we always keep the select checkboxes in the table (user can't hide them)
-                                 ),
-                                 extensions = "Buttons"
-                   )
+               DT::datatable({enrichmentListDisplay}, 
+                             escape = FALSE,
+                             rownames = FALSE,
+                             class = "row-border stripe compact",
+                             style = "bootstrap",
+                             select = "none",
+                             options = list( 
+                               paging = TRUE,
+                               #autoWidth = FALSE,
+                               #columnDefs = list(list(width="200px", targets="_all")),
+                               preDrawCallback = JS('function() { Shiny.unbindAll(this.api().table().node()); }'), 
+                               drawCallback = JS('function() { Shiny.bindAll(this.api().table().node()); } '),
+                               dom = "Bfrtip",
+                               buttons = list(list( extend="colvis", columns=as.vector(1:(ncol(enrichmentListDisplay)-1)) ))  
+                               #                                                           ^^ this is so we always keep the select checkboxes in the table (user can't hide them)
+                             ),
+                             extensions = "Buttons"
+               )
             )
           )
         }
@@ -1206,7 +1206,6 @@ shinyServer(function(input, output, session) {
     setColors <- reactiveValues(color = NULL)
     
     performEnrichment <- function(casrnBox, reenrichFlag=FALSE, originalNamesToReturn=NULL) {
-      
         # If reenriching, always do CASRN
         if(reenrichFlag == FALSE){
           reenrichFlagReactive$reenrichFlagReactive <- FALSE
@@ -1396,10 +1395,7 @@ shinyServer(function(input, output, session) {
                           return(FALSE)
                         }
                       )
-                      
-                      print("trySubstructure")
-                      print(trySubstructure)
-                      
+
                       if(!is.null(trySubstructure)) {
                         if(trySubstructure == FALSE){
                           badConnectionFlag <<- TRUE
@@ -2094,21 +2090,17 @@ shinyServer(function(input, output, session) {
         if(mode == "annotation") {
           output$resultsTabset <- renderUI({
             fluidRow(
-              fluidRow(
-                column(12,
-                       h1(id="resultsHeader", "Fetched Annotations"),
-                       do.call(tabsetPanel, c(id='tab', lapply(names(enrichmentSets), function(i) {
-                         tabPanel(
-                           title=paste0(i),
-                           uiOutput(paste0("outTab_", i)) %>% withSpinner()
-                         )
-                       })))
-                )
+              column(12,
+                     h1(id="resultsHeader", "Fetched Annotations"),
+                     do.call(tabsetPanel, c(id='tab', lapply(names(enrichmentSets), function(i) {
+                       tabPanel(
+                         title=paste0(i),
+                         uiOutput(paste0("outTab_", i)) %>% withSpinner()
+                       )
+                     })))
               ),
-              fluidRow(
-                column(12,
-                       actionButton(inputId="downloadButton", label="Download results", icon=icon("download"))       
-                )
+              column(12,
+                     actionButton(inputId="downloadButton", label="Download results", icon=icon("download"))       
               )
             )
           })
@@ -2552,8 +2544,7 @@ shinyServer(function(input, output, session) {
                                 h3("Result Chemicals")
                               },
                               if(mode != "casrn" | (originalEnrichMode == "substructure" | originalEnrichMode == "similarity")) {
-                                #uiOutput(paste0("table_", i))
-                                DTOutput(paste0("table_", i))
+                                uiOutput(paste0("table_", i))
                               }
                             )
                         )
@@ -2585,6 +2576,8 @@ shinyServer(function(input, output, session) {
                 return(reenrichResults[[i]][, "casrn"])
               })
               names(reenrichChoices) <- names(reenrichResults)
+              
+              print("creating checkboxes...")
               checkboxes <- lapply(names(reenrichChoices), function(reenrichSet){
                 tmp_checkboxes <- lapply(reenrichChoices[[reenrichSet]], function(x){
                   return(checkboxInput(inputId=paste0(x, "__", reenrichSet), value=TRUE, label=NULL, width="4px"))
@@ -2595,6 +2588,7 @@ shinyServer(function(input, output, session) {
                 return(tmp_checkboxes)
               })
               names(checkboxes) <- names(reenrichChoices)
+              print(checkboxes)
   
               # Set reactive value so we can access these checkboxes later
               checkboxList$checkboxes <- checkboxes
@@ -2617,8 +2611,8 @@ shinyServer(function(input, output, session) {
                   structuresSvg <- content(resp)
                   resultImages <- lapply(reenrichResults[[i]][, "casrn"], function(casrnName) {
                     # TODO: this is kind of a hacky way to resize the SVG images generated by rdkit, but it works...
-                    resizedSvg <- str_replace(unlist(structuresSvg[casrnName][[1]]) , "width='250px'", "width='100px'")
-                    resizedSvg <- str_replace(resizedSvg , "height='200px'", "height='80px'")
+                    resizedSvg <- str_replace(unlist(structuresSvg[casrnName][[1]]) , "width='250px'", "width='50px'")
+                    resizedSvg <- str_replace(resizedSvg , "height='200px'", "height='40px'")
                     
                     # Add fetched, resized SVG to list too
                     svgImagesList[paste0(casrnName, "__", i)] <<- resizedSvg
@@ -2660,15 +2654,12 @@ shinyServer(function(input, output, session) {
                     
                     # Resize structural image
                     svgExpanded <- paste0(svgImagesList[paste0(casrn, "__", i)])
-                    svgExpanded <- str_replace(svgExpanded , "width='100px'", "width='600px'")
-                    svgExpanded <- str_replace(svgExpanded , "height='80px'", "height='480px'")
+                    svgExpanded <- str_replace(svgExpanded , "width='50px'", "width='600px'")
+                    svgExpanded <- str_replace(svgExpanded , "height='40px'", "height='480px'")
 
                     # Create observer
                     if(is.null(setFilesObservers$observers[[paste0("svgObserver__", casrn, "__", i)]])){
-                      print(">>>>>>>> CREATING")
                       setFilesObservers$observers[[paste0("svgObserver__", casrn, "__", i)]] <- observeEvent(input[[paste0("ab__img__", casrn, "__", i)]], {
-                        print(paste0("ab__img__", casrn, "__", i))
-                        print(input[[paste0("ab__img__", casrn, "__", i)]])
                         showModal(
                           modalDialog(
                             title=casrn,
@@ -2909,25 +2900,30 @@ shinyServer(function(input, output, session) {
                   rownames(fullTable) <- 1:nrow(fullTable)
                   
                   if(mode != "casrn" | (originalEnrichMode == "substructure" | originalEnrichMode == "similarity")) {
-                    output[[paste0("table_", i)]] <- renderDT(
-                      # Render reenrichment table (solution from https://stackoverflow.com/questions/37356625/adding-a-column-with-true-false-and-showing-that-as-a-checkbox/37356792#37356792)
-                      fullTable,
-                          escape = FALSE, 
-                          class = "row-border stripe compact",
-                          rownames = FALSE,
-                          style = "bootstrap",
-                          select = "none",
-                          options = list( 
-                            paging=TRUE,
-                            preDrawCallback = JS('function() { Shiny.unbindAll(this.api().table().node()); }'), 
-                            drawCallback = JS('function() { Shiny.bindAll(this.api().table().node()); } '),
-                            dom="Bfrtip",
-                            buttons=list("copy", "csv", "excel", "pdf", "print", list( extend="colvis", columns=as.vector(1:(ncol(fullTable)-1)) ))  
-                            #                                                           ^^ this is so we always keep the select checkboxes in the table (user can't hide them)
-                          ),
-                          extensions="Buttons"
-                        #)
-                      #)
+                    output[[paste0("table_", i)]] <- renderUI(
+                      column(12,
+                        DT::datatable({fullTable},
+                        # Render reenrichment table (solution from https://stackoverflow.com/questions/37356625/adding-a-column-with-true-false-and-showing-that-as-a-checkbox/37356792#37356792)
+                            escape = FALSE, 
+                            class = "row-border stripe compact",
+                            rownames = FALSE,
+                            style = "bootstrap",
+                            select = "none",
+                            fillContainer = TRUE,
+                            options = list( 
+                              paging=TRUE,
+                              preDrawCallback = JS('function() { Shiny.unbindAll(this.api().table().node()); }'), 
+                              drawCallback = JS('function() { Shiny.bindAll(this.api().table().node()); } '),
+                              dom="Bfrtip",
+                              pageLength=10,
+                              #autoWidth=TRUE,
+                              #scrollY="350px",
+                              buttons=list("copy", "csv", "excel", "pdf", "print", list( extend="colvis", columns=as.vector(1:(ncol(fullTable)-1)) ))  
+                              #                                                           ^^ this is so we always keep the select checkboxes in the table (user can't hide them)
+                            ),
+                            extensions="Buttons"
+                        )
+                      )
                     )
                   } 
   
@@ -3198,11 +3194,8 @@ shinyServer(function(input, output, session) {
           # Render networks
           output$chartNetwork <- renderUI(chartFullNetwork)
           output$clusterNetwork <- renderUI(clusterFullNetwork)
-          
-          
-          
+
           # Create bar graph 
-          
           # Query API to get chart simple
           resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="bargraph", query=list(transactionId=transactionId, inputSet=i))
           #TODO: error check
@@ -3312,39 +3305,31 @@ shinyServer(function(input, output, session) {
         if(is.null(setFilesObservers$observers[["selectAllReenrichButtonObserver"]])){
           setFilesObservers$observers[["selectAllReenrichButtonObserver"]] <- observeEvent(input$selectAllReenrichButton, {
             
-            for (i in checkboxList$checkboxes) {
-              for(j in names(i)){
-                testVal <- !input[[j]]
-                updateCheckboxInput(session, j, value = testVal)
+            if(selectAllReenrichButtonStatus$option == "select") { # Selecting
+              selectAllReenrichButtonStatus$option = "deselect"
+              updateActionButton(session, "selectAllReenrichButton", label="Deselect all chemicals")
+              for (i in checkboxList$checkboxes) {
+                for(j in names(i)){
+                  #print(j)
+                  #print(paste0("before: ", input[[j]]))
+                  updateCheckboxInput(session, j, value = TRUE)
+                  #js$check(paste0(j))
+                  #print(paste0("after: ", input[[j]]))
+                }
+              }
+            } else { # Deselecting
+              selectAllReenrichButtonStatus$option = "select"
+              updateActionButton(session, "selectAllReenrichButton", label="Select all chemicals")
+              for (i in checkboxList$checkboxes) {
+                for(j in names(i)){
+                  #print(j)
+                  #print(paste0("before: ", input[[j]]))
+                  updateCheckboxInput(session, j, value = FALSE)
+                  #js$check(paste0(j))
+                  #print(paste0("after: ", input[[j]]))
+                }
               }
             }
-            
-            #print(paste0("IN HERE NOW WITH VALUE: ", selectAllReenrichButtonStatus$option))
-            #if(selectAllReenrichButtonStatus$option == "select") { # Selecting
-            #  selectAllReenrichButtonStatus$option = "deselect"
-            #  updateActionButton(session, "selectAllReenrichButton", label="Deselect all chemicals")
-            #  for (i in checkboxList$checkboxes) {
-            #    for(j in names(i)){
-            #      print(j)
-            #      print(paste0("before: ", input[[j]]))
-            #      updateCheckboxInput(session, j, value = TRUE)
-            #      #js$check(paste0(j))
-            #      print(paste0("after: ", input[[j]]))
-            #    }
-            #  }
-            #} else { # Deselecting
-            #  selectAllReenrichButtonStatus$option = "select"
-            #  updateActionButton(session, "selectAllReenrichButton", label="Select all chemicals")
-            #  for (i in checkboxList$checkboxes) {
-            #    for(j in names(i)){
-            #      print(j)
-            #      print(paste0("before: ", input[[j]]))
-            #      updateCheckboxInput(session, j, value = FALSE)
-            #      #js$check(paste0(j))
-            #      print(paste0("after: ", input[[j]]))
-            #    }
-            #  }
-            #}
 
           }, ignoreInit=TRUE)
         }
@@ -3353,27 +3338,27 @@ shinyServer(function(input, output, session) {
         selectAllSetButtonStatus <- reactiveValues(option = "deselect")
         if(is.null(setFilesObservers$observers[["selectAllSetButtonObserver"]])){
           setFilesObservers$observers[["selectAllSetButtonObserver"]] <- observeEvent(input$selectAllSetButton, {
-            #if(selectAllSetButtonStatus$option == "select") { # Selecting
-            #  selectAllSetButtonStatus$option = "deselect"
-            #  updateActionButton(session, "selectAllSetButton", label="Deselect all chemicals for this set")
-            #  for (i in checkboxList$checkboxes) {
-            #    for(j in names(i)){
-            #      if(unlist(str_split(j, "__"))[2] == input$tab){
-            #        updateCheckboxInput(session, j, value = TRUE)
-            #      }
-            #    }
-            #  }
-            #} else { # Deselecting
-            #  selectAllSetButtonStatus$option = "select"
-            #  updateActionButton(session, "selectAllSetButton", label="Select all chemicals for this set")
-            #  for (i in checkboxList$checkboxes) {
-            #    for(j in names(i)){
-            #      if(unlist(str_split(j, "__"))[2] == input$tab){
-            #        updateCheckboxInput(session, j, value = FALSE)
-            #      }
-            #    }
-            #  }
-            #}
+            if(selectAllSetButtonStatus$option == "select") { # Selecting
+              selectAllSetButtonStatus$option = "deselect"
+              updateActionButton(session, "selectAllSetButton", label="Deselect all chemicals for this set")
+              for (i in checkboxList$checkboxes) {
+                for(j in names(i)){
+                  if(unlist(str_split(j, "__"))[2] == input$tab){
+                    updateCheckboxInput(session, j, value = TRUE)
+                  }
+                }
+              }
+            } else { # Deselecting
+              selectAllSetButtonStatus$option = "select"
+              updateActionButton(session, "selectAllSetButton", label="Select all chemicals for this set")
+              for (i in checkboxList$checkboxes) {
+                for(j in names(i)){
+                  if(unlist(str_split(j, "__"))[2] == input$tab){
+                    updateCheckboxInput(session, j, value = FALSE)
+                  }
+                }
+              }
+            }
           }, ignoreInit=TRUE)
         }
         
@@ -3382,43 +3367,43 @@ shinyServer(function(input, output, session) {
         if(is.null(setFilesObservers$observers[["selectAllWarningsReenrichButtonObserver"]])){
           setFilesObservers$observers[["selectAllWarningsReenrichButtonObserver"]] <- observeEvent(input$selectAllWarningsReenrichButton, {
             # Get list of all the chemicals with warnings per set
-            #chemicalsWithWarnings <- lapply(finalTableToDisplay$table, function(dataset){
-            #  chemicalsWithWarningsInner <- lapply(1:nrow(dataset), function(line){
-            #    if(is.null(dataset[line, "warning"]) == FALSE){
-            #      if(dataset[line, "warning"] != "None") {
-            #        return(paste0(dataset[line, "CASRN"]))
-            #      }
-            #    }
-            #  })
-            #  return(unlist(chemicalsWithWarningsInner))
-            #})
-            #chemicalsWithWarningsList <- unlist(lapply(names(chemicalsWithWarnings), function(dataset){
-            #  for(casrn in chemicalsWithWarnings[dataset]) {
-            #    return(paste0(casrn, "__", dataset))
-            #  }
-            #}))
+            chemicalsWithWarnings <- lapply(finalTableToDisplay$table, function(dataset){
+              chemicalsWithWarningsInner <- lapply(1:nrow(dataset), function(line){
+                if(is.null(dataset[line, "warning"]) == FALSE){
+                  if(dataset[line, "warning"] != "None") {
+                    return(paste0(dataset[line, "CASRN"]))
+                  }
+                }
+              })
+              return(unlist(chemicalsWithWarningsInner))
+            })
+            chemicalsWithWarningsList <- unlist(lapply(names(chemicalsWithWarnings), function(dataset){
+              for(casrn in chemicalsWithWarnings[dataset]) {
+                return(paste0(casrn, "__", dataset))
+              }
+            }))
             
-            #if(selectAllWarningsReenrichButtonStatus$option == "select") { # Selecting
-            #  selectAllWarningsReenrichButtonStatus$option = "deselect"
-            #  updateActionButton(session, "selectAllWarningsReenrichButton", label="<div class=\"text-danger\">Deselect all chemicals with warnings</div>")
-            #  for (i in checkboxList$checkboxes) {
-            #    for(j in names(i)){
-            #      if(j %in% chemicalsWithWarningsList){
-            #        updateCheckboxInput(session, j, value = TRUE)  
-            #      }
-            #    }
-            #  }
-            #} else { # Deselecting
-            #  selectAllWarningsReenrichButtonStatus$option = "select"
-            #  updateActionButton(session, "selectAllWarningsReenrichButton", label="<div class=\"text-danger\">Select all chemicals with warnings</div>")
-            #  for (i in checkboxList$checkboxes) {
-            #    for(j in names(i)){
-            #      if(j %in% chemicalsWithWarningsList){
-            #        updateCheckboxInput(session, j, value=FALSE)  
-            #      }
-            #    }
-            #  }
-            #}
+            if(selectAllWarningsReenrichButtonStatus$option == "select") { # Selecting
+              selectAllWarningsReenrichButtonStatus$option = "deselect"
+              updateActionButton(session, "selectAllWarningsReenrichButton", label="<div class=\"text-danger\">Deselect all chemicals with warnings</div>")
+              for (i in checkboxList$checkboxes) {
+                for(j in names(i)){
+                  if(j %in% chemicalsWithWarningsList){
+                    updateCheckboxInput(session, j, value = TRUE)  
+                  }
+                }
+              }
+            } else { # Deselecting
+              selectAllWarningsReenrichButtonStatus$option = "select"
+              updateActionButton(session, "selectAllWarningsReenrichButton", label="<div class=\"text-danger\">Select all chemicals with warnings</div>")
+              for (i in checkboxList$checkboxes) {
+                for(j in names(i)){
+                  if(j %in% chemicalsWithWarningsList){
+                    updateCheckboxInput(session, j, value=FALSE)  
+                  }
+                }
+              }
+            }
           }, ignoreInit=TRUE)
         }
         
@@ -3820,51 +3805,14 @@ shinyServer(function(input, output, session) {
       reenrichResultsList$reenrichResults <- NULL
       enrichmentSetsList$enrichmentSets <- NULL
       
-      # debug
-      #print("INPUT NAMES")
-      #print(names(input))
-      
-      # Destroy dynamic observers
-      #print("destroying...")
-      #print(setFilesObservers$observers)
-
-      #selectAllReenrichButtonObserver$destroy()
-      #selectAllSetButtonObserver$destroy()
-      #selectAllWarningsReenrichButtonObserver$destroy()
-      
-      #for(x in setFilesObservers$observers) {
-        #print(">>")
-        #print(x)
-        #x$suspend()
-      #}
-      #setFilesObservers$observers <- list()
-      
-      # debug: remove svg img buttons
-      #for(x in names(input)){
-      #  if(grepl("ab__img__*", x)){
-      #    print(paste0("REMOVING: #div__", x))
-      #    removeUI(selector=paste0("#div__", x), multiple=TRUE)
-      #  }
-      #}
-      #print("... deleted.")
-      #print(setFilesObservers$observers)
-      
-      #print("INPUT NAMES 2")
-      #print(names(input))
-      
       for(i in checkboxList$checkboxes){
         for(j in names(i)){
           remove_shiny_inputs(j, input) 
         }
       }
-      print("NAMES NAMES NAMES")
-      print(names(input))
-      
-      
-      # Remove existing table
-      #output[["resultsTabset"]] <- renderUI(NULL)
-      #output[["resultsTabset"]] <- NULL
-      
+
+      checkboxList$checkboxes <- NULL
+
       # Perform enrichment again
       performEnrichment(reenrichCASRNBox, reenrichFlag=TRUE, originalNamesToReturn=originalNamesToReturn)
     })
