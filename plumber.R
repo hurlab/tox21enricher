@@ -273,6 +273,9 @@ cancelEnrichment <- function(res, req, transactionId){
   query <- sqlInterpolate(ANSI(), paste0("UPDATE enrichment_list SET timestamp_finish='cancelled' WHERE id='", transactionId, "';"), id="cancelEnrichment")
   outp <- dbGetQuery(poolCancel, query)
   
+  # Close pool
+  poolClose(poolCancel)
+  
   # Delete Input/Output files on filesystem
   unlink(paste0(inDir, transactionId), recursive=TRUE)
   unlink(paste0(outDir, transactionId), recursive=TRUE)
@@ -299,6 +302,9 @@ getTimestamp <- function(res, req, transactionId="-1"){
   # update database with ending timestamp for enrichment
   query <- sqlInterpolate(ANSI(), paste0("SELECT timestamp_start, timestamp_finish FROM enrichment_list WHERE id='", transactionId, "';"), id="getFromDb")
   outp <- dbGetQuery(poolUpdate, query)
+  
+  # Close pool
+  poolClose(poolUpdate)
   
   return(outp)
 }
@@ -341,6 +347,7 @@ initAnnotations <- function(res, req){
   annoClassOutp2 <- annoClassOutp[!(annoClassOutp$annoclassname %in% annoClassOutpRemove), ]
   rownames(annoClassOutp2) <- 1:nrow(annoClassOutp2)
   
+  # Close pool
   poolClose(poolAnnotations)
   return(annoClassOutp2)
   #})
@@ -362,6 +369,10 @@ total <- function(res, req){
   )
   totalQuery <- sqlInterpolate(ANSI(), "SELECT COUNT(*) FROM enrichment_list;", id = "getTotalEnrichment")
   totalOutp <- dbGetQuery(poolTotal, totalQuery)
+  
+  # Close pool
+  poolClose(poolTotal)
+  
   return(totalOutp)
   #})
 }
@@ -392,14 +403,14 @@ substructure <- function(res, req, input, reenrich=FALSE){
   }
   
   substructureQuery <- ""
-  
   if(reenrich == FALSE){
     substructureQuery <- sqlInterpolate(ANSI(), paste0("SELECT * FROM mols_2 WHERE m @> CAST('", input, "' AS mol);"), id = "substructureResults")
   } else {
     substructureQuery <- sqlInterpolate(ANSI(), paste0("SELECT * FROM mols_2 WHERE casrn='", input, "';"), id = "substructureResults")
   }
-  
   substructureOutp <- dbGetQuery(poolSubstructure, substructureQuery)
+  
+  # Close pool
   poolClose(poolSubstructure)
   return(substructureOutp)
   #})
@@ -432,6 +443,8 @@ similarity <- function(res, req, input, threshold){
 
   similarityQuery <- sqlInterpolate(ANSI(), paste0("SELECT * FROM get_mfp2_neighbors('", input, "');"), id = "similarityResults")
   similarityOutp <- dbGetQuery(poolSimilarity, similarityQuery)
+  
+  # Close pool
   poolClose(poolSimilarity)
   return(similarityOutp)
   #})
@@ -454,6 +467,8 @@ casrnData <- function(res, req, input){
   )
   casrnQuery <- sqlInterpolate(ANSI(), paste0("SELECT iupac_name, smiles, dtxsid, dtxrid, mol_formula, mol_weight, inchis, inchikey, cid, testsubstance_chemname FROM chemical_detail WHERE CASRN LIKE '", input, "';"), id = "casrnResults")
   casrnOutp <- dbGetQuery(poolCasrn, casrnQuery)
+  
+  # Close pool
   poolClose(poolCasrn)
   return(casrnOutp)
   #})
@@ -476,6 +491,8 @@ inchiToSmiles <- function(res, req, inchi){
   )
   inchiQuery <- sqlInterpolate(ANSI(), paste0("SELECT smiles FROM chemical_detail WHERE inchis = '", inchi, "';"), id = "convertInchi")
   inchiOutp <- dbGetQuery(poolInchi, inchiQuery)
+  
+  # Close pool
   poolClose(poolInchi)
   return(inchiOutp[[1]])
   #})
@@ -494,6 +511,8 @@ convertInchi <- function(res, req, inchi){
   )
   inchiQuery <- sqlInterpolate(ANSI(), paste0("SELECT smiles FROM chemical_detail WHERE inchis = '", inchi, "';"), id = "convertInchi")
   inchiOutp <- dbGetQuery(poolInchi, inchiQuery)
+  
+  # Close pool
   poolClose(poolInchi)
   return(inchiOutp[[1]])
 }
@@ -530,6 +549,7 @@ generateStructures <- function(res, req, input){
     return(tmpSplit2[1])
   })
   
+  # Close pool
   poolClose(poolSvg)
   return(structures)
   #})
@@ -632,6 +652,8 @@ createInput <- function(res, req, transactionId, enrichmentSets, setNames, mode,
       close(inFile) 
     }
   }
+  
+  # Close pool
   poolClose(poolInput)
   return(TRUE)
 
@@ -848,7 +870,9 @@ retrieveAnnotations <- function(){
   )
   query <- sqlInterpolate(ANSI(), paste0("SELECT annoclassname FROM annotation_class;"))
   outp <- dbGetQuery(pool, query)
-  poolClose(pool) # Close pool
+  
+  # Close pool
+  poolClose(pool)
 
   return(outp[, "annoclassname"])
 }
@@ -920,7 +944,9 @@ submit <- function(mode="", input="", annotations="MESH,PHARMACTIONLIST,ACTIVITY
     )
     queryTanimoto <- sqlInterpolate(ANSI(), paste0("set rdkit.tanimoto_threshold=", tanimoto, ";"))
     outpTanimoto <- dbGetQuery(poolTanimoto, queryTanimoto)
-    poolClose(poolTanimoto) # Close pool
+    
+    # Close pool
+    poolClose(poolTanimoto)
   }
   
   # Get list of all annotation classes in database

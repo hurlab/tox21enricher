@@ -1058,46 +1058,46 @@ shinyServer(function(input, output, session) {
     # Refresh enrichment form
     observeEvent(input$refresh, {
         # Initialize all annotation classes to checked and button mode to "deselect"
-        #annoClassList = annoClasses$classes
-        #updateCheckboxGroupInput(session, "checkboxPubChem", selected = annoClassList[[1]])
-        #updateCheckboxGroupInput(session, "checkboxDrugMatrix", selected = annoClassList[[2]])
-        #updateCheckboxGroupInput(session, "checkboxDrugBank", selected = annoClassList[[3]])
-        #updateCheckboxGroupInput(session, "checkboxCTD", selected = annoClassList[[4]])
-        #updateCheckboxGroupInput(session, "checkboxOther", selected = annoClassList[[5]])
-        #updateActionButton(session, "select_all_annotations", label = "Deselect all")
-        #selectStatus$option <- "deselect"
-        #shinyjs::reset(id = "enrichmentForm")
-        #shinyjs::reset(id = "resultsContainer")
-        #shinyjs::show(id = "enrichmentForm")
-        #shinyjs::enable(id = "enrichmentForm")
-        #shinyjs::reset(id = "select_all_annotations")
+        annoClassList = annoClasses$classes
+        updateCheckboxGroupInput(session, "checkboxPubChem", selected = annoClassList[[1]])
+        updateCheckboxGroupInput(session, "checkboxDrugMatrix", selected = annoClassList[[2]])
+        updateCheckboxGroupInput(session, "checkboxDrugBank", selected = annoClassList[[3]])
+        updateCheckboxGroupInput(session, "checkboxCTD", selected = annoClassList[[4]])
+        updateCheckboxGroupInput(session, "checkboxOther", selected = annoClassList[[5]])
+        updateActionButton(session, "select_all_annotations", label = "Deselect all")
+        selectStatus$option <- "deselect"
+        shinyjs::reset(id = "enrichmentForm")
+        shinyjs::reset(id = "resultsContainer")
+        shinyjs::show(id = "enrichmentForm")
+        shinyjs::enable(id = "enrichmentForm")
+        shinyjs::reset(id = "select_all_annotations")
         
         # Clear the chemical submission text area
-        #updateTextAreaInput(session, "submitted_chemicals", value="")
+        updateTextAreaInput(session, "submitted_chemicals", value="")
         
         # Allow user to change enrichment type
-        #shinyjs::enable(id = "enrich_from")
+        shinyjs::enable(id = "enrich_from")
         
         # Hide the refresh button
-        #shinyjs::hide(id = "refresh")
+        shinyjs::hide(id = "refresh")
         
         # Re-enable View previous results button
-        #shinyjs::enable(id="searchButton")
-        #updateActionButton(session, "searchButton", label = "View previous results", icon=icon("search"))
-        #searchStatus$option <- "search"
+        shinyjs::enable(id="searchButton")
+        updateActionButton(session, "searchButton", label = "View previous results", icon=icon("search"))
+        searchStatus$option <- "search"
         
         # Reset reenrichResultsList$reenrichResults
-        #reenrichResultsList$reenrichResults <- NULL
+        reenrichResultsList$reenrichResults <- NULL
         
         # clear the previous enrichment's results and hide
-        #shinyjs::hide("resultsContainer")
-        #shinyjs::reset("resultsContainer")
-        #output[["resultsTabset"]] <- renderUI(
-        #    div(id="resultsTmp")
-        #)
+        shinyjs::hide("resultsContainer")
+        shinyjs::reset("resultsContainer")
+        output[["resultsTabset"]] <- renderUI(
+            div(id="resultsTmp")
+        )
 
         # refresh session entirely
-        session$reload()
+        #session$reload()
     })
     
     # Keep track of what enrichment type is currently selected
