@@ -1291,7 +1291,6 @@ shinyServer(function(input, output, session) {
                 innerCasrnSet <- sapply(enrichmentSets[[casrnSet]], function(casrn){
                   queryReenrichCasrns <- NULL
                   if(originalEnrichModeList$originalEnrichMode == "substructure"){
-                    print("HERE?")
                     # Query API to get list of annotation classes and types
                     resp <- NULL
                     trySubstructure <- tryCatch(
@@ -1606,14 +1605,10 @@ shinyServer(function(input, output, session) {
             # Get just the ID
             return(unlist(str_split(x, "Output/"))[2])
           }))
-          goodID <- FALSE
-          while(goodID == FALSE){
-            if(transactionId %in% fullIDs){
-              # Regenerate UUID
-              transactionId <- UUIDgenerate()
-            } else {
-              goodID <- TRUE
-            }
+          
+          while(transactionId %in% fullIDs){
+            # Regenerate UUID
+            transactionId <- UUIDgenerate()
           }
         }
         
@@ -1753,9 +1748,7 @@ shinyServer(function(input, output, session) {
             enrichmentDisplayType <- "Enrich from chemicals with shared substructures"
           }
         }
-        
-        
-        
+
         # Query API to put request in queue
         resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="queue", query=list(mode=enrichmentType$enrichType, enrichmentUUID=transactionId, annoSelectStr=annoSelectStr, nodeCutoff=cutoff))
         

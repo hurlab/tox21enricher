@@ -576,67 +576,65 @@ checkId <- function(res, req){
 #* @param setNames Input set names
 #* @get /createInput
 createInput <- function(res, req, transactionId, enrichmentSets, setNames, mode, nodeCutoff, annoSelectStr){
-  # async
-  #future_promise({
 
-    # Get enrichment sets from sent string
-    enrichmentSetNames <- unlist(str_split(setNames, "\n"))
-    enrichmentSetsSplit <- unlist(str_split(enrichmentSets, "\n"))
-    enrichmentSets <- lapply(enrichmentSetNames, function(x){
-      innerList <- unlist(lapply(enrichmentSetsSplit, function(casrn){
-        tmpSplit <- unlist(str_split(casrn, "__"))
-        if(tmpSplit[2] == x) {
-          return(tmpSplit[1])
-        } else {
-          return(NULL)
-        }
-      }))
-      innerList <- innerList[!sapply(innerList, is.null)]
-    })
-    names(enrichmentSets) <- enrichmentSetNames
-    
-    # Create input directory
-    inDir <- paste0(APP_DIR, "Input/", transactionId, "/")
-    dir.create(inDir)
-    # Create output directory
-    outDir <- paste0(APP_DIR, "Output/", transactionId, "/")
-    dir.create(outDir)
-    
-    # Connect to db
-    
-    poolInput <- dbPool(
-      drv = dbDriver("PostgreSQL", max.con = 100),
-      dbname = tox21config$database,
-      host = tox21config$host,
-      user = tox21config$uid,
-      password = tox21config$pwd,
-      idleTimeout = 3600000
-    )
-    
-    # Add request to database
-    #query <- sqlInterpolate(ANSI(), paste0("INSERT INTO enrichment_list(id, chemlist, type, node_cutoff, anno_select_str, timestamp_start, ip) VALUES('", transactionId, "','", enrichmentSets, "','", mode, "','", nodeCutoff, "','", annoSelectStr, "','", Sys.time(), "','", req$REMOTE_ADDR, "');"), id="addToDb")
-    #outp <- dbGetQuery(poolInput, query)
-  
-    # Create input set txt for enrichment
-    for (i in names(enrichmentSets)) {
-      outString <- ""
-      for (j in enrichmentSets[[i]]) {
-        query <- sqlInterpolate(ANSI(), paste0("SELECT testsubstance_chemname FROM chemical_detail WHERE CASRN LIKE '", j, "';"), id = j)
-        outp <- dbGetQuery(poolInput, query)
-        if (dim(outp)[1] > 0 & dim(outp)[2] > 0) {
-          outString <- paste0(outString, j, "\t", outp, "\n\n")
-        }
+  # Get enrichment sets from sent string
+  enrichmentSetNames <- unlist(str_split(setNames, "\n"))
+  enrichmentSetsSplit <- unlist(str_split(enrichmentSets, "\n"))
+  enrichmentSets <- lapply(enrichmentSetNames, function(x){
+    innerList <- unlist(lapply(enrichmentSetsSplit, function(casrn){
+      tmpSplit <- unlist(str_split(casrn, "__"))
+      if(tmpSplit[2] == x) {
+        return(tmpSplit[1])
+      } else {
+        return(NULL)
       }
-      # Only write if there are matching chemicals (don't create input files for empty sets)
-      if(nchar(outString) > 0){
-        inFile <- file(paste0(inDir, i, ".txt"))
-        writeLines(outString,inFile)
-        close(inFile) 
+    }))
+    innerList <- innerList[!sapply(innerList, is.null)]
+  })
+  names(enrichmentSets) <- enrichmentSetNames
+  
+  print("enrichmentSets")
+  print(enrichmentSets)
+  print("setNames")
+  print(setNames)
+  
+  # Create input directory
+  inDir <- paste0(APP_DIR, "Input/", transactionId, "/")
+  dir.create(inDir)
+  # Create output directory
+  outDir <- paste0(APP_DIR, "Output/", transactionId, "/")
+  dir.create(outDir)
+  
+  # Connect to db
+  poolInput <- dbPool(
+    drv = dbDriver("PostgreSQL", max.con = 100),
+    dbname = tox21config$database,
+    host = tox21config$host,
+    user = tox21config$uid,
+    password = tox21config$pwd,
+    idleTimeout = 3600000
+  )
+  
+  # Create input set txt for enrichment
+  for (i in names(enrichmentSets)) {
+    outString <- ""
+    for (j in enrichmentSets[[i]]) {
+      query <- sqlInterpolate(ANSI(), paste0("SELECT testsubstance_chemname FROM chemical_detail WHERE CASRN LIKE '", j, "';"), id = j)
+      outp <- dbGetQuery(poolInput, query)
+      if (dim(outp)[1] > 0 & dim(outp)[2] > 0) {
+        outString <- paste0(outString, j, "\t", outp, "\n\n")
       }
     }
-    poolClose(poolInput)
-    return(TRUE)
- #})
+    # Only write if there are matching chemicals (don't create input files for empty sets)
+    if(nchar(outString) > 0){
+      inFile <- file(paste0(inDir, i, ".txt"))
+      writeLines(outString,inFile)
+      close(inFile) 
+    }
+  }
+  poolClose(poolInput)
+  return(TRUE)
+
 }
 
 #* Returns list of sets that are valid/existing for a given transaction
@@ -833,23 +831,86 @@ generateNetwork <- function(res, req, transactionId, cutoff, mode, input, qval){
   #})
 }
 
-#######################################################################################
+########################################################################################################################################################################################################################################################
+
+### SECTION 6: API CLIENT ENDPOINTS FOR OPERATING IN NO-GUI MODE ###
+
+#* Get list of all annotations in the database
+#* @get /annotationList
+retrieveAnnotations <- function(){
+  pool <- dbPool(
+    drv = dbDriver("PostgreSQL",max.con = 100),
+    dbname = tox21config$database,
+    host = tox21config$host,
+    user = tox21config$uid,
+    password = tox21config$pwd,
+    idleTimeout = 3600000
+  )
+  query <- sqlInterpolate(ANSI(), paste0("SELECT annoclassname FROM annotation_class;"))
+  outp <- dbGetQuery(pool, query)
+  poolClose(pool) # Close pool
+
+  return(outp[, "annoclassname"])
+}
 
 #* Post input set for enrichment analysis
-#* @param enrichmentType The mode to use when performing enrichment analysis. CASRNs = CASRN input. Substructure = SMILES or InChI input. Similarity = SMILES or InChI input.
-#* @param inputStr Comma-separated string of chemicals for this enrichment process.
-#* @param annoSelectStr Comma-separated string of all enabled annotations for this enrichment process.
+#* @param mode The mode to use when performing enrichment analysis. casrn = CASRN input. substructure = SMILES or InChI input. similarity = SMILES or InChI input. annotation = view annotations.
+#* @param input Comma-separated string of chemicals for this enrichment process.
+#* @param annotations Comma-separated string of all enabled annotations for this enrichment process.
+#* @param cutoff Node cutoff value - integers only between 1-50.
 #* @param tanimoto Tanimoto threshold for Similarity search (default 0.5).
-#* @post /input
-function(enrichmentType="CASRNs", inputStr="", annoSelectStr="MESH PHARMACTIONLIST ACTIVITY_CLASS ADVERSE_EFFECT INDICATION KNOWN_TOXICITY MECH_LEVEL_1 MECH_LEVEL_2 MECH_LEVEL_3 MECHANISM MODE_CLASS PRODUCT_CLASS STRUCTURE_ACTIVITY TA_LEVEL_1 TA_LEVEL_2 TA_LEVEL_3 THERAPEUTIC_CLASS TISSUE_TOXICITY DRUGBANK_ATC DRUGBANK_ATC_CODE DRUGBANK_CARRIERS DRUGBANK_ENZYMES DRUGBANK_TARGETS DRUGBANK_TRANSPORTERS CTD_CHEM2DISEASE CTD_CHEM2GENE_25 CTD_CHEMICALS_DISEASES CTD_CHEMICALS_GENES CTD_CHEMICALS_GOENRICH_CELLCOMP CTD_CHEMICALS_GOENRICH_MOLFUNCT CTD_CHEMICALS_PATHWAYS CTD_GOSLIM_BIOPROCESS CTD_PATHWAY HTS_ACTIVE LEADSCOPE_TOXICITY MULTICASE_TOX_PREDICTION TOXCAST_ACTIVE TOXINS_TARGETS TOXPRINT_STRUCTURE TOXREFDB", tanimoto=0.5) {
+#* @post /submit
+submit <- function(mode="", input="", annotations="MESH,PHARMACTIONLIST,ACTIVITY_CLASS,ADVERSE_EFFECT,INDICATION,KNOWN_TOXICITY,MECH_LEVEL_1,MECH_LEVEL_2,MECH_LEVEL_3,MECHANISM,MODE_CLASS,PRODUCT_CLASS,STRUCTURE_ACTIVITY,TA_LEVEL_1,TA_LEVEL_2,TA_LEVEL_3,THERAPEUTIC_CLASS,TISSUE_TOXICITY,DRUGBANK_ATC,DRUGBANK_ATC_CODE,DRUGBANK_CARRIERS,DRUGBANK_ENZYMES,DRUGBANK_TARGETS,DRUGBANK_TRANSPORTERS,CTD_CHEM2DISEASE,CTD_CHEM2GENE_25,CTD_CHEMICALS_DISEASES,CTD_CHEMICALS_GENES,CTD_CHEMICALS_GOENRICH_CELLCOMP,CTD_CHEMICALS_GOENRICH_MOLFUNCT,CTD_CHEMICALS_PATHWAYS,CTD_GOSLIM_BIOPROCESS,CTD_PATHWAY,HTS_ACTIVE,LEADSCOPE_TOXICITY,MULTICASE_TOX_PREDICTION,TOXCAST_ACTIVE,TOXINS_TARGETS,TOXPRINT_STRUCTURE,TOXREFDB", cutoff=10, tanimoto=0.5) {
   
-  # async
-  #future_promise({
-    # Generate UUID for enrichment process (return this to user)
+  # TODO: Check if arguments are bad
+  # Check if mode is missing
+  if(is.null(mode) | mode == ""){
+    return("Error: No mode specified. (casrn, substructure, similarity, or annotation)")
+  }
+  # Check if input is missing
+  if(is.null(input) | input == ""){
+    return("Error: No input supplied.")
+  }
+  # Check if cutoff is not a number
+  if(!is.numeric(cutoff)){
+    return("Error: Cutoff value is not a number.")
+  }
+  # Check if cutoff is not an integer
+  if(cutoff%%1 != 0){
+    return("Error: Cutoff value is not an integer.")
+  }
+  # Check if cutoff is out of range
+  if(cutoff < 1 | cutoff > 50){
+    return("Error: Cutoff value must be between 1 and 50 inclusive.")
+  }
+  # Check if Tanimoto is not a number
+  if(!is.numeric(tanimoto)){
+    return("Error: Tanimoto threshold is not a number.")
+  }
+  # Check if Tanimoto is out of range
+  if(tanimoto < 0.01 | tanimoto > 1.00){
+    return("Error: Tanimoto threshold must be between 0.01 and 1.00 inclusive.")
+  }
+  
+  # Paths
+  inBaseDir <- paste0(APP_DIR, "/Input/")
+  outBaseDir <- paste0(APP_DIR, "/Output/")
+  
+  # Generate UUID for enrichment process (return this to user later)
+  transactionId <- UUIDgenerate()
+  
+  # Check if UUID already exists. If so, regenerate UUID. This should be very rare but this is here just in case
+  transactions <- Sys.glob(paste0(outBaseDir, "*"))
+  while(transactionId %in% transactions) {
     transactionId <- UUIDgenerate()
-
+  }
+  
+  # Ignore Tanimoto threshold value if not similarity
+  if(mode != "similarity"){
+    tanimoto <- 0.5
+  } else {
     # Open pool for PostgreSQL
-    poolTerms <- dbPool(
+    poolTanimoto <- dbPool(
       drv = dbDriver("PostgreSQL",max.con = 100),
       dbname = tox21config$database,
       host = tox21config$host,
@@ -857,165 +918,194 @@ function(enrichmentType="CASRNs", inputStr="", annoSelectStr="MESH PHARMACTIONLI
       password = tox21config$pwd,
       idleTimeout = 3600000
     )
-    
-    # Set tanimoto threshold
     queryTanimoto <- sqlInterpolate(ANSI(), paste0("set rdkit.tanimoto_threshold=", tanimoto, ";"))
-    outpTanimoto <- dbGetQuery(poolTerms, queryTanimoto)
+    outpTanimoto <- dbGetQuery(poolTanimoto, queryTanimoto)
+    poolClose(poolTanimoto) # Close pool
+  }
   
-    inputList <- list()
-    currentSet <- ""
-    
-    inputListTry <- tryCatch({
-      # should be of format [:digit:]+-[:digit:]+-[:digit:]+
-      inputListTmp <- str_split(inputStr, " ")
-      inputListTmp <- unlist(inputListTmp)
-      
-      # Grab CASRNs if type is Substructure
-      if(enrichmentType == "Substructure"){
-        setNameIndex <- 1
-        substructureMainProcess <- lapply(inputListTmp, function(i){
-          goodToAdd <- TRUE #Set this to false and don't add if InChI is bad
-          
-          # First, check if we have any InChIs, and convert to SMILES
-          if (grepl("InChI=",i,fixed=TRUE)) {
-            queryInchi <- sqlInterpolate(ANSI(), paste0("SELECT smiles FROM chemical_detail WHERE inchis = '", i, "';"),
-                                         id = "smilesResults")
-            outpInchi <- dbGetQuery(poolTerms, queryInchi)
-            if(length(outpInchi) > 0){
-              i <- outpInchi[[1]]
-            } else {
-              goodToAdd <- FALSE
-            }
-          }
-          if (goodToAdd == TRUE) {
-            queryGetCasFromSubstructure <- sqlInterpolate(ANSI(), paste0("SELECT casrn FROM mols_2 WHERE m @> CAST('", i, "' AS mol);"))
-            outpGetCasFromSubstructure <- dbGetQuery(poolTerms, queryGetCasFromSubstructure)
-            
-            if(length(outpGetCasFromSubstructure) > 0){ 
-              currentSet <<- paste0("Set",setNameIndex)
-              substructureProcess <- lapply(1:nrow(outpGetCasFromSubstructure), function(index){
-                casrn <- paste0(outpGetCasFromSubstructure[index, "casrn"])
-                return(casrn)
-              })
-              inputList[[currentSet]] <<- unlist(substructureProcess)
-              setNameIndex <<- setNameIndex + 1
-            }
-          }
-        })
-      }
-      
-      # Grab CASRNs if type is Similarity
-      else if(enrichmentType == "Similarity"){
-        setNameIndex <- 1
-        similarityMainProcess <- lapply(inputListTmp, function(i){
-          goodToAdd <- TRUE #Set this to false and don't add if InChI is bad
-          
-          # First, check if we have any InChIs, and convert to SMILES
-          if (grepl("InChI=",i,fixed=TRUE)) {
-            queryInchi <- sqlInterpolate(ANSI(), paste0("SELECT smiles FROM chemical_detail WHERE inchis = '", i, "';"),
-                                         id = "smilesResults")
-            outpInchi <- dbGetQuery(poolTerms, queryInchi)
-            if(length(outpInchi) > 0){
-              i <- outpInchi[[1]]
-            } else {
-              goodToAdd <- FALSE
-            }
-          }
-          
-          if (goodToAdd == TRUE) {
-            queryGetCasFromSimilarity <- sqlInterpolate(ANSI(), paste0("SELECT * FROM get_mfp2_neighbors('", i, "');"))
-            outpGetCasFromSimilarity <- dbGetQuery(poolTerms, queryGetCasFromSimilarity)
-            if (length(outpGetCasFromSimilarity) > 0) {
-              currentSet <<- paste0("Set",setNameIndex)
-              similarityProcess <- lapply(1:nrow(outpGetCasFromSimilarity), function(index){
-                casrn <- paste0(outpGetCasFromSimilarity[index, "casrn"])
-                return(casrn)
-              })
-              inputList[[currentSet]] <<- unlist(similarityProcess)
-              setNameIndex <<- setNameIndex + 1
-            }
-          }
-        })
-        
-      }
+  # Get list of all annotation classes in database
+  annotationList <- retrieveAnnotations()
   
-      # Else do CASRNs
-      else {
-        currentSet <- "Set1"
-        preparedInputList <- lapply(inputListTmp, function(i){
-          if(startsWith(i, "#") == TRUE) { # Set Name
-            currentSet <<- str_replace(i, "#", "") #remove pound symbol from set name
-            inputList[[currentSet]] <<- list()
-          } else {
-            inputList[[currentSet]] <<- append(inputList[[currentSet]], i)
-          }
-        })
-      
-      }
-      
-    }, error=function(e) {
-      message(paste0("Error at ", e))
-      # Close DB connection
-      poolClose(poolTerms)
+  # Set annotations to default if missing
+  if(annotations == ""){
+    annotations <- paste0(annotationList, collapse=",")
+  }
+  
+  # Check if all annotations are valid
+  for(x in unlist(str_split(annotations, ","))){
+    if(!(x %in% annotationList)){
+      return(paste0("Error: Invalid annotation class: ", x))
+    }
+  }
+  
+  # Put annotations into correct form (annotation selection string with =checked)
+  annotations <- gsub(",", "=checked,", annotations)
+  
+  # Open main pool
+  pool <- dbPool(
+    drv = dbDriver("PostgreSQL",max.con = 100),
+    dbname = tox21config$database,
+    host = tox21config$host,
+    user = tox21config$uid,
+    password = tox21config$pwd,
+    idleTimeout = 3600000
+  )
+  
+  # Validate & prepare input
+  
+  finalInput <- NULL
+  errorCasrns <- list()
+  setNames <- list()
+  
+  # 1) strip horizontal whitespace and condense multiple newlines
+  casrnValidatedInput <- gsub(" ", "", input)
+  casrnValidatedInput <- gsub("\\t", "", casrnValidatedInput)
+  casrnValidatedInput <- gsub("\\n+", "\n", casrnValidatedInput)
+  
+  inputList <- unlist(str_split(casrnValidatedInput, "\n"))
+  # Remove empty items from input list
+  inputList <- unlist(lapply(inputList, function(x){
+    if(nchar(x) > 0){
+      return(x)
+    } else {
       return(NULL)
-    }, finally={
-      # Validate list - remove anything that's not a valid CASRN
-      inputListRemove <- lapply(1:length(inputList), function(i) {
-        inputList[[i]] <<- inputList[[i]][grepl("\\d+-\\d+-\\d+", inputList[[i]])]
-      })
+    }
+  }))
+  inputList <- inputList[!sapply(inputList, is.null)]
   
-    })
+  # If SMILES/InChI input, do the following:
+  if(mode == "similarity" | mode == "substructure") {
     
-    fileGenerationProcess <- lapply(names(inputList), function(i){
-      # Create input directory & input file
-      inputDir <- paste0(APP_DIR, "Input/", transactionId, "/")
-      inputFile	<- paste0(APP_DIR, "Input/", transactionId, "/", i, ".txt")
-      dir.create(inputDir)
-      INPUT <- file(inputFile)  
-      
-      writeInput <- ""
-      # For each set in input, fetch the terms for its CASRNs
-      getTermNames <- lapply(inputList[[i]], function(j){
-        queryTermName <- sqlInterpolate(ANSI(), paste0("SELECT TestSubstance_ChemName FROM chemical_detail WHERE CASRN LIKE '", j, "';"))
-        outpTermName <- dbGetQuery(poolTerms, queryTermName)
-        fetchedTerm <- outpTermName[1, "testsubstance_chemname"]
-        # Validate list - remove anything that's not in Tox21
-        if (length(fetchedTerm) == 1) {
-          writeInput <<- paste0(writeInput, j, "\t", fetchedTerm, "\n\n")  
+    # First, check if we have any InChIs, and convert to SMILES
+    for(i in length(inputList)){
+      if (grepl("InChI=", inputList[i])) {
+        queryInchi <- sqlInterpolate(ANSI(), paste0("SELECT smiles FROM chemical_detail WHERE inchis = '", inputList[i], "';"),
+                                     id = "smilesResults")
+        outpInchi <- dbGetQuery(poolTerms, queryInchi)
+        if(length(outpInchi) > 0){
+          inputList[i] <- outpInchi[[1]]
+        } else {
+          inputList[i] <- NULL
         }
-        
-      })
-      
-      # Write to input file
-      write(writeInput, INPUT, append=TRUE)
-      # Close file connection
-      close(INPUT)
-    })
-    # Close DB connection
-    poolClose(poolTerms)
-    
-    # Send to enrich endpoint to perform enrichment analysis
-    performEnrichment(transactionId, annoSelectStr)
-  
-    outDir <- paste0(APP_DIR, "Output/", transactionId,"/", sep="")
-    for (i in names(inputList)) {
-      xlsxChart <- read.table(paste0(outDir, i, "__Chart.txt"), header=TRUE, sep="\t", comment.char="", fill=FALSE)
-      xlsxChartSimple <- read.table(paste0(outDir, i, "__ChartSimple.txt"), header=TRUE, sep="\t", comment.char="", fill=FALSE)
-      xlsxCluster <- read.table(paste0(outDir, i, "__Cluster.txt"), header=FALSE, sep="\t", comment.char="", 
-                                col.names=seq_len(13), fill=TRUE ) #this needs to be treated differently due to having different # of columns
-      write.xlsx2(xlsxChart, paste0(outDir, i, "__Chart.xlsx"), sheetName=paste0(i), col.names=TRUE, row.names=TRUE, append=FALSE)
-      write.xlsx2(xlsxChartSimple, paste0(outDir, i, "__ChartSimple.xlsx"), sheetName=paste0(i), col.names=TRUE, row.names=TRUE, append=FALSE)
-      write.xlsx2(xlsxCluster, paste0(outDir, i, "__Cluster.xlsx"), sheetName=paste0(i), col.names=TRUE, row.names=TRUE, append=FALSE)
+      } 
     }
     
-    print('done')
-    return(transactionId)
-  #})
+    # Build CASRN input from SMILES/InChI
+    setNameIndex <- 1
+    finalInput <- lapply(inputList, function(i){
+      query <- ""
+      if(mode == "similarity"){
+        query <- sqlInterpolate(ANSI(), paste0("SELECT * FROM get_mfp2_neighbors('", i, "');"))
+      } else { # substructure
+        query <- sqlInterpolate(ANSI(), paste0("SELECT casrn FROM mols_2 WHERE m @> CAST('", i, "' AS mol);"))  
+      }
+      outp <- dbGetQuery(pool, query)
+      
+      if(length(outp) > 0){ 
+        currentSet <- paste0("Set", setNameIndex)
+        fetchedCASRNs <- lapply(1:nrow(outp), function(index){
+          casrn <- paste0(outp[index, "casrn"])
+          return(casrn)
+        })
+        setNameIndex <<- setNameIndex + 1
+        return(unlist(fetchedCASRNs))
+      } else {
+        setNameIndex <<- setNameIndex + 1
+        return(NULL)
+      }
+    })
+    names(finalInput) <- lapply(1:length(finalInput), function(x){
+      return(paste0("#Set", x))
+    })
+    finalInput <- finalInput[!sapply(finalInput, is.null)]
+    # Set setnames to pass to function
+    setNames <- paste0(names(finalInput), collapse = "\n")
+    
+    casrnValidatedInput <- ""
+    for(x in 1:length(finalInput)){
+      casrnValidatedInput <- paste0(casrnValidatedInput, names(finalInput)[x], "\n", paste0(finalInput[[x]], collapse="\n"))
+      if(x < length(finalInput)){
+        casrnValidatedInput <- paste0(casrnValidatedInput, "\n") 
+      }
+    }
+  }
+  
+  # 2) check if of the form ###-###-### or setname
+  casrnValidatedInput <- unlist(str_split(casrnValidatedInput, "\n"))
+  casrnValidatedInput <- unlist(lapply(casrnValidatedInput, function(x){
+    if(nchar(x) > 0){
+      return(x)
+    } else {
+      return(NULL)
+    }
+  }))
+  casrnValidatedInput <- casrnValidatedInput[!sapply(casrnValidatedInput, is.null)]
+  
+  errorCasrnsIndex <- 1
+  for(i in 1:length(casrnValidatedInput)) {
+    if(!grepl("^#[A-Za-z0-9]+|[0-9]+-[0-9]+-[0-9]+", casrnValidatedInput[i], ignore.case=TRUE)) {
+      errorCasrns[errorCasrnsIndex] <- i
+      errorCasrnsIndex <- errorCasrnsIndex + 1
+    }
+  }
+  # If there are errors
+  if(length(errorCasrns) > 0){
+    return(paste0("Error: Incorrect CASRN or set name formatting on input line(s): ", paste0(errorCasrns, collapse=", "), ". Please check your input and try again.")) 
+  }
+  
+  # 3) check if missing first set name, if you are using set names
+  usingSetNames <- FALSE
+  for(i in 1:length(casrnValidatedInput)) {
+    if(grepl("^#[A-Za-z0-9]+", casrnValidatedInput[i], ignore.case=TRUE)) { # Detect if we are using set names
+      usingSetNames <- TRUE
+      break
+    }
+  }
+  if(!grepl("^#[A-Za-z0-9]+", casrnValidatedInput[1], ignore.case=TRUE) & usingSetNames == TRUE) {
+    return(paste0("Error: It appears you are using set names but have not provided a name for the first input set. Please check your input and try again."))
+  }
+  
+  # Set setnames to pass to function for casrn input
+  if(mode == "casrn" | mode == "annotation"){
+    casrnSets <- lapply(1:length(casrnValidatedInput), function(i){
+      if(grepl("^#[A-Za-z0-9]+", casrnValidatedInput[i], ignore.case=TRUE)) { # Detect if we are using set names
+        return(casrnValidatedInput[i])
+      } else {
+        return(NULL)
+      }
+    })
+    casrnSets <- casrnSets[!sapply(casrnSets, is.null)]
+    setNames <- paste0(casrnSets, collapse = "\n")
+  }
+  
+  # Close DB connection
+  poolClose(pool)
+  
+  # Put casrnValidatedInput back into a form we can pass to the createInput function
+  currentSet <- NULL
+  casrnValidatedInput <- lapply(1:length(casrnValidatedInput), function(i){
+    if(grepl("^#[A-Za-z0-9]+", casrnValidatedInput[i], ignore.case=TRUE)) { # Detect if we are using set names
+      currentSet <<- gsub("#", "", casrnValidatedInput[i])
+      return(NULL)
+    } else {
+      return(paste0(casrnValidatedInput[i], "__", currentSet))
+    }
+  })
+  casrnValidatedInput <- casrnValidatedInput[!sapply(casrnValidatedInput, is.null)]
+  casrnValidatedInput <- paste0(casrnValidatedInput, collapse="\n")
+  
+  # Remove pound symbol from set names
+  setNames <- lapply(setNames, function(x){
+    return(gsub("#", "", x))
+  })
+  setNames <- paste0(setNames, collapse="\n")
+  
+  # Create input file in queue
+  createInput(transactionId=transactionId, enrichmentSets=casrnValidatedInput, setNames=setNames, mode=mode, nodeCutoff=cutoff, annoSelectStr=annotations)
+  queue(mode=mode, enrichmentUUID=transactionId, annoSelectStr=annotations, nodeCutoff=cutoff)
+  
+  return(transactionId)
 }
-
-########################################################################################################################################################################################################################################################
-
-### ! headless (no-gui-client) endpoints ! ###
 
 #* Download enrichment results for a given uuid
 #* @serializer contentType list(type="application/zip")
@@ -1024,8 +1114,29 @@ function(enrichmentType="CASRNs", inputStr="", annoSelectStr="MESH PHARMACTIONLI
 function(id="-1", res) {
   # async
   future_promise({
-    fName <- paste0(APP_DIR, "Output/", id, "/tox21enricher_", id, ".zip", sep="")
-    readBin(fName, 'raw', n = file.info(fName)$size)
+    fName <- paste0(APP_DIR, "Output/", id, "/tox21enricher_", id, ".zip")
+    if(file.exists(fName)){
+      readBin(fName, 'raw', n = file.info(fName)$size)  
+    } else {
+      return(paste0("The supplied request ", id, " does not exist or has not completed yet. Please try again later."))
+    }
+    
+  })
+}
+
+#* Check if enrichment results exist for a given uuid
+#* @param id The UUID of the enrichment process to check.
+#* @get /completed
+function(id="-1", res) {
+  # async
+  future_promise({
+    fName <- paste0(APP_DIR, "Output/", id, "/tox21enricher_", id, ".zip")
+    if(file.exists(fName)){
+      return(TRUE)  
+    } else {
+      return(FALSE)
+    }
+    
   })
 }
 #######################################################################################
