@@ -15,6 +15,16 @@ shinyServer(function(input, output, session) {
   
     # Theme info
     theme <- reactiveValues(textcolor = "#000000")
+    
+    # Load theme file
+    localDir <- paste0("./www/local/")
+    if(file.exists(paste0(localDir, "theme-dark"))){
+      theme$textcolor = "#FFFFFF"
+      updateCheckboxInput(session, inputId="changeThemeToggle", value=TRUE)
+    } else {
+      theme$textcolor = "#000000"
+      updateCheckboxInput(session, inputId="changeThemeToggle", value=FALSE)
+    }
   
     # API connectivity details
     # Change host address and port in config.yml
@@ -495,15 +505,15 @@ shinyServer(function(input, output, session) {
     
     # update theme data when checkbox is clicked
     observeEvent(input$changeThemeToggle, {
+      tmpDir <- paste0("./www/local/")
       if(input$changeThemeToggle == TRUE){ # dark
         theme$textcolor <- "#FFFFFF"
+        file.create(paste0(tmpDir, "theme-dark"))
       } else { # light
         theme$textcolor <- "#000000"
+        unlink(paste0(tmpDir, "theme-dark"))
       }
-      # change stylesheet
-      js$toggleTheme()
-      
-    })
+    }, ignoreInit=TRUE, ignoreNULL=TRUE)
     
     # Clear cache when button is pressed
     observeEvent(input$clearCacheButton, {

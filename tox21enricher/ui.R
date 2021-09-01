@@ -27,8 +27,7 @@ js_cbx <- "
 # Theme toggle js
 # vvv solution from here: https://stackoverflow.com/questions/61632272/r-shiny-light-dark-mode-switch vvv
 js_theme <-  "
-        shinyjs.toggleTheme = function() {
-        
+        shinyjs.init = function() {
                 // define css theme filepaths
                 const themes = {
                     dark: 'css/tox21enricher-dark.css',
@@ -64,10 +63,9 @@ js_theme <-  "
         
         
                 // define event - checked === 'light'
+
                 toggle.addEventListener('input', function(event) {
                   // if checked, switch to dark theme
-                  console.log('>> checking');
-                  console.log(toggle.checked);
                   if (toggle.checked) {
                       removeLink(themes.light);
                       head.appendChild(extraDarkThemeElement);
@@ -79,13 +77,23 @@ js_theme <-  "
                       head.appendChild(lightTheme);
                   }
                 })
+
           }
         "
+
+# Get theme to load on start
+localDir <- paste0("local/")
+themeInit <- "css/tox21enricher-light.css"
+
+if(file.exists("./www/local/theme-dark")){
+  themeInit <- "css/tox21enricher-dark.css"
+}
 
 # Define UI for Tox21Enricher application
 shinyUI(fluidPage(
     # Theme
-    theme = "css/tox21enricher-light.css",
+    #theme = "css/tox21enricher-light.css",
+    theme = themeInit,
 
     # Lang
     lang = "en",
@@ -103,7 +111,7 @@ shinyUI(fluidPage(
             style="position: fixed; overflow: visible; width: 15%",
             useShinyjs(),
             extendShinyjs(text = js_code, functions = 'browseURL'),
-            extendShinyjs(text = js_theme, functions = 'toggleTheme'),
+            extendShinyjs(text = js_theme, functions = c('init', 'toggleTheme')),
             extendShinyjs(text = js_cbx, functions = c('check', 'uncheck')),
             p("Welcome to Tox21 Enricher! Please see this ", actionLink(inputId="manualLink", label="link"), "for instructions on using this application and the descriptions about the chemical / biological categories. Other resources from the Tox21 toolbox can be viewed", tags$a(href="https://ntp.niehs.nih.gov/results/tox21/tbox/","here."), "A sufficiently robust internet connection and JavaScript are required to use all of this application's features."),
             # Manual link error output
