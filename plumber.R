@@ -353,11 +353,9 @@ initAnnotations <- function(res, req){
   #})
 }
 
-#* Get total number of enrichments (internal use only)
+#* Get total number of requests (internal use only)
 #* @get /total
 total <- function(res, req){
-  # async
-  #future_promise({
   # Connect to db
   poolTotal <- dbPool(
     drv = dbDriver("PostgreSQL", max.con = 100),
@@ -367,14 +365,33 @@ total <- function(res, req){
     password = tox21config$pwd,
     idleTimeout = 3600000
   )
-  totalQuery <- sqlInterpolate(ANSI(), "SELECT COUNT(*) FROM enrichment_list;", id = "getTotalEnrichment")
+  totalQuery <- sqlInterpolate(ANSI(), "SELECT id, timestamp_start, timestamp_finish FROM enrichment_list;", id = "getTotalEnrichment")
   totalOutp <- dbGetQuery(poolTotal, totalQuery)
+
+  # Extract current month
+  currentDate <- unlist(str_split(Sys.time(), " "))[1]
+  currentMonth <- unlist(str_split(currentDate, "-"))[2]
+
+  # Get all finished requests for the month
+  finishedRequests <- totalOutp[, "timestamp_finish"]
+  finishedRequests<- unlist(lapply(finishedRequests, function(x){
+    if(!is.na(x) & x != "canceled"){
+      xDate <- unlist(str_split(x, " "))[1]
+      xMonth <- unlist(str_split(xDate, "-"))[2]
+
+      if(!is.na(xMonth) & xMonth == currentMonth){
+        return(x)
+      }
+    }
+    return(NULL)
+  }))
+  finishedRequests <- finishedRequests[!sapply(finishedRequests, is.null)]
+  monthTotal <- length(finishedRequests)
   
   # Close pool
   poolClose(poolTotal)
   
-  return(totalOutp)
-  #})
+  return(monthTotal)
 }
 
 ### SECTION 3: PREPARING CHEMICAL DATA FOR ENRICHMENT ###

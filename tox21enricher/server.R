@@ -87,7 +87,7 @@ shinyServer(function(input, output, session) {
     
     # Display number of total enrichments performed
     output$totalEnrichments <- renderUI({
-      totalEnrichments <- paste0("Total requests serviced by Tox21 Enricher: ", getEnrichmentCount())
+      totalEnrichments <- HTML(paste0("<br>Total requests serviced by Tox21 Enricher this month: <b>", getEnrichmentCount(), "</b>"))
       return(totalEnrichments)
     })
     
