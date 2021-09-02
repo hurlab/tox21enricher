@@ -9,7 +9,6 @@
 
 # Define server logic
 shinyServer(function(input, output, session) {
-  
     # List of observers
     setFilesObservers <- reactiveValues(observers = list())
   
@@ -1081,6 +1080,8 @@ shinyServer(function(input, output, session) {
         shinyjs::show(id = "enrichmentForm")
         shinyjs::enable(id = "enrichmentForm")
         shinyjs::reset(id = "select_all_annotations")
+        shinyjs::reset(id = "enrich_from")
+        shinyjs::reset(id = "submitted_chemicals")
         
         # Clear the chemical submission text area
         updateTextAreaInput(session, "submitted_chemicals", value="")
@@ -1113,7 +1114,6 @@ shinyServer(function(input, output, session) {
     # Keep track of what enrichment type is currently selected
     enrichmentType <- reactiveValues(enrichType = character())
     enrichmentType$enrichType <- "casrn"
-    
     
     # Perform CASRN enrichment analysis when submit button is pressed
     observeEvent(input$submit, {
@@ -2096,6 +2096,7 @@ shinyServer(function(input, output, session) {
               column(12,
                      h1(id="resultsHeader", "Fetched Annotations"),
                      do.call(tabsetPanel, c(id='tab', lapply(names(enrichmentSets), function(i) {
+                       outputOptions(output, paste0("outTab_", i), suspendWhenHidden=FALSE)
                        tabPanel(
                          title=paste0(i),
                          uiOutput(paste0("outTab_", i)) %>% withSpinner()
@@ -2220,10 +2221,11 @@ shinyServer(function(input, output, session) {
                       column(12,
                           h1(id="resultsHeader", "Enrichment Results"),
                           do.call(tabsetPanel, c(id='tab', lapply(names(enrichmentSets), function(i) {
-                              tabPanel(
-                                title=paste0(i),
-                                uiOutput(paste0("outTab_", i))
-                              )
+                            outputOptions(output, paste0("outTab_", i), suspendWhenHidden=FALSE)
+                            tabPanel(
+                              title=paste0(i),
+                              uiOutput(paste0("outTab_", i))
+                            )
                           })))
                       )
                   ),
@@ -2580,7 +2582,6 @@ shinyServer(function(input, output, session) {
               })
               names(reenrichChoices) <- names(reenrichResults)
               
-              print("creating checkboxes...")
               checkboxes <- lapply(names(reenrichChoices), function(reenrichSet){
                 tmp_checkboxes <- lapply(reenrichChoices[[reenrichSet]], function(x){
                   return(checkboxInput(inputId=paste0(x, "__", reenrichSet), value=TRUE, label=NULL, width="4px"))
@@ -2591,8 +2592,7 @@ shinyServer(function(input, output, session) {
                 return(tmp_checkboxes)
               })
               names(checkboxes) <- names(reenrichChoices)
-              print(checkboxes)
-  
+
               # Set reactive value so we can access these checkboxes later
               checkboxList$checkboxes <- checkboxes
               
@@ -2928,6 +2928,8 @@ shinyServer(function(input, output, session) {
                         )
                       )
                     )
+                    
+                    outputOptions(output, paste0("table_", i), suspendWhenHidden=FALSE)
                   } 
   
                 })
@@ -3301,6 +3303,12 @@ shinyServer(function(input, output, session) {
           
           # For each unique class name, render a bar plot
           createBargraph(bgChartFull=bgChartFull, bgChartAllCategories=bgChartAllCategories, orderSet=names(enrichmentSets)[1], colorsList=colorsList)
+          
+          # Initialize tabPanels (this is so checkboxes work correctly)
+          lapply(names(enrichmentSets), function(i) {
+            updateTabsetPanel(session, "tab", selected=paste0("outTab_", i))
+          })
+          updateTabsetPanel(session, "tab", selected=paste0("outTab_", names(enrichmentSets)[1]))
         }
         
         # Select/Deselect all chemicals for reenrichment
@@ -3313,11 +3321,7 @@ shinyServer(function(input, output, session) {
               updateActionButton(session, "selectAllReenrichButton", label="Deselect all chemicals")
               for (i in checkboxList$checkboxes) {
                 for(j in names(i)){
-                  #print(j)
-                  #print(paste0("before: ", input[[j]]))
                   updateCheckboxInput(session, j, value = TRUE)
-                  #js$check(paste0(j))
-                  #print(paste0("after: ", input[[j]]))
                 }
               }
             } else { # Deselecting
@@ -3325,16 +3329,12 @@ shinyServer(function(input, output, session) {
               updateActionButton(session, "selectAllReenrichButton", label="Select all chemicals")
               for (i in checkboxList$checkboxes) {
                 for(j in names(i)){
-                  #print(j)
-                  #print(paste0("before: ", input[[j]]))
                   updateCheckboxInput(session, j, value = FALSE)
-                  #js$check(paste0(j))
-                  #print(paste0("after: ", input[[j]]))
                 }
               }
             }
 
-          }, ignoreInit=TRUE)
+          }, ignoreInit=TRUE, ignoreNULL=TRUE)
         }
         
         # Select/Deselect all chemicals for a single set
@@ -3362,7 +3362,7 @@ shinyServer(function(input, output, session) {
                 }
               }
             }
-          }, ignoreInit=TRUE)
+          }, ignoreInit=TRUE, ignoreNULL=TRUE)
         }
         
         # Select/Deselect all chemicals with warnings for reenrichment
@@ -3407,7 +3407,7 @@ shinyServer(function(input, output, session) {
                 }
               }
             }
-          }, ignoreInit=TRUE)
+          }, ignoreInit=TRUE, ignoreNULL=TRUE)
         }
         
         # Re-enable refresh button
@@ -3738,15 +3738,6 @@ shinyServer(function(input, output, session) {
         })))
       )
     }
-    
-    # Debug: fix from https://www.r-bloggers.com/2020/02/shiny-add-removing-modules-dynamically/
-    remove_shiny_inputs <- function(id, .input) {
-      invisible(
-        lapply(grep(id, names(.input), value = TRUE), function(i) {
-          .subset2(.input, "impl")$.values$remove(i)
-        })
-      )
-    }
 
     # Perform re-enrichment on selected result chemicals
     observeEvent(input$reenrichButton, {
@@ -3807,12 +3798,6 @@ shinyServer(function(input, output, session) {
       # Reset reenrichResultsList$reenrichResults and enrichmentSetsList$enrichmentSets
       reenrichResultsList$reenrichResults <- NULL
       enrichmentSetsList$enrichmentSets <- NULL
-      
-      for(i in checkboxList$checkboxes){
-        for(j in names(i)){
-          remove_shiny_inputs(j, input) 
-        }
-      }
 
       checkboxList$checkboxes <- NULL
 

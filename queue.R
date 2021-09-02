@@ -143,6 +143,8 @@ performEnrichment <- function(enrichmentUUID="-1", annoSelectStr="MESH=checked,P
   query <- sqlInterpolate(ANSI(), paste0("INSERT INTO enrichment_list(id, chemlist, type, node_cutoff, anno_select_str, timestamp_start, ip) VALUES('", enrichmentUUID, "','", "placeholder", "','", "placeholder", "','", nodeCutoff, "','", annoSelectStr, "','", Sys.time(), "','", "placeholder", "');"), id="addToDb")
   outp <- dbGetQuery(poolInput, query)
   
+  poolClose(poolInput)
+  
   # Enrichment parameters
   annoSelectStrSplit <- strsplit(annoSelectStr,"=checked,",fixed=TRUE)
   

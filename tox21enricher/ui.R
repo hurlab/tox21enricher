@@ -81,18 +81,16 @@ js_theme <-  "
           }
         "
 
-# Get theme to load on start
-localDir <- paste0("local/")
-themeInit <- "css/tox21enricher-light.css"
-
-if(file.exists("./www/local/theme-dark")){
-  themeInit <- "css/tox21enricher-dark.css"
-}
-
 # Define UI for Tox21Enricher application
-shinyUI(fluidPage(
+shinyUI(function(){
+  # Get theme to load on start
+  themeInit <- "css/tox21enricher-light.css"
+  if(file.exists("./www/local/theme-dark")){
+    themeInit <- "css/tox21enricher-dark.css"
+  }
+  
+  fluidPage(
     # Theme
-    #theme = "css/tox21enricher-light.css",
     theme = themeInit,
 
     # Lang
@@ -277,5 +275,5 @@ shinyUI(fluidPage(
                 )
             )
         )
-    )
-))
+    ))
+})
