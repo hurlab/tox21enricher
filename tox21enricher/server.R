@@ -483,10 +483,11 @@ shinyServer(function(input, output, session) {
     
     # Open settings modal menu
     observeEvent(input$settingsButton, {
+      shinyjs::disable(id = "sidebar")
       showModal(
         modalDialog(
           title="Settings",
-          footer=modalButton("Save & Exit"),
+          footer=actionButton(inputId="closeSettingsButton", label="Save & Exit"),
           size="l",
           fluidRow(
             column(12, 
@@ -500,6 +501,11 @@ shinyServer(function(input, output, session) {
           br(),
         )
       )
+    })
+    
+    observeEvent(input$closeSettingsButton, {
+      removeModal()
+      shinyjs::enable(id = "sidebar")
     })
     
     # update theme data when checkbox is clicked
@@ -2089,6 +2095,9 @@ shinyServer(function(input, output, session) {
         # If success at this point, hide waiting page
         shinyjs::hide(id="waitingPage")
         
+        # Initialize if we have warnings
+        haveWarnings <- reactiveValues(warnings = FALSE)
+        
         # Render results page
         if(mode == "annotation") {
           output$resultsTabset <- renderUI({
@@ -2224,6 +2233,7 @@ shinyServer(function(input, output, session) {
                             outputOptions(output, paste0("outTab_", i), suspendWhenHidden=FALSE)
                             tabPanel(
                               title=paste0(i),
+                              value=paste0(i),
                               uiOutput(paste0("outTab_", i))
                             )
                           })))
@@ -2902,9 +2912,14 @@ shinyServer(function(input, output, session) {
                   # Remove dataframe row names so they will just be numbered
                   rownames(fullTable) <- 1:nrow(fullTable)
                   
+                  # Check if chemicals with warnings exist
+                  if(length(unlist(warningList$warnings[[i]], recursive=FALSE)) > 0){
+                    haveWarnings$warnings <<- TRUE
+                  }
+                  
                   if(mode != "casrn" | (originalEnrichMode == "substructure" | originalEnrichMode == "similarity")) {
                     output[[paste0("table_", i)]] <- renderUI(
-                      column(12,
+                      column(12, style="height:500px; overflow-y:scroll;",
                         DT::datatable({fullTable},
                         # Render reenrichment table (solution from https://stackoverflow.com/questions/37356625/adding-a-column-with-true-false-and-showing-that-as-a-checkbox/37356792#37356792)
                             escape = FALSE, 
@@ -2912,15 +2927,12 @@ shinyServer(function(input, output, session) {
                             rownames = FALSE,
                             style = "bootstrap",
                             select = "none",
-                            fillContainer = TRUE,
                             options = list( 
                               paging=TRUE,
                               preDrawCallback = JS('function() { Shiny.unbindAll(this.api().table().node()); }'), 
                               drawCallback = JS('function() { Shiny.bindAll(this.api().table().node()); } '),
                               dom="Bfrtip",
                               pageLength=10,
-                              #autoWidth=TRUE,
-                              #scrollY="350px",
                               buttons=list("copy", "csv", "excel", "pdf", "print", list( extend="colvis", columns=as.vector(1:(ncol(fullTable)-1)) ))  
                               #                                                           ^^ this is so we always keep the select checkboxes in the table (user can't hide them)
                             ),
@@ -2942,12 +2954,12 @@ shinyServer(function(input, output, session) {
                   column(12,
                     h3("Adjust Network Node Cutoff"),
                     bsTooltip(id="nodeCutoffRe", title="This will determine the maximum number of results per data set and may affect how many nodes are generated during network generation. (default = 10). Higher values may cause the enrichment process to take longer (Not available when viewing annotations for Tox21 chemicals).", placement="right", trigger="hover"),
-                    sliderInput(inputId = "nodeCutoffRe", label="Re-enrichment Cutoff", value=10, min=1, max=50, step=1, width="85%")
+                    sliderInput(inputId = "nodeCutoffRe", label="Re-enrichment Cutoff", value=10, min=1, max=50, step=1, width="100%")
                   ),
                   hr()
                 )
               )
-              
+
               # Render re-enrich buttons
               output[["reenrichButtonOut"]] <- renderUI(
                 fluidRow(
@@ -2965,12 +2977,13 @@ shinyServer(function(input, output, session) {
                   ),
                   # Deselect all chemicals with warnings
                   column(id=paste0("selectAllWarningsReenrich", i), 6,
-                    if(length(unlist(warningList$warnings[[i]], recursive=FALSE)) > 0){
+                    if(haveWarnings$warnings == TRUE) {
                       if(mode != "casrn" | (originalEnrichMode == "substructure" | originalEnrichMode == "similarity")) {
                         actionButton("selectAllWarningsReenrichButton", HTML("<div class=\"text-danger\">Deselect all chemicals with warnings</div>"))
                       }
                     }
                   ),
+                  
                   # Reenrich selected chemicals
                   column(id=paste0("reenrichButtonCol", i), 12, 
                     if(mode != "casrn" | (originalEnrichMode == "substructure" | originalEnrichMode == "similarity")) {
@@ -2986,10 +2999,7 @@ shinyServer(function(input, output, session) {
                 )
               )
           #}
-              
-              # Reset reactive warningList$warnings
-              #warningList$warnings <- NULL
-          
+
           # Render Chart & Cluster heatmaps for all sets
           
           # Query API to read in gct file
@@ -3303,12 +3313,6 @@ shinyServer(function(input, output, session) {
           
           # For each unique class name, render a bar plot
           createBargraph(bgChartFull=bgChartFull, bgChartAllCategories=bgChartAllCategories, orderSet=names(enrichmentSets)[1], colorsList=colorsList)
-          
-          # Initialize tabPanels (this is so checkboxes work correctly)
-          lapply(names(enrichmentSets), function(i) {
-            updateTabsetPanel(session, "tab", selected=paste0("outTab_", i))
-          })
-          updateTabsetPanel(session, "tab", selected=paste0("outTab_", names(enrichmentSets)[1]))
         }
         
         # Select/Deselect all chemicals for reenrichment
@@ -3380,6 +3384,7 @@ shinyServer(function(input, output, session) {
               })
               return(unlist(chemicalsWithWarningsInner))
             })
+
             chemicalsWithWarningsList <- unlist(lapply(names(chemicalsWithWarnings), function(dataset){
               for(casrn in chemicalsWithWarnings[dataset]) {
                 return(paste0(casrn, "__", dataset))
@@ -3387,7 +3392,7 @@ shinyServer(function(input, output, session) {
             }))
             
             if(selectAllWarningsReenrichButtonStatus$option == "select") { # Selecting
-              selectAllWarningsReenrichButtonStatus$option = "deselect"
+              selectAllWarningsReenrichButtonStatus$option <- "deselect"
               updateActionButton(session, "selectAllWarningsReenrichButton", label="<div class=\"text-danger\">Deselect all chemicals with warnings</div>")
               for (i in checkboxList$checkboxes) {
                 for(j in names(i)){
@@ -3397,7 +3402,7 @@ shinyServer(function(input, output, session) {
                 }
               }
             } else { # Deselecting
-              selectAllWarningsReenrichButtonStatus$option = "select"
+              selectAllWarningsReenrichButtonStatus$option <- "select"
               updateActionButton(session, "selectAllWarningsReenrichButton", label="<div class=\"text-danger\">Select all chemicals with warnings</div>")
               for (i in checkboxList$checkboxes) {
                 for(j in names(i)){
@@ -3410,10 +3415,50 @@ shinyServer(function(input, output, session) {
           }, ignoreInit=TRUE, ignoreNULL=TRUE)
         }
         
+        # Observer to select/deselect checkboxes on boot (workaround for issue #19 https://github.com/hurlab/tox21enricher/issues/19)
+        observeEvent(input$tab, {
+          chemicalsWithWarnings <- lapply(finalTableToDisplay$table, function(dataset){
+            chemicalsWithWarningsInner <- lapply(1:nrow(dataset), function(line){
+              if(is.null(dataset[line, "warning"]) == FALSE){
+                if(dataset[line, "warning"] != "None") {
+                  return(paste0(dataset[line, "CASRN"]))
+                }
+              }
+            })
+            return(unlist(chemicalsWithWarningsInner))
+          })
+          chemicalsWithWarningsList <- unlist(lapply(names(chemicalsWithWarnings), function(dataset){
+            for(casrn in chemicalsWithWarnings[dataset]) {
+              return(paste0(casrn, "__", dataset))
+            }
+          }))
+          
+          # Check if we deselected all chems
+          if(selectAllReenrichButtonStatus$option == "select") {
+            for (i in checkboxList$checkboxes) {
+              for(j in names(i)){
+                updateCheckboxInput(session, j, value = FALSE)
+              }
+            }
+          }
+          
+          # Check if we deselected all chems with warnings
+          if(selectAllWarningsReenrichButtonStatus$option == "select") {
+            for (i in checkboxList$checkboxes) {
+              for(j in names(i)){
+                if(j %in% chemicalsWithWarningsList){
+                  updateCheckboxInput(session, j, value=FALSE)  
+                }
+              }
+            }
+          }
+        })
+        
         # Re-enable refresh button
         shinyjs::enable(id="refresh")
         # Re-enable results page
         shinyjs::enable(id="enrichmentResults")
+
     }
     
     # Re-order bar graphs with respect to given input set

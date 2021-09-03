@@ -105,8 +105,10 @@ shinyUI(function(){
     
     # Sidebar
     sidebarLayout(
-        sidebarPanel(width=2,
-            style="position: fixed; overflow: visible; width: 15%",
+        sidebarPanel(
+            id="sidebar",
+            width=2,
+            style="position:fixed; overflow:visible; width:15%; height:600px; z-index:9999; overflow-y:scroll;",
             useShinyjs(),
             extendShinyjs(text = js_code, functions = 'browseURL'),
             extendShinyjs(text = js_theme, functions = c('init', 'toggleTheme')),
@@ -183,10 +185,10 @@ shinyUI(function(){
                 fluidRow(
                     h3("Select Enrichment Cutoff"),
                     bsTooltip(id="nodeCutoff", title="This will determine the maximum number of results per data set and may affect how many nodes are generated during network generation. (default = 10). Higher values may cause the enrichment process to take longer (Not available when viewing annotations for Tox21 chemicals).", placement="right", trigger="hover"),
-                    sliderInput(inputId = "nodeCutoff", label="Select enrichment cutoff", value=10, min=1, max=50, step=1, width="85%"),
+                    sliderInput(inputId = "nodeCutoff", label="Select enrichment cutoff", value=10, min=1, max=50, step=1, width="100%"),
                     
                     hidden(
-                        sliderInput(inputId = "tanimotoThreshold", label="Select Tanimoto similarity threshold (%)", value=50, min=1, max=100, step=1, width="85%")
+                        sliderInput(inputId = "tanimotoThreshold", label="Select Tanimoto similarity threshold (%)", value=50, min=1, max=100, step=1, width="100%")
                     )
                     
                 ),
@@ -229,7 +231,7 @@ shinyUI(function(){
                         uiOutput("inputInstructions"),
                     ),
                     column(12,
-                        tags$textarea(id="submitted_chemicals", rows=12,cols=100,""),
+                        textAreaInput(inputId="submitted_chemicals", label=NULL, rows=12, width="100%", value="", resize="both"),
                     )
                 ),
                 hidden( # hide error box; only display if there's an error
