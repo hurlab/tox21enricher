@@ -184,7 +184,7 @@ shinyUI(function(){
                 hr(),
                 fluidRow(
                     h3("Select Enrichment Cutoff"),
-                    bsTooltip(id="nodeCutoff", title="This will determine the maximum number of results per data set and may affect how many nodes are generated during network generation. (default = 10). Higher values may cause the enrichment process to take longer (Not available when viewing annotations for Tox21 chemicals).", placement="right", trigger="hover"),
+                    bsTooltip(id="nodeCutoff", title="This will determine the maximum number of results per data set and may affect how many nodes are generated during network generation. (default = 10). Higher values may cause the enrichment process to take longer (Not available when viewing annotations for Tox21 chemicals).", placement="bottom", trigger="hover"),
                     sliderInput(inputId = "nodeCutoff", label="Select enrichment cutoff", value=10, min=1, max=50, step=1, width="100%"),
                     
                     hidden(
