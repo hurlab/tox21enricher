@@ -17,6 +17,7 @@ library(parallel)
 library(plyr)
 library(pool)
 library(promises)
+library(reticulate)
 library(rjson)
 library(RPostgreSQL)
 library(stringr)
@@ -26,10 +27,16 @@ library(xlsx)
 
 ################## Code to run on startup, not part of API endpoints ##################
 
-#Current version of the application
+# Load params from config file
 tox21config <- config::get("tox21enricher")
 APP_VERSION <- tox21config$appversion
 APP_DIR <- tox21config$appdir
+PYTHON_DIR <- tox21config$python
+
+# Source Python
+Sys.setenv(RETICULATE_PYTHON = PYTHON_DIR)
+use_python(PYTHON_DIR)
+source_python("calcReactiveGroups.py")
 
 print(paste0("! Tox21 Enricher Plumber API version ", APP_VERSION, "."))
 
@@ -489,6 +496,13 @@ casrnData <- function(res, req, input){
   poolClose(poolCasrn)
   return(casrnOutp)
   #})
+}
+
+#* Detect if submitted chemical contains any reactive groups (internal use only)
+#* @param input
+#* @get /reactiveGroups
+reactiveGroups <- function(res, req, input){
+  return(calcReactiveGroups(input))
 }
 
 #* Convert provided InChI string to SMILES (internal use only)

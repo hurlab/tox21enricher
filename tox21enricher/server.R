@@ -27,9 +27,9 @@ shinyServer(function(input, output, session) {
   
     # API connectivity details
     # Change host address and port in config.yml
-    tox21api <- config::get("tox21enricher-client")
-    API_HOST <- tox21api$host
-    API_PORT <- tox21api$port
+    tox21config <- config::get("tox21enricher-client")
+    API_HOST <- tox21config$host
+    API_PORT <- tox21config$port
 
     # Display enrichment type on title
     titleStatus <- reactiveValues(option = character())
@@ -770,10 +770,8 @@ shinyServer(function(input, output, session) {
       descOther <- unlist(lapply(1:length(descOther), function(x){
         return(paste0(descOther[x]))
       }))
-
       annodescList <- annoListFull[, "annodesc"]
       names(annodescList) <- annoListFull[, "annoclassname"]
-      
       
       # Create list of annotation tooltips (help from https://stackoverflow.com/questions/36670065/tooltip-in-shiny-ui-for-help-text)
       ttPubChem <- lapply(1:length(descPubChem), function(x){
@@ -817,6 +815,72 @@ shinyServer(function(input, output, session) {
         }
       })
       names(classCTDSelected) <- names(classCTD)
+      
+      # Observers for deselect/select buttons for individual annotation categories
+      selectPubChemValue <- reactiveValues(value="deselect")
+      observeEvent(input$selectPubChem, {
+        if(selectPubChemValue$value == "deselect"){
+          updateCheckboxGroupInput(session, inputId="checkboxPubChem", selected=character(0))
+          updateActionButton(session, inputId="selectPubChem", label="Select all PubChem annotations")
+          selectPubChemValue$value <- "select"
+        } else {
+          updateCheckboxGroupInput(session, inputId="checkboxPubChem", selected=classPubChem)
+          updateActionButton(session, inputId="selectPubChem", label="Deselect all PubChem annotations")
+          selectPubChemValue$value <- "deselect"
+        }
+      })
+      
+      selectDrugMatrixValue <- reactiveValues(value="deselect")
+      observeEvent(input$selectDrugMatrix, {
+        if(selectDrugMatrixValue$value == "deselect"){
+          updateCheckboxGroupInput(session, inputId="checkboxDrugMatrix", selected=character(0))
+          updateActionButton(session, inputId="selectDrugMatrix", label="Select all DrugMatrix annotations")
+          selectDrugMatrixValue$value <- "select"
+        } else {
+          updateCheckboxGroupInput(session, inputId="checkboxDrugMatrix", selected=classDrugMatrix)
+          updateActionButton(session, inputId="selectDrugMatrix", label="Deselect all DrugMatrix annotations")
+          selectDrugMatrixValue$value <- "deselect"
+        }
+      })
+      
+      selectDrugBankValue <- reactiveValues(value="deselect")
+      observeEvent(input$selectDrugBank, {
+        if(selectDrugBankValue$value == "deselect"){
+          updateCheckboxGroupInput(session, inputId="checkboxDrugBank", selected=character(0))
+          updateActionButton(session, inputId="selectDrugBank", label="Select all DrugBank annotations")
+          selectDrugBankValue$value <- "select"
+        } else {
+          updateCheckboxGroupInput(session, inputId="checkboxDrugBank", selected=classDrugBank)
+          updateActionButton(session, inputId="selectDrugBank", label="Deselect all DrugBank annotations")
+          selectDrugBankValue$value <- "deselect"
+        }
+      })
+      
+      selectCTDValue <- reactiveValues(value="deselect")
+      observeEvent(input$selectCTD, {
+        if(selectCTDValue$value == "deselect"){
+          updateCheckboxGroupInput(session, inputId="checkboxCTD", selected=character(0))
+          updateActionButton(session, inputId="selectCTD", label="Select all CTD annotations")
+          selectCTDValue$value <- "select"
+        } else {
+          updateCheckboxGroupInput(session, inputId="checkboxCTD", selected=classCTD)
+          updateActionButton(session, inputId="selectCTD", label="Deselect all CTD annotations")
+          selectCTDValue$value <- "deselect"
+        }
+      })
+      
+      selectOtherValue <- reactiveValues(value="deselect")
+      observeEvent(input$selectOther, {
+        if(selectOtherValue$value == "deselect"){
+          updateCheckboxGroupInput(session, inputId="checkboxOther", selected=character(0))
+          updateActionButton(session, inputId="selectOther", label="Select all Other annotations")
+          selectOtherValue$value <- "select"
+        } else {
+          updateCheckboxGroupInput(session, inputId="checkboxOther", selected=classOther)
+          updateActionButton(session, inputId="selectOther", label="Deselect all Other annotations")
+          selectOtherValue$value <- "deselect"
+        }
+      })
 
       # Render checkboxes for each annotation class
       column(12,
@@ -825,6 +889,9 @@ shinyServer(function(input, output, session) {
                 fluidRow(
                   column(12,
                     extendedCheckboxGroupInput("checkboxPubChem", "PubChem Compound Annotations", choices=classPubChem, selected=classPubChem, extensions=ttPubChem)
+                  ),
+                  column(12,
+                    actionButton(inputId="selectPubChem", label="Deselect all PubChem annotations")       
                   )
                 )
               ),
@@ -832,6 +899,9 @@ shinyServer(function(input, output, session) {
                 fluidRow(
                   column(12,
                     extendedCheckboxGroupInput("checkboxDrugMatrix", "DrugMatrix Annotations", choices=classDrugMatrix, selected=classDrugMatrix, extensions=ttDrugMatrix)
+                  ),
+                  column(12,
+                    actionButton(inputId="selectDrugMatrix", label="Deselect all DrugMatrix annotations")       
                   )
                 )
               ),
@@ -839,6 +909,9 @@ shinyServer(function(input, output, session) {
                 fluidRow(
                   column(12,
                     extendedCheckboxGroupInput("checkboxDrugBank", "DrugBank Annotations", choices=classDrugBank, selected=classDrugBank, extensions=ttDrugBank)
+                  ),
+                  column(12,
+                    actionButton(inputId="selectDrugBank", label="Deselect all DrugBank annotations")       
                   )
                 )
               ),
@@ -846,6 +919,9 @@ shinyServer(function(input, output, session) {
                 fluidRow(
                   column(12,
                     extendedCheckboxGroupInput("checkboxCTD", "CTD Annotations", width="500px", choices=classCTD, selected=classCTDSelected, extensions=ttCTD)
+                  ),
+                  column(12,
+                    actionButton(inputId="selectCTD", label="Deselect all CTD annotations")       
                   )
                 )
               ),
@@ -853,6 +929,9 @@ shinyServer(function(input, output, session) {
                 fluidRow(
                   column(12,
                     extendedCheckboxGroupInput("checkboxOther", "Other Annotations", choices=classOther, selected=classOther, extensions=ttOther)
+                  ),
+                  column(12,
+                    actionButton(inputId="selectOther", label="Deselect all Other annotations")       
                   )
                 )
               )
@@ -977,7 +1056,7 @@ shinyServer(function(input, output, session) {
     
     # Provide SMILES example set when button is clicked
     observeEvent (input$example_smiles, {
-        updateTextAreaInput(session, "submitted_chemicals", value = "ClCC1=CC=CC=C1\nCOCCOC(=O)CC#N\nInChI=1S/C8H11N/c1-9(2)8-6-4-3-5-7-8/h3-7H,1-2H3")
+        updateTextAreaInput(session, "submitted_chemicals", value = "ClCC1=CC=CC=C1\nN#CSCC1=CC=CC=C1\nInChI=1S/C8H11N/c1-9(2)8-6-4-3-5-7-8/h3-7H,1-2H3")
     })
     
     # Clear CASRNs input box
@@ -2623,7 +2702,7 @@ shinyServer(function(input, output, session) {
                   resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="generateStructures", query=list(input=resultImagesSVG))
                   structuresSvg <- content(resp)
                   resultImages <- lapply(reenrichResults[[i]][, "casrn"], function(casrnName) {
-                    # TODO: this is kind of a hacky way to resize the SVG images generated by rdkit, but it works...
+                    # Note: this is kind of a hacky way to resize the SVG images generated by rdkit, but it works...
                     resizedSvg <- str_replace(unlist(structuresSvg[casrnName][[1]]) , "width='250px'", "width='50px'")
                     resizedSvg <- str_replace(resizedSvg , "height='200px'", "height='40px'")
                     
@@ -2785,23 +2864,45 @@ shinyServer(function(input, output, session) {
                   imgPath1 <- '<img src="images/warnings/'
                   imgPath2 <- ' height="50" width="100"></img>'
                   
+                  # Check if original string contains any of the reactive structures
+                  originalInputStr <- ""
+                  for(j in originalNames){
+                    originalSetName <- unlist(str_split(j, "__"))
+                    if(originalSetName[2] == i){
+                      originalInputStr <- paste0(originalSetName[1])
+                    }
+                  }
+                  resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="reactiveGroups", query=list(input=originalInputStr))
+                  if(resp$status_code != 200){
+                    return(NULL)
+                  }
+                  originalInputStrReactive <- unlist(str_split(content(resp), ","))
+                  # 1=cyanide, 2=isocyanate, 3=aldehyde, 4=epoxide
+                  
                   # Simplify reactive structure columns into one warning column
                   fullTableWarnings <- lapply(1:nrow(fullTableTmp), function(tableRow){
                     warningToDisplay <- ""
+                    nitrileCol <- fullTableTmp[tableRow, (ncol(fullTableTmp)-3)]
+                    isocyanateCol <- fullTableTmp[tableRow, (ncol(fullTableTmp)-2)]
+                    aldehydeCol <- fullTableTmp[tableRow, (ncol(fullTableTmp)-1)]
+                    epoxideCol <- fullTableTmp[tableRow, (ncol(fullTableTmp))]
+
+                    if(toString(nitrileCol) != toString(originalInputStrReactive[1])) {
+                      warningToDisplay <- paste0(tipify(div( HTML(paste0(warningToDisplay, imgPath1, 'nitrile.png"', imgPath2))   ), "Nitrile (Cyanide) group.", placement="left"))
+                    }
                     
-                    #TODO make this not dependent on number of columns
-                    if(fullTableTmp[tableRow, (ncol(fullTableTmp)-3)] == 1) {
-                      warningToDisplay <- paste0(tipify(div( HTML(paste0(warningToDisplay, imgPath1, 'nitrile.png"', imgPath2))   ), "Nitrile (Cyanide) group.", placement="right"))
+                    if(toString(isocyanateCol) != toString(originalInputStrReactive[2])) {
+                      warningToDisplay <- paste0(tipify(div( HTML(paste0(warningToDisplay, imgPath1, 'isocyanate.png"', imgPath2)) ), "Isocyanate group.", placement="left"))
                     }
-                    if(fullTableTmp[tableRow, (ncol(fullTableTmp)-2)] == 1) {
-                      warningToDisplay <- paste0(tipify(div( HTML(paste0(warningToDisplay, imgPath1, 'isocyanate.png"', imgPath2)) ), "Isocyanate group.", placement="right"))
+                  
+                    if(toString(aldehydeCol) != toString(originalInputStrReactive[3])) {
+                      warningToDisplay <- paste0(tipify(div( HTML(paste0(warningToDisplay, imgPath1, 'aldehyde.png"', imgPath2))   ),  "Aldehyde group.", placement="left"))
                     }
-                    if(fullTableTmp[tableRow, (ncol(fullTableTmp)-1)] == 1) {
-                      warningToDisplay <- paste0(tipify(div( HTML(paste0(warningToDisplay, imgPath1, 'aldehyde.png"', imgPath2))   ),  "Aldehyde group.", placement="right"))
+              
+                    if(toString(epoxideCol) != toString(originalInputStrReactive[4])) {
+                      warningToDisplay <- paste0(tipify(div( HTML(paste0(warningToDisplay, imgPath1, 'epoxide.png"', imgPath2))     ), "Epoxide group.", placement="left"))
                     }
-                    if(fullTableTmp[tableRow, (ncol(fullTableTmp))] == 1) {
-                      warningToDisplay <- paste0(tipify(div( HTML(paste0(warningToDisplay, imgPath1, 'epoxide.png"', imgPath2))     ), "Epoxide group.", placement="right"))
-                    }
+        
                     if(warningToDisplay == "") { # if no warnings
                       warningToDisplay <- "<p>None</p>"
                     }
@@ -2838,10 +2939,8 @@ shinyServer(function(input, output, session) {
                     fullTable$warning=fullTableWarnings  
                     # Add checkboxes for CASRNs
                     fullTable <- data.frame(select=unlist(selectList), fullTable)
-                    
                     # Save this so we can use it outside of the method
                     finalTableToDisplay$table[[i]] <- fullTable
-                    
                     # Set appropriate column names to display in table
                     if (mode == "similarity" | originalEnrichMode == "similarity") {
                       names(fullTable) <- c(
@@ -2856,7 +2955,7 @@ shinyServer(function(input, output, session) {
                         "Molecular Formula",
                         "Molecular Weight",
                         "Similarity",
-                        paste0( tipify( div("Reactive Structure Warning"), "Warning: either this chemical contains a known reactive group(s) while your original submission did not, or this chemical does not contain a known reactive group(s) that your original submission contained. It is recommended that you deselect this chemical and perform re-enrichment on your data set.", placement="right" ) )
+                        paste0( tipify( div("Reactive Structure Warning"), "Warning: either this chemical contains a known reactive group(s) while your original submission did not, or this chemical does not contain a known reactive group(s) that your original submission contained. It is recommended that you deselect this chemical and perform re-enrichment on your data set.", placement="bottom" ) )
                       )
                     } else if(mode == "substructure" | originalEnrichMode == "substructure") {
                       names(fullTable) <- c(
@@ -2870,7 +2969,7 @@ shinyServer(function(input, output, session) {
                         "InChI Key",
                         "Molecular Formula",
                         "Molecular Weight",
-                        paste0( tipify( div("Reactive Structure Warning"), "Warning: either this chemical contains a known reactive group(s) while your original submission did not, or this chemical does not contain a known reactive group(s) that your original submission contained. It is recommended that you deselect this chemical and perform re-enrichment on your data set.", placement="right" ) )
+                        paste0( tipify( div("Reactive Structure Warning"), "Warning: either this chemical contains a known reactive group(s) while your original submission did not, or this chemical does not contain a known reactive group(s) that your original submission contained. It is recommended that you deselect this chemical and perform re-enrichment on your data set.", placement="bottom" ) )
                       )
                     }
                     
@@ -3377,14 +3476,13 @@ shinyServer(function(input, output, session) {
             chemicalsWithWarnings <- lapply(finalTableToDisplay$table, function(dataset){
               chemicalsWithWarningsInner <- lapply(1:nrow(dataset), function(line){
                 if(is.null(dataset[line, "warning"]) == FALSE){
-                  if(dataset[line, "warning"] != "None") {
+                  if(dataset[line, "warning"] != "<p>None</p>") {
                     return(paste0(dataset[line, "CASRN"]))
                   }
                 }
               })
               return(unlist(chemicalsWithWarningsInner))
             })
-
             chemicalsWithWarningsList <- unlist(lapply(names(chemicalsWithWarnings), function(dataset){
               for(casrn in chemicalsWithWarnings[dataset]) {
                 return(paste0(casrn, "__", dataset))
@@ -3444,6 +3542,21 @@ shinyServer(function(input, output, session) {
           
           # Check if we deselected all chems with warnings
           if(selectAllWarningsReenrichButtonStatus$option == "select") {
+            chemicalsWithWarnings <- lapply(finalTableToDisplay$table, function(dataset){
+              chemicalsWithWarningsInner <- lapply(1:nrow(dataset), function(line){
+                if(is.null(dataset[line, "warning"]) == FALSE){
+                  if(dataset[line, "warning"] != "<p>None</p>") {
+                    return(paste0(dataset[line, "CASRN"]))
+                  }
+                }
+              })
+              return(unlist(chemicalsWithWarningsInner))
+            })
+            chemicalsWithWarningsList <- unlist(lapply(names(chemicalsWithWarnings), function(dataset){
+              for(casrn in chemicalsWithWarnings[dataset]) {
+                return(paste0(casrn, "__", dataset))
+              }
+            }))
             for (i in checkboxList$checkboxes) {
               for(j in names(i)){
                 if(j %in% chemicalsWithWarningsList){

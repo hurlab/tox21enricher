@@ -14,6 +14,8 @@ default:
     ### Directories/pathing ###
     # The application's home directory
     appdir: "/home/username/tox21enricher/"
+    # Location of your Python installation
+    python: "/home/username/anaconda3/envs/my-rdkit-env/bin/python3.6"
   tox21enricher-queue:
     ### Database information for connecting to Postgres database ###
     driver: 'Postgres'
