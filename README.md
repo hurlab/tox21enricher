@@ -7,9 +7,11 @@ Chemicals are specified directly via their corresponding CASRN or indirectly wit
 After performing enrichment, the results are displayed (heatmap images per set, .gct, .xls, .txt files, cluster and chart full heatmaps) along with an option to view the cluster and chart full heatmaps visualized as networks. In the networks displayed, two nodes with a connecting edge indicate two annotations that have a statistically significant connection.
 
 <h2>Development Tools</h2>
-Tools used in the development of the Tox21 Enricher:
+Tools used in the development of Tox21 Enricher:
 
 <br/>Plumber
 <br/>PostgreSQL
+<br/>Python
 <br/>RDKit
-<br/>R Shiny
+<br/>R
+<br/>Shiny
