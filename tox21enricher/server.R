@@ -124,6 +124,7 @@ shinyServer(function(input, output, session) {
     searchStatus <- reactiveValues(option = character())
     searchStatus$option <- "search"
     searchCheckboxes<- reactiveValues(checkboxes = NULL)
+    
     # Open search enrichment menu
     observeEvent(input$searchButton, {
       loadEnrichList()
@@ -179,15 +180,27 @@ shinyServer(function(input, output, session) {
             
             beginTime <- "not started"
             endTime <- "incomplete"
+            tmpContent <- NULL
             if(ncol(enrichDataRaw) < 12){
               # Get timestamps for missing entries
               # Get ending timestamp to put in file
-              resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="getTimestamp", query=list(transactionId=transactionId))
-              # TODO: error check
-              if(resp$status_code != 200){
-                return(NULL)
+              tryTimestamp <- tryCatch(
+                {
+                  resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="getTimestamp", query=list(transactionId=transactionId))
+                  # TODO: error check
+                  if(resp$status_code != 200){
+                    return(FALSE)
+                  }    
+                  return(TRUE)
+                }, error=function(cond){
+                  return(FALSE)
+                }
+              )
+              if(tryTimestamp == FALSE){
+                tmpContent <- NULL
+              } else {
+                tmpContent <- unlist(content(resp))
               }
-              tmpContent <- unlist(content(resp))
               
               #Placeholder if hasn't started yet
               if(is.null(tmpContent)) {
@@ -1191,9 +1204,6 @@ shinyServer(function(input, output, session) {
         output[["resultsTabset"]] <- renderUI(
             div(id="resultsTmp")
         )
-
-        # refresh session entirely
-        #session$reload()
     })
     
     # Keep track of what enrichment type is currently selected
