@@ -2219,13 +2219,16 @@ kappa_cluster <- function(x, deg=NULL, useTerm=FALSE, cutoff=0.5, overlap=0.5, m
   sortedIndex <- sortedIndex[order(names(sortedIndex), decreasing=TRUE)]
   
   #TODO: make more efficient
-  writeToCluster <- ""
+  #writeToCluster <- ""
+  writeToClusterFinal <- NULL
   if(length(sortedIndex) > 0){
-    for(myIndex in 1:length(sortedIndex)) {
+    #for(myIndex in 1:length(sortedIndex)) {
+    writeToClusterFinal <- lapply(1:length(sortedIndex), function(myIndex) {
       if(length(finalGroups[[myIndex]] > 0)){
-        writeToCluster <- paste0(writeToCluster, "Annotation Cluster ", (clusterNumber+1), "\tEnrichment Score: ", names(sortedIndex)[myIndex], "\n", sep="")
-        clusterNumber <- clusterNumber + 1
-        writeToCluster <- paste0(writeToCluster, clusterHeader)
+        #writeToCluster <- paste0(writeToCluster, "Annotation Cluster ", (clusterNumber+1), "\tEnrichment Score: ", names(sortedIndex)[myIndex], "\n", sep="")
+        writeToCluster <- paste0("Annotation Cluster ", (clusterNumber+1), "\tEnrichment Score: ", names(sortedIndex)[myIndex], "\n", clusterHeader)
+        clusterNumber <<- clusterNumber + 1
+        #writeToCluster <- paste0(writeToCluster, clusterHeader)
         # sort terms again by p-value
         finalGroups2Pvalue <- lapply(sortedIndex[[myIndex]], function(term){
           return(term2Pvalue[[term]])
@@ -2234,12 +2237,16 @@ kappa_cluster <- function(x, deg=NULL, useTerm=FALSE, cutoff=0.5, overlap=0.5, m
         names(finalGroups2Pvalue) <- sortedIndex[[myIndex]]
         sortedFunCatTerms <- finalGroups2Pvalue[order(unlist(finalGroups2Pvalue), decreasing = FALSE)]
         writeTermsToCluster <- lapply(names(sortedFunCatTerms), function(myTerm) return(paste0(term2Contents[[myTerm]], collapse="\t")))
-        writeToCluster <- paste0(writeToCluster, paste0(writeTermsToCluster, collapse="\n"), sep="")
-        writeToCluster <- paste0(writeToCluster, "\n\n")
+        writeToCluster <- paste0(writeToCluster, paste0(writeTermsToCluster, collapse="\n"), "\n")
+        #writeToCluster <- paste0(writeToCluster, "\n\n")
+        return(writeToCluster)
       }
-    }
+    #}
+    })
   }
-  write(writeToCluster, CLUSTER, append=TRUE)
+  writeToClusterFinal <- paste0(paste0(writeToClusterFinal, collapse="\n"), "\n")
+  
+  write(writeToClusterFinal, CLUSTER, append=TRUE)
   close(CLUSTER)
   
   print(paste0(">> TIME | Step 4 write to cluster: ", Sys.time()))
@@ -2450,15 +2457,12 @@ getAnnotations <- function(enrichmentUUID="-1", annoSelectStr="MESH=checked,PHAR
   annotationMatrix <- annotationMatrix[!sapply(annotationMatrix, is.null)]
   
   if(length(annotationMatrix) < 1){
-    #res$status = 500
-    #res$body = paste0("No lines available in any input file. Cannot fetch annotations.")
-    #return(res) #return error message  
+    # Return error message
     return("No lines available in any input file. Cannot fetch annotations.")
   }
   # zip result files
   zipDir <- dir(outDir, recursive=TRUE, include.dirs=TRUE)
   filesToZip <- unlist(lapply(zipDir, function(x) paste0(outDir, "/", x)))
-  # try with system call instead vvv
   system(paste0("cd ", outDir, "/ ; zip -r9X ./tox21enricher_", enrichmentUUID, ".zip ./*"))
   
   # Close pool connection to db when done accessing
