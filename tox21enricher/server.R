@@ -181,6 +181,7 @@ shinyServer(function(input, output, session) {
             beginTime <- "not started"
             endTime <- "incomplete"
             tmpContent <- NULL
+            resp <- NULL
             if(ncol(enrichDataRaw) < 12){
               # Get timestamps for missing entries
               # Get ending timestamp to put in file
@@ -189,19 +190,20 @@ shinyServer(function(input, output, session) {
                   resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="getTimestamp", query=list(transactionId=transactionId))
                   # TODO: error check
                   if(resp$status_code != 200){
-                    return(FALSE)
+                    tmpContent <- NULL
                   }    
-                  return(TRUE)
+                  TRUE
                 }, error=function(cond){
                   return(FALSE)
                 }
               )
+
               if(tryTimestamp == FALSE){
                 tmpContent <- NULL
               } else {
                 tmpContent <- unlist(content(resp))
               }
-              
+        
               #Placeholder if hasn't started yet
               if(is.null(tmpContent)) {
                 beginTime <- "not started"
@@ -279,7 +281,6 @@ shinyServer(function(input, output, session) {
           }))
           
           enrichmentListDisplay <- bind_rows(enrichmentListDisplay)
-          
           searchCheckboxes$checkboxes <- searchCheckboxNames
           
           output[["enrichmentTable"]] <- renderUI(
@@ -365,7 +366,7 @@ shinyServer(function(input, output, session) {
         tryPrevious <- tryCatch(
           {
             resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="exists", query=list(transactionId=transactionId))    
-            return(TRUE)
+            TRUE
           }, error=function(cond){
             return(FALSE)
           }
@@ -488,9 +489,11 @@ shinyServer(function(input, output, session) {
         
         shinyjs::hide(id = "searchForm")
         shinyjs::disable(id = "searchForm")
+        shinyjs::hide(id = "searchButtonsMenu")
+        shinyjs::disable(id = "searchButtonsMenu")
         future({
           enrichmentResults(mode, transactionId, annoSelectStr, nodeCutoff, enrichmentSets, originalNames, reenrichResults, originalMode, colorsList)
-        })
+        }, seed=TRUE)
       }
     })
     
@@ -1186,6 +1189,7 @@ shinyServer(function(input, output, session) {
         
         # Allow user to change enrichment type
         shinyjs::enable(id = "enrich_from")
+        shinyjs::show(id="enrich_from")
         
         # Hide the refresh button
         shinyjs::hide(id = "refresh")
@@ -2070,7 +2074,7 @@ shinyServer(function(input, output, session) {
       
       # Show error message on main page
       shinyjs::show(id="errorBox")
-      
+
       # Reset results page
       #shinyjs::reset(id="resultsContainer")
       
@@ -2092,37 +2096,41 @@ shinyServer(function(input, output, session) {
         # Update cache file for completed enrichment
         # Create local file so we can reference later
         tmpDir <- paste0("./www/tmp/transaction/")
-        
-        # Get ending timestamp to put in file
-        resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="getTimestamp", query=list(transactionId=transactionId))
-        # TODO: error check
-        beginTime <- "not started"
-        endTime <- "incomplete"
-        if(resp$status_code != 200){
-          return(NULL)
-        }
-        tmpContent <- unlist(content(resp))
-        
-        if(is.null(tmpContent)) {
+        tmpLocalFile <- file(paste0(tmpDir, transactionId), open="a")
+        tmpLocalFilePath <- paste0(tmpDir, transactionId)
+        tmpLocalFileRead <- read.table(tmpLocalFilePath, stringsAsFactors=FALSE, sep="\t")
+
+        if(length(tmpLocalFileRead) < 12){
+          # Get ending timestamp to put in file
+          resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="getTimestamp", query=list(transactionId=transactionId))
+          # TODO: error check
           beginTime <- "not started"
           endTime <- "incomplete"
-        } else {
-          if("timestamp_start" %in% names(tmpContent["timestamp_start"])){
-            beginTime <- tmpContent[["timestamp_start"]]
-          } else {
+          if(resp$status_code != 200){
+            return(NULL)
+          }
+          tmpContent <- unlist(content(resp))
+          
+          if(is.null(tmpContent)) {
             beginTime <- "not started"
-          }
-          if("timestamp_finish" %in% names(tmpContent["timestamp_finish"])){
-            endTime <- tmpContent[["timestamp_finish"]]
-          } else {
             endTime <- "incomplete"
+          } else {
+            if("timestamp_start" %in% names(tmpContent["timestamp_start"])){
+              beginTime <- tmpContent[["timestamp_start"]]
+            } else {
+              beginTime <- "not started"
+            }
+            if("timestamp_finish" %in% names(tmpContent["timestamp_finish"])){
+              endTime <- tmpContent[["timestamp_finish"]]
+            } else {
+              endTime <- "incomplete"
+            }
           }
+  
+          # Write local info file so we can reference this request later
+          cat(paste0("\t", beginTime, "\t", endTime, "\r"), file=tmpLocalFile)
+          close(tmpLocalFile)
         }
-
-        # Write local info file so we can reference this request later
-        tmpLocalFile <- file(paste0(tmpDir, transactionId), open="a")
-        cat(paste0("\t", beginTime, "\t", endTime, "\r"), file=tmpLocalFile)
-        close(tmpLocalFile)
       
         # Show results container
         shinyjs::show(id="resultsContainer")
@@ -2194,10 +2202,10 @@ shinyServer(function(input, output, session) {
               column(12,
                      h1(id="resultsHeader", "Fetched Annotations"),
                      do.call(tabsetPanel, c(id='tab', lapply(names(enrichmentSets), function(i) {
-                       outputOptions(output, paste0("outTab_", i), suspendWhenHidden=FALSE)
+                       #outputOptions(output, paste0("annotationTab_", i), suspendWhenHidden=FALSE)
                        tabPanel(
-                         title=paste0(i),
-                         uiOutput(paste0("outTab_", i)) %>% withSpinner()
+                          title=paste0(i),
+                          uiOutput(paste0("annotationTab_", i)) %>% withSpinner()
                        )
                      })))
               ),
@@ -2252,11 +2260,10 @@ shinyServer(function(input, output, session) {
               }, ignoreInit = TRUE)
             }
             
-            output[[paste0("outTab_", i)]] <- renderUI(
-              column(12,
-                tabPanel(paste0("tab_", i), 
+            lapply(names(enrichmentSets), function(i) {
+              output[[paste0("annotationTab_", i)]] <- renderUI(
+                column(12,
                   lapply(1:length(setFiles), function(setFile){
-                    
                     # Create item in tab for matching sets
                     if (grepl(paste0(i, "[.]*"), setFilesSplit[setFile])) {
                       fluidRow(
@@ -2273,7 +2280,8 @@ shinyServer(function(input, output, session) {
                   })
                 )
               )
-            )
+            })
+            
           })
 
           # Event handler for download full results
@@ -2289,7 +2297,6 @@ shinyServer(function(input, output, session) {
               js$browseURL(paste0("tmp/output/", transactionId, "/tox21enricher_", transactionId, ".zip"))
             }, ignoreInit = TRUE)
           }
-        
         } else { # Render enrichment results
           
           # Download button
@@ -3271,6 +3278,7 @@ shinyServer(function(input, output, session) {
                           checkboxGroupInput( label="Selected Input Sets", inputId="chartNetworkChoices", choices=names(enrichmentSets), selected=names(enrichmentSets) ),
                           HTML("<h5><b>Other Options</b></h5>"),
                           checkboxInput(inputId="physicsEnabledChart", label="Enable physics?", value=FALSE),
+                          checkboxInput(inputId="smoothCurveChart", label="Smooth curve for edges?", value=TRUE),
                           actionButton(inputId="chartNetworkUpdateButton", label="Update network"),
                         ), 
                         column(9,
@@ -3303,6 +3311,7 @@ shinyServer(function(input, output, session) {
                           checkboxGroupInput( label="Selected Input Sets", inputId="clusterNetworkChoices", choices=names(enrichmentSets), selected=names(enrichmentSets) ),
                           HTML("<h5><b>Other Options</b></h5>"),
                           checkboxInput(inputId="physicsEnabledCluster", label="Enable physics?", value=FALSE),
+                          checkboxInput(inputId="smoothCurveCluster", label="Smooth curve for edges?", value=TRUE),
                           actionButton(inputId="clusterNetworkUpdateButton", label="Update network"),
                         ), 
                         column(9,
@@ -3590,7 +3599,7 @@ shinyServer(function(input, output, session) {
     })
     
     # Shared code to create networks
-    generateNetwork <- function(transactionId, cutoff, networkMode, inputNetwork, qval, physicsEnabled=FALSE){
+    generateNetwork <- function(transactionId, cutoff, networkMode, inputNetwork, qval, physicsEnabled=FALSE, smoothCurve=TRUE){
       inputNetwork <- paste0(inputNetwork, collapse="#")
       
       # Error handling
@@ -3671,7 +3680,7 @@ shinyServer(function(input, output, session) {
         visOptions(highlightNearest=TRUE, nodesIdSelection=TRUE, selectedBy="group") %>%
         visLayout(randomSeed=runif(1)) %>%
         visPhysics(solver="forceAtlas2Based", enabled=physicsEnabled, stabilization=list(enabled=FALSE, iterations=1000, updateInterval=25)) %>%
-        visEdges(smooth=TRUE) %>%
+        visEdges(smooth=smoothCurve) %>%
         visInteraction(navigationButtons=TRUE, keyboard=FALSE, selectable=TRUE)
       
       # Add groups for legend
@@ -3697,7 +3706,7 @@ shinyServer(function(input, output, session) {
       if(length(input$chartNetworkChoices) == 0){
         output$chartNetwork <- renderUI(HTML("<p class=\"text-danger\"><b>Error:</b> No input sets selected.</p>"))
       } else {
-        chartFullNetwork <- generateNetwork(transactionId=reactiveTransactionId$id, cutoff=input$nodeCutoffRe, networkMode="chart", inputNetwork=input$chartNetworkChoices, qval=input$chartqval, physicsEnabled=input$physicsEnabledChart)
+        chartFullNetwork <- generateNetwork(transactionId=reactiveTransactionId$id, cutoff=input$nodeCutoffRe, networkMode="chart", inputNetwork=input$chartNetworkChoices, qval=input$chartqval, physicsEnabled=input$physicsEnabledChart, smoothCurve=input$smoothCurveChart)
         # Render networks
         output$chartNetwork <- renderUI(chartFullNetwork) 
       }
@@ -3711,7 +3720,7 @@ shinyServer(function(input, output, session) {
       if(length(input$clusterNetworkChoices) == 0){
         output$clusterNetwork <- renderUI(HTML("<p class=\"text-danger\"><b>Error:</b> No input sets selected.</p>"))
       } else {
-        clusterFullNetwork <- generateNetwork(transactionId=reactiveTransactionId$id, cutoff=input$nodeCutoffRe, networkMode="cluster", inputNetwork=input$clusterNetworkChoices, qval=input$clusterqval, physicsEnabled=input$physicsEnabledCluster)
+        clusterFullNetwork <- generateNetwork(transactionId=reactiveTransactionId$id, cutoff=input$nodeCutoffRe, networkMode="cluster", inputNetwork=input$clusterNetworkChoices, qval=input$clusterqval, physicsEnabled=input$physicsEnabledCluster, smoothCurve=input$smoothCurveCluster)
         # Render networks
         output$clusterNetwork <- renderUI(clusterFullNetwork)
       }

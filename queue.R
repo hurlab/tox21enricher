@@ -264,8 +264,8 @@ performEnrichment <- function(enrichmentUUID="-1", annoSelectStr="MESH=checked,P
   names(inputIDListHash) <- outfileBaseNames
   
   # multi-core
-  #enrichmentStatusComplete <- mclapply(outfileBaseNames, mc.cores=4, mc.silent=FALSE, function(i){
-  enrichmentStatusComplete <- lapply(outfileBaseNames, function(i){
+  enrichmentStatusComplete <- mclapply(outfileBaseNames, mc.cores=4, mc.silent=FALSE, function(i){
+  #enrichmentStatusComplete <- lapply(outfileBaseNames, function(i){
     
     # Get list of CASRN names
     CASRNS <- lapply(inputIDListHash[[i]], function(j){
@@ -297,15 +297,6 @@ performEnrichment <- function(enrichmentUUID="-1", annoSelectStr="MESH=checked,P
   #
   #
   ########################################################################################
-  
-  
-  #if (not defined $ARGV[6])
-  #{	die "\n!ERROR: Missing parameters\n".
-  #  ">ThisScript.pl <Input Dir> <DAVID Result directory> <topTermCount per file>\n".
-  #  "               <Sig-applying ALL or AT-LEAST-ONE data> <SigColumn> <SigCutOff> <ValueColumn>\n".
-  #  "				[optional part of file name]\n\n".
-  #  ">ThisScript.pl Input/ Output/ 10 ALL BH 0.05 P\n\n";
-  #}
   
   ARGV_0 <- inDir
   ARGV_1 <- outDir 
@@ -356,7 +347,7 @@ performEnrichment <- function(enrichmentUUID="-1", annoSelectStr="MESH=checked,P
   setNames <- unique(unlist(setNames)) # Get only 1 copy of each set name
   
   # Create Excel spreadsheets of existing files
-  for (i in setNames) {
+  lapply(setNames, function(i){
     xlsxChart <- read.table(paste0(baseDirName, "/", i, "__Chart.txt"), header=TRUE, sep="\t", comment.char="", fill=FALSE)
     xlsxChartSimple <- read.table(paste0(baseDirName, "/", i, "__ChartSimple.txt"), header=TRUE, sep="\t", comment.char="", fill=FALSE)
     xlsxCluster <- read.table(paste0(baseDirName, "/", i, "__Cluster.txt"), header=FALSE, sep="\t", comment.char="", 
@@ -364,7 +355,7 @@ performEnrichment <- function(enrichmentUUID="-1", annoSelectStr="MESH=checked,P
     write.xlsx2(xlsxChart, paste0(baseDirName, "/", i, "__Chart.xlsx"), sheetName=paste0(i), col.names=TRUE, row.names=TRUE, append=FALSE)
     write.xlsx2(xlsxChartSimple, paste0(baseDirName, "/", i, "__ChartSimple.xlsx"), sheetName=paste0(i), col.names=TRUE, row.names=TRUE, append=FALSE)
     write.xlsx2(xlsxCluster, paste0(baseDirName, "/", i, "__Cluster.xlsx"), sheetName=paste0(i), col.names=TRUE, row.names=TRUE, append=FALSE)
-  }
+  })
   
   # zip result files
   zipDir <- dir(baseDirName, recursive=TRUE, include.dirs=TRUE)
@@ -421,7 +412,8 @@ process_variable_DAVID_CHART_directories_individual_file <- function(inputDirNam
   valueColumnIndex	<- get_column_index(valueColumnName)    # 5=p-value, 12=BH p-value, 13=FDR
   
   # Step1. Get the list of significant terms
-  for (infile in infiles){
+  #for (infile in infiles){
+  mclapply(infiles, mc.cores=4, mc.silent=FALSE, function(infile){
     tmp1 <- str_split(infile, "/")
     tmp1[[1]][length(tmp1[[1]])] <- str_replace(tmp1[[1]][length(tmp1[[1]])], ".txt", "")
     tmp2 <- tmp1[[1]]
@@ -542,38 +534,34 @@ process_variable_DAVID_CHART_directories_individual_file <- function(inputDirNam
       tmpTermKeys       <- names(term2pvalue)
       CASRNCount        <- length(CASRNs)
       tmpTermKeyCount   <- length(tmpTermKeys)
-      outputContent     <- paste0("#1.2\n", CASRNCount, "\t", tmpTermKeyCount, "\nCASRN\tName", sep="")
-      
-      for(tmpTermKey in tmpTermKeys) {	
-        outputContent <- paste0(outputContent, "\t", tmpTermKey, " | ", term2pvalue[tmpTermKey], sep="")
-      }
-      outputContent	<- paste0(outputContent, "\n", sep="")
-      
-      for(CASRN in unique(CASRNs)){
-        outputContent	<- paste0(outputContent, CASRN, "\t", sep="")
-        #print("^^")
+      outputContentHeader <- paste0("#1.2\n", CASRNCount, "\t", tmpTermKeyCount, "\nCASRN\tName")
+      termKeys <- lapply(tmpTermKeys, function(tmpTermKey){
+        return(paste0(tmpTermKey, " | ", term2pvalue[tmpTermKey]))
+      })
+      termKeys <- paste0(paste0(termKeys, collapse="\t"))
+      outputContentMatrix <- lapply(CASRNs, function(CASRN){
         if (is.null(CASRN2Name[[CASRN]]) == FALSE){	
           termNameOut <- CASRN2Name[[CASRN]]
           if(nchar(termNameOut) > 30){ # If the term name is longer than 30 characters (arbitrary, can change later), truncate for readability on the heatmap images
             termNameOut <- paste0(substring(termNameOut, 1, 30), "...", sep="")
           }
-          outputContent	<- paste0(outputContent, termNameOut, sep="")
         }
-        
-        for(tmpTermKey in tmpTermKeys){
+        casrnAndTerm <- paste0(CASRN, "\t", termNameOut)
+        termKeysInner <- lapply(tmpTermKeys, function(tmpTermKey){
           if (tmpTermKey %in% CASRN2TermMatrix[[CASRN]] == TRUE){
-            outputContent	<- paste0(outputContent, "\t1", sep="")
+            return("1")
           } else {
-            outputContent	<- paste0(outputContent, "\t0", sep="")
+            return("0")
           }
-        }	
-        outputContent	<- paste0(outputContent, "\n", sep="")
-      }
+        })
+        return(paste0(casrnAndTerm, "\t", paste0(termKeysInner, collapse="\t")))
+      })
+      outputContent <- paste0(outputContentHeader, "\t", termKeys, "\n", paste0(outputContentMatrix, collapse="\n"))
       
       writeLines(outputContent, OUTFILE) 
       close(OUTFILE)
     }
-  }
+  })
 }	
 
 get_column_index <- function(columnType) {
@@ -679,8 +667,8 @@ create_clustering_images <- function(outDir = "", imageFlags = "-color=BR"){
   perform_hclustering_per_directory (dirName, '', outputBaseDir, dirTypeTag, libDir, cluster_program, row_distance_measure, column_distance_measure, clustering_method, java_flags, output_format, column_size, row_size, show_grid, grid_color, show_row_description, show_row_names, row_to_highlight, row_highlight_color, color_scheme, color_palette, use_color_gradient)
   
   if (is.null(baseSubDirs[1]) == FALSE){
-    #performHclusteringForEach <- mclapply(baseSubDirs, mc.cores=4, mc.silent=FALSE, function(x){
-    performHclusteringForEach <- lapply(baseSubDirs, function(x){
+    performHclusteringForEach <- mclapply(baseSubDirs, mc.cores=4, mc.silent=FALSE, function(x){
+    #performHclusteringForEach <- lapply(baseSubDirs, function(x){
       perform_hclustering_per_directory (paste0(dirName, '/', x, baseShortDirName, '/', sep=""), outputBaseDir, dirTypeTag, libDir, cluster_program, row_distance_measure, column_distance_measure, clustering_method, java_flags, output_format, column_size, row_size, show_grid, grid_color, show_row_description, show_row_names, row_to_highlight, row_highlight_color, color_scheme, color_palette, use_color_gradient)
     })
   }
@@ -703,8 +691,8 @@ perform_hclustering_per_directory <- function(givenDirName, additionalDirName, o
   create_sub_directory(outputDir)
   
   # TODO: Multithread this
-  #generateImagesProcess <-mclapply (gctFiles, function(infile){
-  generateImagesProcess <-lapply (gctFiles, function(infile){
+  generateImagesProcess <-mclapply (gctFiles, function(infile){
+  #generateImagesProcess <-lapply (gctFiles, function(infile){
     tmp1 <- str_split(infile, "/")[[1]]
     tmp1 <- tmp1[nchar(tmp1) > 0]
     tmp2 <- str_split(tmp1[length(tmp1)], ".gct")[[1]]
@@ -911,14 +899,12 @@ process_variable_DAVID_CLUSTER_directories <- function(dirName, outputDir, extTa
   }
   
   # Step1. Get the list of significant terms
-  # TODO: convert to multithreaded
-  #getSigTerms <- mclapply(infiles, function(infile) {
-  
   if(length(infiles) < 1){
     return(FALSE)
   }
   
   getSigTerms <- lapply(infiles, function(infile) {
+  #getSigTerms <- mclapply(infiles, mc.cores=4, mc.silent=FALSE, function(infile){
     tmp1 <- str_split(infile, "/")[[1]]
     tmpNameSplit <- str_split(tmp1[length(tmp1)], "__Cluster.txt")[[1]]
     shortFileBaseName	<- tmpNameSplit[1]
@@ -1581,6 +1567,8 @@ sort_by_file_number <- function(originalArray) {
 ###### Perform enrichment analysis ######
 perform_CASRN_enrichment_analysis <- function(CASRNRef, outputBaseDir, outfileBase, mappedCASRNsFromProcess, funCat2Selected, CASRN2funCatTerm, funCatTerm2CASRN, funCat2CASRNCount, funCat2termCount, funCatTerm2CASRNCount, pvalueThresholdToDisplay, similarityThreshold=0.50, initialGroupMembership, multipleLinkageThreshold, EASEThreshold){
   
+  print(paste0(">> TIME | process start: ", Sys.time()))
+  
   # Define output file names
   outfileChart    <- paste0(outputBaseDir, outfileBase, "__Chart.txt")
   outfileSimple		<- paste0(outputBaseDir, outfileBase, "__ChartSimple.txt")
@@ -1605,10 +1593,54 @@ perform_CASRN_enrichment_analysis <- function(CASRNRef, outputBaseDir, outfileBa
   mappedCASRNs			    <- mappedCASRNsFromProcess # Among the CASRNS, use only those included in the full Tox21 list
   datArray	      <- list()
   annoArray	      <- list()
-  hmt <- 0
   
+  # Populate sigTerm2CASRNMatrix
+  funCat2SelectedProcessed_sigTerm2CASRNMatrix <- lapply(names(funCat2Selected), function(funCat){
+    if (is.null(funCat2Selected[[funCat]]) == FALSE & funCat2Selected[[funCat]] != ""){
+      funCatTerms <- names(funCatTerm2CASRN[[funCat]])
+      tmp_sigTerm2CASRNMatrix <- lapply(funCatTerms, function(term){
+        sigTermResults <- lapply(names(mappedCASRNs), function(CASRN) {
+          if (!is.null(funCatTerm2CASRN[[funCat]][[term]][[CASRN]])){
+            return(1)
+          }
+          return(NULL)
+        })
+        names(sigTermResults) <- lapply(names(mappedCASRNs), function(CASRN) {
+          if (!is.null(funCatTerm2CASRN[[funCat]][[term]][[CASRN]])){
+            return(CASRN)  
+          }
+          return(NULL)
+        })
+        sigTermResults <- sigTermResults[!sapply(sigTermResults, function(x){
+          if(length(x) < 1){
+            return(TRUE)
+          }
+          return(FALSE)
+        })]
+        return(sigTermResults)
+      })
+    }
+    names(tmp_sigTerm2CASRNMatrix) <- lapply(funCatTerms, function(term){
+      return(paste0(funCat, "|", term))
+    })
+    tmp_sigTerm2CASRNMatrix <- tmp_sigTerm2CASRNMatrix[!sapply(tmp_sigTerm2CASRNMatrix, function(x){
+      if(length(x) < 1){
+        return(TRUE)
+      }
+      return(FALSE)
+    })]
+    if(length(tmp_sigTerm2CASRNMatrix) < 1){
+      return(NULL)
+    }
+    return(tmp_sigTerm2CASRNMatrix)
+  })
+  funCat2SelectedProcessed_sigTerm2CASRNMatrix <- funCat2SelectedProcessed_sigTerm2CASRNMatrix[!sapply(funCat2SelectedProcessed_sigTerm2CASRNMatrix, is.null)]
+  sigTerm2CASRNMatrix <- unlist(funCat2SelectedProcessed_sigTerm2CASRNMatrix, recursive=FALSE)
   
-  funCat2SelectedProcessed <- lapply(names(funCat2Selected), function(funCat){
+  print(paste0(">> TIME | sigTerm2CASRNMatrix: ", Sys.time()))
+  
+  # Populate datArray
+  funCat2SelectedProcessed_datArray <- lapply(names(funCat2Selected), function(funCat){
     # Calculate the CASRN counts for the given categories
     if (is.null(funCat2Selected[[funCat]]) == FALSE & funCat2Selected[[funCat]] != ""){
       # Variables
@@ -1643,19 +1675,18 @@ perform_CASRN_enrichment_analysis <- function(CASRNRef, outputBaseDir, outfileBa
           targetCASRNs <- targetCASRNs[!sapply(targetCASRNs, is.null)]
           CASRNCount   <- length(targetCASRNs)
           
-          sigTermResults <- lapply(names(mappedCASRNs), function(CASRN) {
-            #TODO: I think problem here?
-            if (is.null(funCatTerm2CASRN[[funCat]][[term]][[CASRN]]) == FALSE){
-              # Populate sigTerm2CASRNMatrix
-              if(length(sigTerm2CASRNMatrix[[paste0(funCat, "|", term)]]) < 1) {
-                sigTerm2CASRNMatrix[[paste0(funCat, "|", term)]] <<- list()
-              }
-              sigTerm2CASRNMatrix[[paste0(funCat, "|", term)]][CASRN] <<- 1
-            }
-          })
+          #sigTermResults <- lapply(names(mappedCASRNs), function(CASRN) {
+          #  #TODO: I think problem here?
+          #  if (is.null(funCatTerm2CASRN[[funCat]][[term]][[CASRN]]) == FALSE){
+          #    # Populate sigTerm2CASRNMatrix
+          #    if(length(sigTerm2CASRNMatrix[[paste0(funCat, "|", term)]]) < 1) {
+          #      sigTerm2CASRNMatrix[[paste0(funCat, "|", term)]] <<- list()
+          #    }
+          #    sigTerm2CASRNMatrix[[paste0(funCat, "|", term)]][CASRN] <<- 1
+          #  }
+          #})
           targetCASRNsRef   <- targetCASRNs
           targetCASRNCount  <- CASRNCount
-          hmt <<- hmt + 1
           
           # Calculate the EASE score
           if (targetCASRNCount > 1){
@@ -1667,13 +1698,45 @@ perform_CASRN_enrichment_analysis <- function(CASRNRef, outputBaseDir, outfileBa
             # skip any under-represented terms
             foldenrichment <- (targetCASRNCount/length(targetTotalCASRNInFunCatCount))/(n1p/npp)
             pvalue <- 1
-            datArrayLine  <- c(n11, (n1p-n11), (np1-n11), (npp-n1p-np1+n11))
-            tmp_datArrayInner  <- append(tmp_datArrayInner, datArrayLine)
+            datArrayLine  <- list(n11, (n1p-n11), (np1-n11), (npp-n1p-np1+n11))
+            return(datArrayLine)
           }
         }
-        return(tmp_datArrayInner)
+        return(NULL)
       })
-      datArray <<- append(datArray, tmp_datArray)
+      tmp_datArray <- tmp_datArray[!sapply(tmp_datArray, is.null)]
+      return(tmp_datArray)
+    }
+    return(NULL)
+  })
+  funCat2SelectedProcessed_datArray <- funCat2SelectedProcessed_datArray[!sapply(funCat2SelectedProcessed_datArray, is.null)]
+  datArray <- unlist(funCat2SelectedProcessed_datArray, recursive=FALSE)
+  
+  print(paste0(">> TIME | datArray: ", Sys.time()))
+
+  # Populate annoArray
+  funCat2SelectedProcessed_annoArray <- lapply(names(funCat2Selected), function(funCat){
+    # Calculate the CASRN counts for the given categories
+    if (is.null(funCat2Selected[[funCat]]) == FALSE & funCat2Selected[[funCat]] != ""){
+      # Variables
+      
+      localTerms  <- lapply(names(mappedCASRNs), function(CASRN){
+        if (is.null(CASRN2funCatTerm[[CASRN]][[funCat]]) == FALSE){
+          return(names(CASRN2funCatTerm[[CASRN]][[funCat]]))
+        }
+      })
+      localTerms <- localTerms[!sapply(localTerms, is.null)]
+      totalCount <- length(localTerms)
+      targetTotalTermCount          <- length(localTerms)
+      targetTotalCASRNInFunCatCount <- totalCount
+      funCatTerms         <- names(funCatTerm2CASRN[[funCat]]) 
+      localTerm2content	  <- list()
+      localTerm2pvalue	  <- list()
+      localPvalue2term	  <- list()
+      tmp_datArray <- NULL
+      tmp_datArrayInner <- list()
+      tmp_annoArray <- NULL
+      tmp_annoArrayInner <- list()
       
       tmp_annoArray <- lapply(funCatTerms, function(term){
         if (is.null(funCatTerm2CASRN[[funCat]][term]) == FALSE & funCatTerm2CASRN[[funCat]][term] != ""){	
@@ -1710,14 +1773,21 @@ perform_CASRN_enrichment_analysis <- function(CASRNRef, outputBaseDir, outfileBa
                                n1p, npp, (targetCASRNCount/targetTotalCASRNInFunCatCount)/(n1p/npp), 
                                (1-(1-pvalue)^targetTotalTermCount))
             tmp_annoArrayInner <- append(tmp_annoArrayInner, annoArrayLine)
+            return(tmp_annoArrayInner)
           }
         }
-        return(tmp_annoArrayInner)
+        return(NULL)
       })
-      annoArray <<- append(annoArray, tmp_annoArray)
-      
+      tmp_annoArray <- tmp_annoArray[!sapply(tmp_annoArray, is.null)]
+      return(tmp_annoArray)
     }
+    return(NULL)
   })
+  funCat2SelectedProcessed_annoArray <- unlist(funCat2SelectedProcessed_annoArray, recursive=FALSE)
+  funCat2SelectedProcessed_annoArray <- funCat2SelectedProcessed_annoArray[!sapply(funCat2SelectedProcessed_annoArray, is.null)]
+  annoArray <- funCat2SelectedProcessed_annoArray
+  
+  print(paste0(">> TIME | annoArray: ", Sys.time()))
   
   # Save the data file -> create "RINPUT" but as a data frame here
   RINPUT_index1 <- list()
@@ -1734,29 +1804,32 @@ perform_CASRN_enrichment_analysis <- function(CASRNRef, outputBaseDir, outfileBa
   })
   RINPUT_df <- data.frame(X1=unlist(RINPUT_index1), X2=unlist(RINPUT_index2), X3=unlist(RINPUT_index3), X4=unlist(RINPUT_index4))
   
+  print(paste0(">> TIME | RINPUT_df: ", Sys.time()))
+  
   if(nrow(RINPUT_df) < 2){
     # Print out the matrix file
     sortedHeaderTerms <- sigTerm2CASRNMatrix[order(unlist(sigTerm2CASRNMatrix), decreasing = FALSE)]
     # Clean out NA values (TODO: Probably a better way to do this?)
     sortedHeaderTerms <- sortedHeaderTerms[lengths(sortedHeaderTerms)!=0]
     matrixHeader <- paste(names(sortedHeaderTerms), collapse='\t')
-    matrixOutput <- paste0("CASRN\t", matrixHeader, "\n\n")
     matrixPrintToFile <- lapply(names(mappedCASRNs), function(tmpCasrn){	
-      matrixOutput <<- paste(matrixOutput, tmpCasrn, sep="")
       tmpMatrixHeaderProcess <- lapply(names(sortedHeaderTerms), function(tmpMatrixHeader){
-        if (is.null(sigTerm2CASRNMatrix[[tmpMatrixHeader]][[tmpCasrn]]) == FALSE & tmpMatrixHeader != "NA"){
-          matrixOutput <<- paste(matrixOutput,"\t1",sep="")
+        if (!is.null(sigTerm2CASRNMatrix[[tmpMatrixHeader]][[tmpCasrn]]) & tmpMatrixHeader != "NA"){
+          return("1")
         }
         else{
-          matrixOutput <<- paste(matrixOutput,"\t0",sep="")
+          return("0")
         }
       })
-      matrixOutput <<- paste(matrixOutput,"\n",sep="")
+      return(paste0(tmpCasrn, "\t", paste0(tmpMatrixHeaderProcess, collapse="\t")))
     })	
+    matrixOutput <- paste0("CASRN\t", matrixHeader, "\n\n", paste0(matrixPrintToFile, collapse="\n"))
+    
     write(matrixOutput, outfileMatrix, append=TRUE)
+    close(MATRIX)
+    
     close(OUTFILE)
     close(SIMPLE)
-    close(MATRIX)
     # Open and create a blank cluster file
     outfileCluster		<- paste0(outputBaseDir, outfileBase, "__Cluster.txt")
     file.create(outfileCluster)
@@ -1781,7 +1854,7 @@ perform_CASRN_enrichment_analysis <- function(CASRNRef, outputBaseDir, outfileBa
   
   # Remove empty elements in annoArray
   annoArray <- annoArray[lengths(annoArray) > 0L]
-  
+
   #TODO: Make this better
   annoArrayIndex <- 1
   pvalueUpdateProcess <- lapply(annoArray, function(i){
@@ -1799,21 +1872,31 @@ perform_CASRN_enrichment_analysis <- function(CASRNRef, outputBaseDir, outfileBa
     
     annoArrayIndex <<- annoArrayIndex + 1
   })
+  
+  print(paste0(">> TIME | term2Contents/term2Pvalue: ", Sys.time()))
+  
   # Sort by the p-values across multiple funCat
   sortedFunCatTerms <- term2Pvalue[order(unlist(term2Pvalue), decreasing = FALSE)]
   sortedFunCatTermsCount <- length(sortedFunCatTerms)
   simpleFunCatTermCount	<- list()
   funCatSimpleContent <- list()
   
+  # write to OUTFILE
+  writeToChart <- unlist(lapply(names(sortedFunCatTerms), function(funCatTerm){ 
+    if (term2Pvalue[[funCatTerm]] <= pvalueThresholdToDisplay){
+      return(paste0(term2Contents[[funCatTerm]], collapse='\t'))
+    } else {
+      return(NULL)
+    }
+  }))
+  writeToChart <- writeToChart[!sapply(writeToChart, is.null)]
+  write(paste0(writeToChart, collapse="\n"), outfileChart, append=TRUE)
+  
   #TODO: fill this list in a better way vvv
-  sortFunCatProcess <- lapply(names(sortedFunCatTerms), function(funCatTerm){ 
+  sortFunCatProcess <- unlist(lapply(names(sortedFunCatTerms), function(funCatTerm){ 
     if (term2Pvalue[[funCatTerm]] <= pvalueThresholdToDisplay){	
-      # write to OUTFILE
-      outputLine <- paste(term2Contents[[funCatTerm]], collapse='\t')
-      write(outputLine, outfileChart, append=TRUE)
       toSimple <- 0
       tmpSplit <- term2Contents[[funCatTerm]]
-      
       if (tmpSplit[[10]] > 1){
         localFunCat <- get_funCat_from_funCatTerm(funCatTerm)
         if (is.null(simpleFunCatTermCount[[localFunCat]]) == TRUE){
@@ -1826,39 +1909,42 @@ perform_CASRN_enrichment_analysis <- function(CASRNRef, outputBaseDir, outfileBa
         }
         
         if(toSimple > 0){
-          funCatSimpleContent[[localFunCat]] <<- append(funCatSimpleContent[[localFunCat]], paste0(tmpSplit[[1]], "\t", tmpSplit[[2]], "\t", tmpSplit[[3]], "\t", tmpSplit[[4]], "\t", tmpSplit[[5]], "\t", tmpSplit[[10]], "\t", tmpSplit[[12]], "\n"))
+          return(paste0(tmpSplit[[1]], "\t", tmpSplit[[2]], "\t", tmpSplit[[3]], "\t", tmpSplit[[4]], "\t", tmpSplit[[5]], "\t", tmpSplit[[10]], "\t", tmpSplit[[12]]))
+        } else {
+          return(NULL)
         }
       }
     }
-  })
-  
-  writeToSimple <- lapply(funCatSimpleContent, function(funCat){
-    write(funCat, outfileSimple, append=TRUE)
-  })
+  }))
+  sortFunCatProcess <- sortFunCatProcess[!sapply(sortFunCatProcess, is.null)]
+  write(paste0(sortFunCatProcess, collapse="\n"), outfileSimple, append=TRUE)
   close(OUTFILE)
   close(SIMPLE)
+  
+  print(paste0(">> TIME | write to OUTFILE: ", Sys.time()))
   
   # Print out the matrix file
   sortedHeaderTerms <- sigTerm2CASRNMatrix[order(unlist(sigTerm2CASRNMatrix), decreasing = FALSE)]
   # Clean out NA values (TODO: Probably a better way to do this?)
   sortedHeaderTerms <- sortedHeaderTerms[lengths(sortedHeaderTerms)!=0]
   matrixHeader <- paste(names(sortedHeaderTerms), collapse='\t')
-  matrixOutput <- paste0("CASRN\t", matrixHeader, "\n\n")
   matrixPrintToFile <- lapply(names(mappedCASRNs), function(tmpCasrn){	
-    matrixOutput <<- paste(matrixOutput, tmpCasrn, sep="")
     tmpMatrixHeaderProcess <- lapply(names(sortedHeaderTerms), function(tmpMatrixHeader){
-      if (is.null(sigTerm2CASRNMatrix[[tmpMatrixHeader]][[tmpCasrn]]) == FALSE & tmpMatrixHeader != "NA"){
-        matrixOutput <<- paste(matrixOutput,"\t1",sep="")
+      if (!is.null(sigTerm2CASRNMatrix[[tmpMatrixHeader]][[tmpCasrn]]) & tmpMatrixHeader != "NA"){
+        return("1")
       }
       else{
-        matrixOutput <<- paste(matrixOutput,"\t0",sep="")
+        return("0")
       }
     })
-    matrixOutput <<- paste(matrixOutput,"\n",sep="")
+    return(paste0(tmpCasrn, "\t", paste0(tmpMatrixHeaderProcess, collapse="\t")))
   })	
+  matrixOutput <- paste0("CASRN\t", matrixHeader, "\n\n", paste0(matrixPrintToFile, collapse="\n"))
   
   write(matrixOutput, outfileMatrix, append=TRUE)
   close(MATRIX)
+  
+  print(paste0(">> TIME | write to MATRIX: ", Sys.time()))
   
   # ----------------------------------------------------------------------
   #	Perform functional term clustering
@@ -1866,6 +1952,8 @@ perform_CASRN_enrichment_analysis <- function(CASRNRef, outputBaseDir, outfileBa
   # Calculate enrichment score
   df<-read.delim(outfileChart, sep="\t", comment.char="", quote="", stringsAsFactors = FALSE)
   res<-kappa_cluster(x=df, outputBaseDir=outputBaseDir, outfileBase=outfileBase, sortedFunCatTerms=sortedFunCatTerms, sigTerm2CASRNMatrix=sigTerm2CASRNMatrix, sortedFunCatTermsCount=sortedFunCatTermsCount, inputCASRNsCount=inputCASRNsCount, similarityThreshold=similarityThreshold, initialGroupMembership=initialGroupMembership, multipleLinkageThreshold=multipleLinkageThreshold, EASEThreshold=EASEThreshold, term2Pvalue=term2Pvalue, term2Contents=term2Contents)
+  
+  print(paste0(">> TIME | kappa_cluster: ", Sys.time()))
 }
 
 calculate_funcat_mapped_total_CASRN_count <- function(mappedCASRNsRef, funCat, CASRN2funCatTerm){
@@ -2029,6 +2117,9 @@ kappa_cluster <- function(x, deg=NULL, useTerm=FALSE, cutoff=0.5, overlap=0.5, m
       }
     }
   }
+  
+  print(paste0(">> TIME | Kappa: ", Sys.time()))
+  
   # TODO: speed this up somehow... ^^^
   
   # ----------------------------------------------------------------------
@@ -2062,6 +2153,8 @@ kappa_cluster <- function(x, deg=NULL, useTerm=FALSE, cutoff=0.5, overlap=0.5, m
   # remove empty nested lists
   qualifiedSeeds <- lapply(qualifiedSeeds, function(innerList) innerList[sapply(innerList, length) > 0])
   qualifiedSeeds <- qualifiedSeeds[!sapply(qualifiedSeeds, is.null)]
+  
+  print(paste0(">> TIME | Step 2 seeds: ", Sys.time()))
   
   # ----------------------------------------------------------------------
   # 	Step#3: Iteratively merge qualifying seeds
@@ -2100,6 +2193,8 @@ kappa_cluster <- function(x, deg=NULL, useTerm=FALSE, cutoff=0.5, overlap=0.5, m
   })
   finalGroups <- finalGroups[!sapply(finalGroups, is.null)]
   
+  print(paste0(">> TIME | Step 3 final groups: ", Sys.time()))
+  
   # ----------------------------------------------------------------------
   # 	Step#4: Calculate enrichment score and print out the results
   # ----------------------------------------------------------------------
@@ -2123,6 +2218,7 @@ kappa_cluster <- function(x, deg=NULL, useTerm=FALSE, cutoff=0.5, overlap=0.5, m
   names(sortedIndex) <- EASEScore
   sortedIndex <- sortedIndex[order(names(sortedIndex), decreasing=TRUE)]
   
+  #TODO: make more efficient
   writeToCluster <- ""
   if(length(sortedIndex) > 0){
     for(myIndex in 1:length(sortedIndex)) {
@@ -2145,6 +2241,9 @@ kappa_cluster <- function(x, deg=NULL, useTerm=FALSE, cutoff=0.5, overlap=0.5, m
   }
   write(writeToCluster, CLUSTER, append=TRUE)
   close(CLUSTER)
+  
+  print(paste0(">> TIME | Step 4 write to cluster: ", Sys.time()))
+  
   return(1)
 }
 
@@ -2332,23 +2431,21 @@ getAnnotations <- function(enrichmentUUID="-1", annoSelectStr="MESH=checked,PHAR
     matrixHeader <- paste(combinedMatrix, collapse='\t')
     matrixOutput <- paste0("CASRN\t", matrixHeader, "\n\n")
     
-    for (CASRN in inputCASRNs) {
+    matrixOutputFull <- lapply(inputCASRNs, function(CASRN){
       matrixOutput <- paste0(matrixOutput, CASRN, sep="")
-      for (matrixItem in combinedMatrix){
+      matrixOutputLine <- lapply(combinedMatrix, function(matrixItem){
         if (matrixItem %in% individualMatrix[[CASRN]]){
-          matrixOutput <- paste0(matrixOutput, "\t1", sep="")
+          return("1")
         }
         else{
-          matrixOutput <- paste0(matrixOutput, "\t0", sep="")
+          return("0")
         } 
-      }
-      matrixOutput <- paste0(matrixOutput, "\n", sep="")
-    }
-    
+      })
+     return(paste0(CASRN, "\t", paste0(matrixOutputLine, collapse="\t")))
+    })
     # Write to matrix file
-    write(matrixOutput, MATRIX, append=TRUE)
+    write(paste0(matrixOutput, paste0(matrixOutputFull, collapse="\n")), MATRIX, append=TRUE)
     return(TRUE)
-    
   })
   annotationMatrix <- annotationMatrix[!sapply(annotationMatrix, is.null)]
   
