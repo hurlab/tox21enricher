@@ -3747,212 +3747,214 @@ shinyServer(function(input, output, session) {
     
     # Observe network edge being clicked
     observeEvent(input$selectEdge, {
-      # Get from node (2), to node (3), and chart - chart or cluster (4)
-      tmpSplit <- unlist(str_split(input$selectEdge, "__"))
-      tmpFrom <- unlist(str_split(tmpSplit[2], "@"))
-      tmpTo <- unlist(str_split(tmpSplit[3], "@"))
-      networkMode <- tmpSplit[4]
-      termFrom <- tmpFrom[1]
-      classFrom <- tmpFrom[2]
-      termTo <- tmpTo[1]
-      classTo <- tmpTo[2]
-
-      # Get overlapping chemicals
-      resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="getNodeChemicals", query=list( termFrom=termFrom, termTo=termTo, classFrom=classFrom, classTo=classTo ))
-      if(resp$status_code != 200){
-        output[["vennChart"]] <- renderplot({
-        #  HTML("<p class=\"text-danger\"><b>Error:</b> An error occurred while fetching the chemicals.</p>")
-        })
-        output[["vennCluster"]] <- renderplot({
+      if(length(input$selectEdge) == 1) { #if selecting edge
+        # Get from node (2), to node (3), and chart - chart or cluster (4)
+        tmpSplit <- unlist(str_split(input$selectEdge, "__"))
+        tmpFrom <- unlist(str_split(tmpSplit[2], "@"))
+        tmpTo <- unlist(str_split(tmpSplit[3], "@"))
+        networkMode <- tmpSplit[4]
+        termFrom <- tmpFrom[1]
+        classFrom <- tmpFrom[2]
+        termTo <- tmpTo[1]
+        classTo <- tmpTo[2]
+  
+        # Get overlapping chemicals
+        resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="getNodeChemicals", query=list( termFrom=termFrom, termTo=termTo, classFrom=classFrom, classTo=classTo ))
+        if(resp$status_code != 200){
+          output[["vennChart"]] <- renderplot({
           #  HTML("<p class=\"text-danger\"><b>Error:</b> An error occurred while fetching the chemicals.</p>")
-        })
-      }
-      casrnsFrom <- unlist(unname(unlist(content(resp)["casrnsFrom"], recursive=FALSE)))
-      casrnsTo <- unlist(unname(unlist(content(resp)["casrnsTo"], recursive=FALSE)))
-      casrnsShared <- intersect(casrnsFrom, casrnsTo)
-      
-      if(length(casrnsShared) < 1){
-        casrnsShared <- "No shared chemicals."
-      }
-      
-      # Set venn diagram color to match theme settings
-      vennColor <- "black"
-      if(theme$textcolor == "#FFFFFF"){
-        vennColor <- "white"
-      } else {
+          })
+          output[["vennCluster"]] <- renderplot({
+            #  HTML("<p class=\"text-danger\"><b>Error:</b> An error occurred while fetching the chemicals.</p>")
+          })
+        }
+        casrnsFrom <- unlist(unname(unlist(content(resp)["casrnsFrom"], recursive=FALSE)))
+        casrnsTo <- unlist(unname(unlist(content(resp)["casrnsTo"], recursive=FALSE)))
+        casrnsShared <- intersect(casrnsFrom, casrnsTo)
+        
+        if(length(casrnsShared) < 1){
+          casrnsShared <- "No shared chemicals."
+        }
+        
+        # Set venn diagram color to match theme settings
         vennColor <- "black"
-      }
-      
-      # Get annotation colors
-      classColors <- generateAnnoClassColors()
-      classColorsFrom <- classColors[[classFrom]]
-      classColorsTo <- classColors[[classTo]]
-
-      colorFrom <- rgb(classColorsFrom[1], classColorsFrom[2], classColorsFrom[3], maxColorValue=255)
-      colorTo <- rgb(classColorsTo[1], classColorsTo[2], classColorsTo[3], maxColorValue=255)
-      
-      if(networkMode == "chart"){
-        vennList <- list(casrnsFrom, casrnsTo)
-        names(vennList) <- list(paste0(termFrom) , paste0(termTo))
-        # Render venn diagram
-        output[["vennChart"]] <- renderPlot(
-          ggVennDiagram(vennList, color=vennColor, lwd=0.8, lty=1) + 
-            #geom_sf(color=vennColor) + 
-            #scale_fill_gradient(low=colorFrom, high=colorTo) +
-            theme(legend.position="none"),
-          width="auto",
-          height="auto"
-        )
+        if(theme$textcolor == "#FFFFFF"){
+          vennColor <- "white"
+        } else {
+          vennColor <- "black"
+        }
         
-        # Render buttons for venn diagram
-        output[["vennChartButtons"]] <- renderUI({
-          fluidRow(
-            column(12,
-                   actionButton(inputId="vennFromButtonChart", label=HTML(paste0("View chemicals for<br/>", classFrom, " |<br/>", termFrom)) )      
-            ),
-            column(12,
-                   actionButton(inputId="vennToButtonChart", label=HTML(paste0("View chemicals for<br/>", classTo, " |<br/>", termTo)) )
-            ),
-            column(12,
-                   actionButton(inputId="vennSharedButtonChart", label="View shared chemicals")
-            )
+        # Get annotation colors
+        classColors <- generateAnnoClassColors()
+        classColorsFrom <- classColors[[classFrom]]
+        classColorsTo <- classColors[[classTo]]
+  
+        colorFrom <- rgb(classColorsFrom[1], classColorsFrom[2], classColorsFrom[3], maxColorValue=255)
+        colorTo <- rgb(classColorsTo[1], classColorsTo[2], classColorsTo[3], maxColorValue=255)
+        
+        if(networkMode == "chart"){
+          vennList <- list(casrnsFrom, casrnsTo)
+          names(vennList) <- list(paste0(termFrom) , paste0(termTo))
+          # Render venn diagram
+          output[["vennChart"]] <- renderPlot(
+            ggVennDiagram(vennList, color=vennColor, lwd=0.8, lty=1) + 
+              #geom_sf(color=vennColor) + 
+              #scale_fill_gradient(low=colorFrom, high=colorTo) +
+              theme(legend.position="none"),
+            width="auto",
+            height="auto"
           )
-        })
-        # Create observers for Venn Diagram buttons
-        observeEvent(input$vennFromButtonChart, {
-          showModal(
-            modalDialog(
-              title=paste0("Chemicals for ", termFrom),
-              footer=actionButton(inputId="vennFromButtonCloseChart", label="Close"),
-              size="l",
-              fluidRow(
-                column(12, 
-                       HTML(paste0(casrnsFrom, collapse="<br/>"))       
+          
+          # Render buttons for venn diagram
+          output[["vennChartButtons"]] <- renderUI({
+            fluidRow(
+              column(12,
+                     actionButton(inputId="vennFromButtonChart", label=HTML(paste0("View chemicals for<br/>", classFrom, " |<br/>", termFrom)) )      
+              ),
+              column(12,
+                     actionButton(inputId="vennToButtonChart", label=HTML(paste0("View chemicals for<br/>", classTo, " |<br/>", termTo)) )
+              ),
+              column(12,
+                     actionButton(inputId="vennSharedButtonChart", label="View shared chemicals")
+              )
+            )
+          })
+          # Create observers for Venn Diagram buttons
+          observeEvent(input$vennFromButtonChart, {
+            showModal(
+              modalDialog(
+                title=paste0("Chemicals for ", termFrom),
+                footer=actionButton(inputId="vennFromButtonCloseChart", label="Close"),
+                size="l",
+                fluidRow(
+                  column(12, 
+                         HTML(paste0(casrnsFrom, collapse="<br/>"))       
+                  )
                 )
               )
             )
-          )
-        })
-        observeEvent(input$vennFromButtonCloseChart, {
-          removeModal()
-        })
-        
-        observeEvent(input$vennToButtonChart, {
-          showModal(
-            modalDialog(
-              title=paste0("Chemicals for ", termTo),
-              footer=actionButton(inputId="vennToButtonCloseChart", label="Close"),
-              size="l",
-              fluidRow(
-                column(12, 
-                       HTML(paste0(casrnsTo, collapse="<br/>"))       
+          })
+          observeEvent(input$vennFromButtonCloseChart, {
+            removeModal()
+          })
+          
+          observeEvent(input$vennToButtonChart, {
+            showModal(
+              modalDialog(
+                title=paste0("Chemicals for ", termTo),
+                footer=actionButton(inputId="vennToButtonCloseChart", label="Close"),
+                size="l",
+                fluidRow(
+                  column(12, 
+                         HTML(paste0(casrnsTo, collapse="<br/>"))       
+                  )
                 )
               )
             )
-          )
-        })
-        observeEvent(input$vennToButtonCloseChart, {
-          removeModal()
-        })
-        
-        observeEvent(input$vennSharedButtonChart, {
-          showModal(
-            modalDialog(
-              title=paste0("Shared chemicals"),
-              footer=actionButton(inputId="vennSharedButtonCloseChart", label="Close"),
-              size="l",
-              fluidRow(
-                column(12, 
-                       HTML(paste0(casrnsShared, collapse="<br/>"))       
+          })
+          observeEvent(input$vennToButtonCloseChart, {
+            removeModal()
+          })
+          
+          observeEvent(input$vennSharedButtonChart, {
+            showModal(
+              modalDialog(
+                title=paste0("Shared chemicals"),
+                footer=actionButton(inputId="vennSharedButtonCloseChart", label="Close"),
+                size="l",
+                fluidRow(
+                  column(12, 
+                         HTML(paste0(casrnsShared, collapse="<br/>"))       
+                  )
                 )
               )
             )
+          })
+          observeEvent(input$vennSharedButtonCloseChart, {
+            removeModal()
+          })
+          
+        } else { # Cluster
+          vennList <- list(casrnsFrom, casrnsTo)
+          names(vennList) <- list(paste0(termFrom) , paste0(termTo))
+          # Render venn diagram
+          output[["vennCluster"]] <- renderPlot(
+            ggVennDiagram(vennList, color=vennColor, lwd=0.8, lty=1) + 
+              theme(legend.position="none"),
+            width="auto",
+            height="auto"
           )
-        })
-        observeEvent(input$vennSharedButtonCloseChart, {
-          removeModal()
-        })
-        
-      } else { # Cluster
-        vennList <- list(casrnsFrom, casrnsTo)
-        names(vennList) <- list(paste0(termFrom) , paste0(termTo))
-        # Render venn diagram
-        output[["vennCluster"]] <- renderPlot(
-          ggVennDiagram(vennList, color=vennColor, lwd=0.8, lty=1) + 
-            theme(legend.position="none"),
-          width="auto",
-          height="auto"
-        )
-        
-        # Render buttons for venn diagram
-        output[["vennClusterButtons"]] <- renderUI({
-          fluidRow(
-            column(12,
-                   actionButton(inputId="vennFromButtonCluster", label=HTML(paste0("View chemicals for<br/>", classFrom, " |<br/>", termFrom)) )      
-            ),
-            column(12,
-                   actionButton(inputId="vennToButtonCluster", label=HTML(paste0("View chemicals for<br/>", classTo, " |<br/>", termTo)) )
-            ),
-            column(12,
-                   actionButton(inputId="vennSharedButtonCluster", label="View shared chemicals")
+          
+          # Render buttons for venn diagram
+          output[["vennClusterButtons"]] <- renderUI({
+            fluidRow(
+              column(12,
+                     actionButton(inputId="vennFromButtonCluster", label=HTML(paste0("View chemicals for<br/>", classFrom, " |<br/>", termFrom)) )      
+              ),
+              column(12,
+                     actionButton(inputId="vennToButtonCluster", label=HTML(paste0("View chemicals for<br/>", classTo, " |<br/>", termTo)) )
+              ),
+              column(12,
+                     actionButton(inputId="vennSharedButtonCluster", label="View shared chemicals")
+              )
             )
-          )
-        })
-        # Create observers for Venn Diagram buttons
-        observeEvent(input$vennFromButtonCluster, {
-          showModal(
-            modalDialog(
-              title=paste0("Chemicals for ", termFrom),
-              footer=actionButton(inputId="vennFromButtonCloseCluster", label="Close"),
-              size="l",
-              fluidRow(
-                column(12, 
-                       HTML(paste0(casrnsFrom, collapse="<br/>"))       
+          })
+          # Create observers for Venn Diagram buttons
+          observeEvent(input$vennFromButtonCluster, {
+            showModal(
+              modalDialog(
+                title=paste0("Chemicals for ", termFrom),
+                footer=actionButton(inputId="vennFromButtonCloseCluster", label="Close"),
+                size="l",
+                fluidRow(
+                  column(12, 
+                         HTML(paste0(casrnsFrom, collapse="<br/>"))       
+                  )
                 )
               )
             )
-          )
-        })
-        observeEvent(input$vennFromButtonCloseCluster, {
-          removeModal()
-        })
-        
-        observeEvent(input$vennToButtonCluster, {
-          showModal(
-            modalDialog(
-              title=paste0("Chemicals for ", termTo),
-              footer=actionButton(inputId="vennToButtonCloseCluster", label="Close"),
-              size="l",
-              fluidRow(
-                column(12, 
-                       HTML(paste0(casrnsTo, collapse="<br/>"))       
+          })
+          observeEvent(input$vennFromButtonCloseCluster, {
+            removeModal()
+          })
+          
+          observeEvent(input$vennToButtonCluster, {
+            showModal(
+              modalDialog(
+                title=paste0("Chemicals for ", termTo),
+                footer=actionButton(inputId="vennToButtonCloseCluster", label="Close"),
+                size="l",
+                fluidRow(
+                  column(12, 
+                         HTML(paste0(casrnsTo, collapse="<br/>"))       
+                  )
                 )
               )
             )
-          )
-        })
-        observeEvent(input$vennToButtonCloseCluster, {
-          removeModal()
-        })
-        
-        observeEvent(input$vennSharedButtonCluster, {
-          showModal(
-            modalDialog(
-              title=paste0("Shared chemicals"),
-              footer=actionButton(inputId="vennSharedButtonCloseCluster", label="Close"),
-              size="l",
-              fluidRow(
-                column(12, 
-                       HTML(paste0(casrnsShared, collapse="<br/>"))       
+          })
+          observeEvent(input$vennToButtonCloseCluster, {
+            removeModal()
+          })
+          
+          observeEvent(input$vennSharedButtonCluster, {
+            showModal(
+              modalDialog(
+                title=paste0("Shared chemicals"),
+                footer=actionButton(inputId="vennSharedButtonCloseCluster", label="Close"),
+                size="l",
+                fluidRow(
+                  column(12, 
+                         HTML(paste0(casrnsShared, collapse="<br/>"))       
+                  )
                 )
               )
             )
-          )
-        })
-        observeEvent(input$vennSharedButtonCloseCluster, {
-          removeModal()
-        })
-        
+          })
+          observeEvent(input$vennSharedButtonCloseCluster, {
+            removeModal()
+          })
+          
+        }
       }
     })
     
