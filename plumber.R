@@ -884,6 +884,48 @@ generateNetwork <- function(res, req, transactionId, cutoff, mode, input, qval){
   #})
 }
 
+#* Get lists of chemicals that are associated with the annotations displayed in the nodes in the network (internal use only)
+#* @param termFrom  
+#* @param termTo
+#* @param classFrom
+#* @param classTo
+#* @get /getNodeChemicals
+getNodeChemicals <- function(res, req, termFrom, termTo, classFrom, classTo){
+  # Connect to db
+  poolNode <- dbPool(
+    drv = dbDriver("PostgreSQL", max.con = 100),
+    dbname = tox21config$database,
+    host = tox21config$host,
+    user = tox21config$uid,
+    password = tox21config$pwd,
+    idleTimeout = 3600000
+  )
+  
+  # Get internal ID number of From annotation
+  nodeQuery <- sqlInterpolate(ANSI(), paste0( "SELECT id FROM annotation_matrix_terms WHERE term='", classFrom, "__", termFrom, "';" ), id = "getFromID")
+  nodeOutp <- dbGetQuery(poolNode, nodeQuery)
+  fromID <- nodeOutp
+  
+  # Get internal ID number of To annotation
+  nodeQuery <- sqlInterpolate(ANSI(), paste0( "SELECT id FROM annotation_matrix_terms WHERE term='", classTo, "__", termTo, "';" ), id = "getToID")
+  nodeOutp <- dbGetQuery(poolNode, nodeQuery)
+  toID <- nodeOutp
+    
+  # Get list of casrns associated with From annotation
+  nodeQuery <- sqlInterpolate(ANSI(), paste0( "SELECT casrn FROM annotation_matrix WHERE annotation LIKE '%", fromID, "%';" ), id = "getCasrnsFrom")
+  nodeOutp <- dbGetQuery(poolNode, nodeQuery)
+  casrnsFrom <- nodeOutp
+  
+  # Get list of casrns associated with To annotation
+  nodeQuery <- sqlInterpolate(ANSI(), paste0( "SELECT casrn FROM annotation_matrix WHERE annotation LIKE '%", toID, "%';" ), id = "getCasrnsTo")
+  nodeOutp <- dbGetQuery(poolNode, nodeQuery)
+  casrnsTo <- nodeOutp
+
+  # Close pool
+  poolClose(poolNode)
+  return(list(casrnsFrom=casrnsFrom[, "casrn"], casrnsTo=casrnsTo[, "casrn"]))
+}
+
 ########################################################################################################################################################################################################################################################
 
 ### SECTION 6: API CLIENT ENDPOINTS FOR OPERATING IN NO-GUI MODE ###

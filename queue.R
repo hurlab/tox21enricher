@@ -7,6 +7,7 @@ library(parallel)
 library(plyr)
 library(pool)
 library(promises)
+library(purrr)
 library(rjson)
 library(RPostgreSQL)
 library(stringr)
@@ -1143,7 +1144,6 @@ process_variable_DAVID_CLUSTER_directories <- function(dirName, outputDir, extTa
   file.create(paste0(outputDir, summaryFileNameBase, "__ValueMatrix.gct"))
   OUTFILE <- file(paste0(outputDir, summaryFileNameBase, "__ValueMatrix.gct"))
   
-  #headerLine	<- paste0(INFILE[1,], collapse="\t")
   headerLine	<- paste0(colnames(INFILE), collapse="\t")
   headerSplit	<- str_split(headerLine, "\t")[[1]]
   sampleCnt	  <- length(headerSplit) - 3
@@ -1595,7 +1595,8 @@ perform_CASRN_enrichment_analysis <- function(CASRNRef, outputBaseDir, outfileBa
   annoArray	      <- list()
   
   # Populate sigTerm2CASRNMatrix
-  funCat2SelectedProcessed_sigTerm2CASRNMatrix <- lapply(names(funCat2Selected), function(funCat){
+  #funCat2SelectedProcessed_sigTerm2CASRNMatrix <- lapply(names(funCat2Selected), function(funCat){
+  funCat2SelectedProcessed_sigTerm2CASRNMatrix <- mclapply(names(funCat2Selected), mc.cores=4, mc.silent=FALSE, function(funCat){
     if (is.null(funCat2Selected[[funCat]]) == FALSE & funCat2Selected[[funCat]] != ""){
       funCatTerms <- names(funCatTerm2CASRN[[funCat]])
       tmp_sigTerm2CASRNMatrix <- lapply(funCatTerms, function(term){
@@ -1640,7 +1641,8 @@ perform_CASRN_enrichment_analysis <- function(CASRNRef, outputBaseDir, outfileBa
   print(paste0(">> TIME | sigTerm2CASRNMatrix: ", Sys.time()))
   
   # Populate datArray
-  funCat2SelectedProcessed_datArray <- lapply(names(funCat2Selected), function(funCat){
+  #funCat2SelectedProcessed_datArray <- lapply(names(funCat2Selected), function(funCat){
+  funCat2SelectedProcessed_datArray <- mclapply(names(funCat2Selected), mc.cores=4, mc.silent=FALSE, function(funCat){
     # Calculate the CASRN counts for the given categories
     if (is.null(funCat2Selected[[funCat]]) == FALSE & funCat2Selected[[funCat]] != ""){
       # Variables
@@ -1715,7 +1717,8 @@ perform_CASRN_enrichment_analysis <- function(CASRNRef, outputBaseDir, outfileBa
   print(paste0(">> TIME | datArray: ", Sys.time()))
 
   # Populate annoArray
-  funCat2SelectedProcessed_annoArray <- lapply(names(funCat2Selected), function(funCat){
+  #funCat2SelectedProcessed_annoArray <- lapply(names(funCat2Selected), function(funCat){
+  funCat2SelectedProcessed_annoArray <- mclapply(names(funCat2Selected), mc.cores=4, mc.silent=FALSE, function(funCat){
     # Calculate the CASRN counts for the given categories
     if (is.null(funCat2Selected[[funCat]]) == FALSE & funCat2Selected[[funCat]] != ""){
       # Variables
@@ -2061,15 +2064,49 @@ kappa_cluster <- function(x, deg=NULL, useTerm=FALSE, cutoff=0.5, overlap=0.5, m
   totalMappedCASRNIDCount	<- length(mappedCASRNIDs)
   
   # Calculate kappa score for each term pair
-  termpair2kappa						        <- list()
-  termpair2kappaOverThresholdCount	<- list()
-  termpair2kappaOverThreshold			  <- list()
+  termpair2kappaOverThreshold <- list()
+  #termpair2kappaOverThreshold <- NULL
   
   # TODO: Clean this up earlier but this should clean things up from this point and down
   sortedFunCatTerms <- names(sortedFunCatTerms)
-
-  for (i in (1:(sortedFunCatTermsCount-1))) {
-    for (j in ((i+1):(sortedFunCatTermsCount))) {
+  
+  #lapply ((1:(sortedFunCatTermsCount-1)), function(i) {
+  #  lapply (((i+1):(sortedFunCatTermsCount)), function(j) {
+  #    #calculate_kappa_statistics 
+  #    term1term2		<- 0
+  #    term1only			<- 0
+  #    term2only			<- 0
+  #    term1term2Non	<- 0
+  
+  #    posTerm1Total	<- posTermCASRNCount[[sortedFunCatTerms[i]]]
+  #    posTerm2Total	<- posTermCASRNCount[[sortedFunCatTerms[j]]]
+  #    negTerm1Total	<- inputCASRNsCount - posTerm1Total			# note that the total is inputCASRNsCount not the mapped total
+  #    negTerm2Total	<- inputCASRNsCount - posTerm2Total			# note that the total is inputCASRNsCount not the mapped total
+  
+  #    # Get number of chemicals that are shared or not for term1 and term2
+  #    sharedTerms <- intersect(names(sigTerm2CASRNMatrix[[sortedFunCatTerms[i]]]), names(sigTerm2CASRNMatrix[[sortedFunCatTerms[j]]]))
+  #    term1term2		<- length(sharedTerms)
+  #    term1only			<- length(names(sigTerm2CASRNMatrix[[sortedFunCatTerms[i]]])) - length(sharedTerms)
+  #    term2only			<- length(names(sigTerm2CASRNMatrix[[sortedFunCatTerms[j]]])) - length(sharedTerms)
+  #    term1term2Non	<- inputCASRNsCount - term1term2 - term1only - term2only
+  
+  #    # Calculate the kappa score 
+  #    # http://david.abcc.ncifcrf.gov/content.jsp?file=linear_search.html
+  #    Oab <- (term1term2 + term1term2Non)/inputCASRNsCount
+  #    Aab <- ((posTerm1Total * posTerm2Total) + (negTerm1Total * negTerm2Total))/(inputCASRNsCount * inputCASRNsCount)
+  
+  #    if (Aab != 1) {
+  #      Kappa	<- as.double(sprintf("%.2f", (Oab - Aab)/(1 - Aab)))
+  #      if (Kappa > similarityThreshold) {
+  #        termpair2kappaOverThreshold[[sortedFunCatTerms[i]]][[sortedFunCatTerms[j]]] <<- 1
+  #        termpair2kappaOverThreshold[[sortedFunCatTerms[j]]][[sortedFunCatTerms[i]]] <<- 1
+  #      }
+  #    }
+  #  })
+  #})
+  
+  termpair2kappaOverThreshold <- mclapply ((1:(sortedFunCatTermsCount-1)), mc.cores=4, mc.silent=FALSE, function(i) {
+    termpair2kappaOverThresholdInner <- lapply (((i+1):(sortedFunCatTermsCount)), function(j) {
       #calculate_kappa_statistics 
       term1term2		<- 0
       term1only			<- 0
@@ -2090,61 +2127,66 @@ kappa_cluster <- function(x, deg=NULL, useTerm=FALSE, cutoff=0.5, overlap=0.5, m
       
       # Calculate the kappa score 
       # http://david.abcc.ncifcrf.gov/content.jsp?file=linear_search.html
-      Oab					    <- (term1term2 + term1term2Non)/inputCASRNsCount
-      Aab					    <- ((posTerm1Total * posTerm2Total) + (negTerm1Total * negTerm2Total))/(inputCASRNsCount * inputCASRNsCount)
+      Oab <- (term1term2 + term1term2Non)/inputCASRNsCount
+      Aab <- ((posTerm1Total * posTerm2Total) + (negTerm1Total * negTerm2Total))/(inputCASRNsCount * inputCASRNsCount)
       
-      if (Aab == 1) {
-        # Do nothing
-      } else {
+      if (Aab != 1) {
         Kappa	<- as.double(sprintf("%.2f", (Oab - Aab)/(1 - Aab)))
-        termpair2kappa[[sortedFunCatTerms[i]]][sortedFunCatTerms[j]] <- Kappa
-        termpair2kappa[[sortedFunCatTerms[j]]][sortedFunCatTerms[i]] <- Kappa
-        
         if (Kappa > similarityThreshold) {
-          if(is.null(termpair2kappaOverThresholdCount[[sortedFunCatTerms[i]]]) == TRUE){
-            termpair2kappaOverThresholdCount[[sortedFunCatTerms[i]]] <- 1
-          } else {
-            termpair2kappaOverThresholdCount[[sortedFunCatTerms[i]]] <- termpair2kappaOverThresholdCount[[sortedFunCatTerms[i]]] + 1
-          }
-          if(is.null(termpair2kappaOverThresholdCount[[sortedFunCatTerms[j]]]) == TRUE){
-            termpair2kappaOverThresholdCount[[sortedFunCatTerms[j]]] <- 1
-          } else {
-            termpair2kappaOverThresholdCount[[sortedFunCatTerms[j]]] <- termpair2kappaOverThresholdCount[[sortedFunCatTerms[j]]] + 1
-          }
-          termpair2kappaOverThreshold[[sortedFunCatTerms[i]]][[sortedFunCatTerms[j]]] <- 1
-          termpair2kappaOverThreshold[[sortedFunCatTerms[j]]][[sortedFunCatTerms[i]]] <- 1
+          #termpair2kappaOverThreshold[[sortedFunCatTerms[i]]][[sortedFunCatTerms[j]]] <<- 1
+          #termpair2kappaOverThreshold[[sortedFunCatTerms[j]]][[sortedFunCatTerms[i]]] <<- 1
+          iTerm <- paste0(sortedFunCatTerms[i])
+          jTerm <- paste0(sortedFunCatTerms[j])
+          ijFrame <- data.frame(iTerm=paste0(jTerm), jTerm=paste0(iTerm), stringsAsFactors=FALSE)
+          colnames(ijFrame) <- list(iTerm, jTerm)
+          return(ijFrame)
         }
       }
+      return(NULL)
+    })
+    termpair2kappaOverThresholdInner <- termpair2kappaOverThresholdInner[!sapply(termpair2kappaOverThresholdInner, is.null)]
+    if(length(termpair2kappaOverThresholdInner) > 0){
+      termpair2kappaOverThresholdInner <- unlist(termpair2kappaOverThresholdInner, recursive=FALSE)
+      return(termpair2kappaOverThresholdInner)
     }
-  }
-  
-  print(paste0(">> TIME | Kappa: ", Sys.time()))
-  
-  # TODO: speed this up somehow... ^^^
-  
+    return(NULL)
+  })
+  termpair2kappaOverThreshold <- unlist( termpair2kappaOverThreshold[!sapply(termpair2kappaOverThreshold, is.null)], recursive=FALSE )
+  termpair2kappaOverThreshold <- tapply(unlist(termpair2kappaOverThreshold, use.names=FALSE), rep(names(termpair2kappaOverThreshold), lengths(termpair2kappaOverThreshold)), FUN=c)
+
   # ----------------------------------------------------------------------
   # 	Step#2: Create qualified initial seeding groups
   # ----------------------------------------------------------------------
   #	Each term could form a initial seeding group (initial seeds) 
   #   as long as it has close relationships (kappa > 0.35 or any designated number) 
   #   with more than > 2 or any designated number of other members. 
-
+  term2sToPass <- NULL
   if(length(termpair2kappaOverThreshold) > 0){
-    termpair2kappaOverThreshold <- termpair2kappaOverThreshold[order(unlist(termpair2kappaOverThreshold), decreasing = TRUE)]
+    #termpair2kappaOverThreshold <- termpair2kappaOverThreshold[order(unlist(termpair2kappaOverThreshold), decreasing = TRUE)]
+    termpair2kappaOverThreshold <- termpair2kappaOverThreshold[order(names(termpair2kappaOverThreshold), decreasing = TRUE)]
+
+    # Prepend sortedFunCatTerms to each element in list
+    term2sToPass <- lapply((1:sortedFunCatTermsCount), function(i){
+      #return( append(names(termpair2kappaOverThreshold[[sortedFunCatTerms[i]]]), sortedFunCatTerms[i], after=0) )
+      return( append(termpair2kappaOverThreshold[[sortedFunCatTerms[i]]], sortedFunCatTerms[i], after=0) )
+    })
+    #names(term2sToPass) <- lapply((1:sortedFunCatTermsCount), function(i){
+    names(term2sToPass) <- mclapply((1:sortedFunCatTermsCount), mc.cores=4, mc.silent=FALSE, function(i){
+      return( sortedFunCatTerms[i] )
+    })
   }
-  
-  qualifiedSeeds <- lapply((1:sortedFunCatTermsCount), function(i){
-    # Seed condition#1: initial group membership
-    if (is.null(termpair2kappaOverThresholdCount[[sortedFunCatTerms[i]]]) == FALSE) {
-      if(termpair2kappaOverThresholdCount[[sortedFunCatTerms[i]]] >= (initialGroupMembership-1)) {
-        # Seed condition#2: majority of the members 
-        results_calculate_percentage_of_membership_over_threshold <- calculate_percentage_of_membership_over_threshold (termpair2kappaOverThreshold, sortedFunCatTerms[i])
-        over_percentage <- results_calculate_percentage_of_membership_over_threshold["overPercentage"]
-        term2sRef <- results_calculate_percentage_of_membership_over_threshold["term2s"]
-        if (as.double(unlist(over_percentage)) > as.double(multipleLinkageThreshold)) {
-          # this seed group is qualified
-          return(unlist(unname(term2sRef)))
-        }
+
+  #qualifiedSeeds <- lapply((1:sortedFunCatTermsCount), function(i){
+  qualifiedSeeds <- mclapply((1:sortedFunCatTermsCount), mc.cores=4, mc.silent=FALSE, function(i){
+    # Seed condition #1: initial group membership
+    if (length(termpair2kappaOverThreshold[[sortedFunCatTerms[i]]]) > 0 & length(termpair2kappaOverThreshold[[sortedFunCatTerms[i]]]) >= (initialGroupMembership-1)) {
+      # Seed condition #2: majority of the members 
+      results_calculate_percentage_of_membership_over_threshold <- calculate_percentage_of_membership_over_threshold (termpair2kappaOverThreshold, term2sToPass[[sortedFunCatTerms[i]]])
+      over_percentage <- unlist(results_calculate_percentage_of_membership_over_threshold["overPercentage"])
+      term2sRef <- results_calculate_percentage_of_membership_over_threshold["term2s"]
+      if (as.double(over_percentage) > as.double(multipleLinkageThreshold)) {
+        # this seed group is qualified
+        return(unlist(unname(term2sRef)))
       }
     }
     return(NULL)
@@ -2167,7 +2209,6 @@ kappa_cluster <- function(x, deg=NULL, useTerm=FALSE, cutoff=0.5, overlap=0.5, m
     currentSeedRef	 <- remainingSeeds[[1]]
     remainingSeeds	 <- remainingSeeds[-1]
     newSeeds <- list()
-    
     while(TRUE) {
       results_get_the_best_seed <- get_the_best_seed (currentSeedRef, remainingSeeds, newSeeds, multipleLinkageThreshold, finalGroupsIndex)
       # update the current reference seed ref with new seeds
@@ -2218,30 +2259,24 @@ kappa_cluster <- function(x, deg=NULL, useTerm=FALSE, cutoff=0.5, overlap=0.5, m
   names(sortedIndex) <- EASEScore
   sortedIndex <- sortedIndex[order(names(sortedIndex), decreasing=TRUE)]
   
-  #TODO: make more efficient
-  #writeToCluster <- ""
   writeToClusterFinal <- NULL
   if(length(sortedIndex) > 0){
-    #for(myIndex in 1:length(sortedIndex)) {
     writeToClusterFinal <- lapply(1:length(sortedIndex), function(myIndex) {
       if(length(finalGroups[[myIndex]] > 0)){
-        #writeToCluster <- paste0(writeToCluster, "Annotation Cluster ", (clusterNumber+1), "\tEnrichment Score: ", names(sortedIndex)[myIndex], "\n", sep="")
         writeToCluster <- paste0("Annotation Cluster ", (clusterNumber+1), "\tEnrichment Score: ", names(sortedIndex)[myIndex], "\n", clusterHeader)
         clusterNumber <<- clusterNumber + 1
-        #writeToCluster <- paste0(writeToCluster, clusterHeader)
         # sort terms again by p-value
         finalGroups2Pvalue <- lapply(sortedIndex[[myIndex]], function(term){
           return(term2Pvalue[[term]])
         })
         finalGroups2Pvalue <- unlist(finalGroups2Pvalue, recursive=FALSE)
+        
         names(finalGroups2Pvalue) <- sortedIndex[[myIndex]]
         sortedFunCatTerms <- finalGroups2Pvalue[order(unlist(finalGroups2Pvalue), decreasing = FALSE)]
         writeTermsToCluster <- lapply(names(sortedFunCatTerms), function(myTerm) return(paste0(term2Contents[[myTerm]], collapse="\t")))
         writeToCluster <- paste0(writeToCluster, paste0(writeTermsToCluster, collapse="\n"), "\n")
-        #writeToCluster <- paste0(writeToCluster, "\n\n")
         return(writeToCluster)
       }
-    #}
     })
   }
   writeToClusterFinal <- paste0(paste0(writeToClusterFinal, collapse="\n"), "\n")
@@ -2259,10 +2294,14 @@ calculate_Enrichment_Score <- function(tmp_groupRef, term2PvalueRef) {
   groupRef <- tmp_groupRef[[1]]
   for (termTmp in groupRef) {
     term <- termTmp[[1]]
-    if (term2PvalueRef[[term]][[1]] == 0) {
+    if(is.null(term2PvalueRef[[term]][[1]])) {
       EASESum <- EASESum +  16
     } else {
-      EASESum <- EASESum + -log(term2PvalueRef[[term]][[1]])/log(10)
+      if (term2PvalueRef[[term]][[1]] == 0) {
+          EASESum <- EASESum +  16
+      } else {
+        EASESum <- EASESum + -log(term2PvalueRef[[term]][[1]])/log(10)
+      }
     }
   }
   
@@ -2270,22 +2309,23 @@ calculate_Enrichment_Score <- function(tmp_groupRef, term2PvalueRef) {
   return(enrichmentScore)
 }
 
-calculate_percentage_of_membership_over_threshold <- function(termpair2kappaOverThresholdRef, currentTerm) {
-  term2s <- names(termpair2kappaOverThresholdRef[[currentTerm]])
-  term2s <- c(currentTerm, term2s)
-  
+calculate_percentage_of_membership_over_threshold <- function(termpair2kappaOverThresholdRef, term2s) {
   # calculate 
-  totalPairs <- 0
-  passedPair <- 0
-  
-  #TODO: use intersect here - somehow?? find better way
-  for (i in 1:(length(term2s)-1)) {
-    for (j in ((i+1):length(term2s))) {
-      if (is.na(termpair2kappaOverThresholdRef[[term2s[i]]][term2s[j]]) == FALSE) {
-        passedPair <- passedPair + 1
+  #passedPair <- lapply (1:(length(term2s)-1), function(i) {
+  passedPair <- lapply (1:(length(term2s)), function(i) {
+    passedPairInner <- lapply (((i+1):length(term2s)), function(j) {
+      #if (!is.null(termpair2kappaOverThresholdRef[[term2s[i]]][term2s[j]]) ) {
+      if(term2s[j] %in% termpair2kappaOverThresholdRef[[term2s[i]]]) {
+      #  if(!is.na(termpair2kappaOverThresholdRef[[term2s[i]]][term2s[j]])){
+          return(1)
+      #  }
       }
-    }
-  }
+      return(NULL)
+    })
+    passedPairInner <- unlist(passedPairInner[!sapply(passedPairInner, is.null)])
+    return(passedPairInner)
+  })
+  passedPair <- length(unlist(passedPair))
   #use n choose k to calculate total number of unique pairs
   totalPairs <- choose(length(term2s), 2)
   return(list(overPercentage=(passedPair/totalPairs), term2s=term2s))

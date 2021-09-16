@@ -1240,12 +1240,19 @@ shinyServer(function(input, output, session) {
       casrnValidatedInput <- gsub(" ", "", input$submitted_chemicals)
       casrnValidatedInput <- gsub("\\t", "", casrnValidatedInput)
       casrnValidatedInput <- gsub("\\n+", "\n", casrnValidatedInput)
-      
+
       # If CASRN input, do the following:
       if(enrichmentType$enrichType == "casrn" | enrichmentType$enrichType == "annotation") {
 
         # 2a) check if of the form ###-###-### or setname
         casrnValidatedInput <- unlist(str_split(casrnValidatedInput, "\n"))
+        casrnValidatedInput <- casrnValidatedInput[sapply(casrnValidatedInput, function(x){
+          if(nchar(x) > 0){
+            return(TRUE)
+          }
+          return(FALSE)
+        })]
+
         errorCasrnsIndex <- 1
         for(i in 1:length(casrnValidatedInput)) {
           if(!grepl("^#[A-Za-z0-9]+|[0-9]+-[0-9]+-[0-9]+", casrnValidatedInput[i], ignore.case=TRUE)) {
@@ -2126,12 +2133,18 @@ shinyServer(function(input, output, session) {
               endTime <- "incomplete"
             }
           }
-  
-          # Write local info file so we can reference this request later
-          cat(paste0("\t", beginTime, "\t", endTime, "\r"), file=tmpLocalFile)
-          close(tmpLocalFile)
+          
+          if(beginTime != "not started" & length(tmpLocalFileRead) == 10){
+            # Write local info file so we can reference this request later
+            cat(paste0("\t", beginTime), file=tmpLocalFile)
+          }
+          if(endTime != "incomplete" & length(tmpLocalFileRead) == 11){
+            # Write local info file so we can reference this request later
+            cat(paste0("\t", endTime, "\r"), file=tmpLocalFile)
+          }
+          close(tmpLocalFile) 
         }
-      
+        
         # Show results container
         shinyjs::show(id="resultsContainer")
         # Hide waiting page
@@ -2194,7 +2207,7 @@ shinyServer(function(input, output, session) {
         
         # Initialize if we have warnings
         haveWarnings <- reactiveValues(warnings = FALSE)
-        
+
         # Render results page
         if(mode == "annotation") {
           output$resultsTabset <- renderUI({
@@ -2575,7 +2588,7 @@ shinyServer(function(input, output, session) {
                         js$browseURL(paste0("tmp/output/", transactionId, "/", i, "__Matrix.txt"))
                       }, ignoreInit = TRUE)
                     }
-                    
+
                     # Render result file links
                     output[[paste0("outTab_", i)]] <- renderUI(
                         column(12,
@@ -3280,9 +3293,19 @@ shinyServer(function(input, output, session) {
                           checkboxInput(inputId="physicsEnabledChart", label="Enable physics?", value=FALSE),
                           checkboxInput(inputId="smoothCurveChart", label="Smooth curve for edges?", value=TRUE),
                           actionButton(inputId="chartNetworkUpdateButton", label="Update network"),
+                          h4("Overlapping Chemicals"),
+                          p("Click on any edge to view a Venn diagram of the chemicals associated with the annotations of its two nodes."),
                         ), 
                         column(9,
                           uiOutput("chartNetwork") %>% withSpinner()
+                        )
+                      ),
+                      fluidRow(
+                        column(6,
+                          uiOutput("vennChartButtons")
+                        ),
+                        column(6,
+                          plotOutput("vennChart") %>% withSpinner()       
                         )
                       )
                     )
@@ -3317,6 +3340,14 @@ shinyServer(function(input, output, session) {
                         column(9,
                                uiOutput("clusterNetwork") %>% withSpinner()
                         )
+                      ),
+                      fluidRow(
+                        column(6,
+                               uiOutput("vennClusterButtons")
+                        ),
+                        column(6,
+                               plotOutput("vennCluster") %>% withSpinner()       
+                        )
                       )
                     )
                   )
@@ -3327,6 +3358,17 @@ shinyServer(function(input, output, session) {
           # Render networks
           output$chartNetwork <- renderUI(chartFullNetwork)
           output$clusterNetwork <- renderUI(clusterFullNetwork)
+          
+          # Render default venn diagram
+          output[["vennChart"]] <- renderPlot({
+          })
+          output[["vennCluster"]] <- renderPlot({
+          })
+          # Render default venn diagram buttons
+          output[["vennChartButtons"]] <- renderUI({
+          })
+          output[["vennClusterButtons"]] <- renderUI({
+          })
 
           # Create bar graph 
           # Query API to get chart simple
@@ -3670,7 +3712,7 @@ shinyServer(function(input, output, session) {
       # Generate list of edges for network
       networkFullEdges <- t(sapply(1:nrow(outpNetwork), function(p){
         rgbCss = generateJaccardColor(as.numeric(outpNetwork[[p, "jaccardindex"]]))
-        edgeUUID <- UUIDgenerate()
+        edgeUUID <- paste0(UUIDgenerate(), "__", paste0(outpNetwork[[p, "name1"]], "@", outpNetwork[[p, "class1"]]), "__", paste0(outpNetwork[[p, "name2"]], "@", outpNetwork[[p, "class2"]]), "__", networkMode)
         return(data.frame( from=paste0(outpNetwork[[p, "name1"]], "@", outpNetwork[[p, "class1"]]), to=paste0(outpNetwork[[p, "name2"]], "@", outpNetwork[[p, "class2"]]), jaccard=outpNetwork[[p, "jaccardindex"]], color=rgbCss, id=edgeUUID, stringsAsFactors=FALSE ))
       }))
       networkFullEdges <- as.data.frame(networkFullEdges)
@@ -3681,7 +3723,13 @@ shinyServer(function(input, output, session) {
         visLayout(randomSeed=runif(1)) %>%
         visPhysics(solver="forceAtlas2Based", enabled=physicsEnabled, stabilization=list(enabled=FALSE, iterations=1000, updateInterval=25)) %>%
         visEdges(smooth=smoothCurve) %>%
-        visInteraction(navigationButtons=TRUE, keyboard=FALSE, selectable=TRUE)
+        visInteraction(navigationButtons=TRUE, keyboard=FALSE, selectable=TRUE) %>%
+        # Venn Diagram handler when clicking on network edges
+        visEvents(selectEdge = "
+          function(properties) {
+            Shiny.onInputChange('selectEdge', properties.edges);
+          }
+        ")
       
       # Add groups for legend
       for (x in classes) {
@@ -3694,9 +3742,219 @@ shinyServer(function(input, output, session) {
         graph=fullNetwork,
         type="png"
       )
-      
       return(fluidRow(id=paste0(networkMode,"NetworkContainer"), fullNetworkExport))
     }
+    
+    # Observe network edge being clicked
+    observeEvent(input$selectEdge, {
+      # Get from node (2), to node (3), and chart - chart or cluster (4)
+      tmpSplit <- unlist(str_split(input$selectEdge, "__"))
+      tmpFrom <- unlist(str_split(tmpSplit[2], "@"))
+      tmpTo <- unlist(str_split(tmpSplit[3], "@"))
+      networkMode <- tmpSplit[4]
+      termFrom <- tmpFrom[1]
+      classFrom <- tmpFrom[2]
+      termTo <- tmpTo[1]
+      classTo <- tmpTo[2]
+
+      # Get overlapping chemicals
+      resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="getNodeChemicals", query=list( termFrom=termFrom, termTo=termTo, classFrom=classFrom, classTo=classTo ))
+      if(resp$status_code != 200){
+        output[["vennChart"]] <- renderplot({
+        #  HTML("<p class=\"text-danger\"><b>Error:</b> An error occurred while fetching the chemicals.</p>")
+        })
+        output[["vennCluster"]] <- renderplot({
+          #  HTML("<p class=\"text-danger\"><b>Error:</b> An error occurred while fetching the chemicals.</p>")
+        })
+      }
+      casrnsFrom <- unlist(unname(unlist(content(resp)["casrnsFrom"], recursive=FALSE)))
+      casrnsTo <- unlist(unname(unlist(content(resp)["casrnsTo"], recursive=FALSE)))
+      casrnsShared <- intersect(casrnsFrom, casrnsTo)
+      
+      if(length(casrnsShared) < 1){
+        casrnsShared <- "No shared chemicals."
+      }
+      
+      # Set venn diagram color to match theme settings
+      vennColor <- "black"
+      if(theme$textcolor == "#FFFFFF"){
+        vennColor <- "white"
+      } else {
+        vennColor <- "black"
+      }
+      
+      # Get annotation colors
+      classColors <- generateAnnoClassColors()
+      classColorsFrom <- classColors[[classFrom]]
+      classColorsTo <- classColors[[classTo]]
+
+      colorFrom <- rgb(classColorsFrom[1], classColorsFrom[2], classColorsFrom[3], maxColorValue=255)
+      colorTo <- rgb(classColorsTo[1], classColorsTo[2], classColorsTo[3], maxColorValue=255)
+      
+      if(networkMode == "chart"){
+        vennList <- list(casrnsFrom, casrnsTo)
+        names(vennList) <- list(paste0(termFrom) , paste0(termTo))
+        # Render venn diagram
+        output[["vennChart"]] <- renderPlot(
+          ggVennDiagram(vennList, color=vennColor, lwd=0.8, lty=1) + 
+            #geom_sf(color=vennColor) + 
+            #scale_fill_gradient(low=colorFrom, high=colorTo) +
+            theme(legend.position="none"),
+          width="auto",
+          height="auto"
+        )
+        
+        # Render buttons for venn diagram
+        output[["vennChartButtons"]] <- renderUI({
+          fluidRow(
+            column(12,
+                   actionButton(inputId="vennFromButtonChart", label=HTML(paste0("View chemicals for<br/>", classFrom, " |<br/>", termFrom)) )      
+            ),
+            column(12,
+                   actionButton(inputId="vennToButtonChart", label=HTML(paste0("View chemicals for<br/>", classTo, " |<br/>", termTo)) )
+            ),
+            column(12,
+                   actionButton(inputId="vennSharedButtonChart", label="View shared chemicals")
+            )
+          )
+        })
+        # Create observers for Venn Diagram buttons
+        observeEvent(input$vennFromButtonChart, {
+          showModal(
+            modalDialog(
+              title=paste0("Chemicals for ", termFrom),
+              footer=actionButton(inputId="vennFromButtonCloseChart", label="Close"),
+              size="l",
+              fluidRow(
+                column(12, 
+                       HTML(paste0(casrnsFrom, collapse="<br/>"))       
+                )
+              )
+            )
+          )
+        })
+        observeEvent(input$vennFromButtonCloseChart, {
+          removeModal()
+        })
+        
+        observeEvent(input$vennToButtonChart, {
+          showModal(
+            modalDialog(
+              title=paste0("Chemicals for ", termTo),
+              footer=actionButton(inputId="vennToButtonCloseChart", label="Close"),
+              size="l",
+              fluidRow(
+                column(12, 
+                       HTML(paste0(casrnsTo, collapse="<br/>"))       
+                )
+              )
+            )
+          )
+        })
+        observeEvent(input$vennToButtonCloseChart, {
+          removeModal()
+        })
+        
+        observeEvent(input$vennSharedButtonChart, {
+          showModal(
+            modalDialog(
+              title=paste0("Shared chemicals"),
+              footer=actionButton(inputId="vennSharedButtonCloseChart", label="Close"),
+              size="l",
+              fluidRow(
+                column(12, 
+                       HTML(paste0(casrnsShared, collapse="<br/>"))       
+                )
+              )
+            )
+          )
+        })
+        observeEvent(input$vennSharedButtonCloseChart, {
+          removeModal()
+        })
+        
+      } else { # Cluster
+        vennList <- list(casrnsFrom, casrnsTo)
+        names(vennList) <- list(paste0(termFrom) , paste0(termTo))
+        # Render venn diagram
+        output[["vennCluster"]] <- renderPlot(
+          ggVennDiagram(vennList, color=vennColor, lwd=0.8, lty=1) + 
+            theme(legend.position="none"),
+          width="auto",
+          height="auto"
+        )
+        
+        # Render buttons for venn diagram
+        output[["vennClusterButtons"]] <- renderUI({
+          fluidRow(
+            column(12,
+                   actionButton(inputId="vennFromButtonCluster", label=HTML(paste0("View chemicals for<br/>", classFrom, " |<br/>", termFrom)) )      
+            ),
+            column(12,
+                   actionButton(inputId="vennToButtonCluster", label=HTML(paste0("View chemicals for<br/>", classTo, " |<br/>", termTo)) )
+            ),
+            column(12,
+                   actionButton(inputId="vennSharedButtonCluster", label="View shared chemicals")
+            )
+          )
+        })
+        # Create observers for Venn Diagram buttons
+        observeEvent(input$vennFromButtonCluster, {
+          showModal(
+            modalDialog(
+              title=paste0("Chemicals for ", termFrom),
+              footer=actionButton(inputId="vennFromButtonCloseCluster", label="Close"),
+              size="l",
+              fluidRow(
+                column(12, 
+                       HTML(paste0(casrnsFrom, collapse="<br/>"))       
+                )
+              )
+            )
+          )
+        })
+        observeEvent(input$vennFromButtonCloseCluster, {
+          removeModal()
+        })
+        
+        observeEvent(input$vennToButtonCluster, {
+          showModal(
+            modalDialog(
+              title=paste0("Chemicals for ", termTo),
+              footer=actionButton(inputId="vennToButtonCloseCluster", label="Close"),
+              size="l",
+              fluidRow(
+                column(12, 
+                       HTML(paste0(casrnsTo, collapse="<br/>"))       
+                )
+              )
+            )
+          )
+        })
+        observeEvent(input$vennToButtonCloseCluster, {
+          removeModal()
+        })
+        
+        observeEvent(input$vennSharedButtonCluster, {
+          showModal(
+            modalDialog(
+              title=paste0("Shared chemicals"),
+              footer=actionButton(inputId="vennSharedButtonCloseCluster", label="Close"),
+              size="l",
+              fluidRow(
+                column(12, 
+                       HTML(paste0(casrnsShared, collapse="<br/>"))       
+                )
+              )
+            )
+          )
+        })
+        observeEvent(input$vennSharedButtonCloseCluster, {
+          removeModal()
+        })
+        
+      }
+    })
     
     # Re-generate chart network
     observeEvent(input$chartNetworkUpdateButton, {
