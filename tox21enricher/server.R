@@ -526,6 +526,19 @@ shinyServer(function(input, output, session) {
     
     # update theme data when checkbox is clicked
     observeEvent(input$changeThemeToggle, {
+      
+      # Reset Venn diagrams on theme change
+      output[["vennChart"]] <- renderPlot({})
+      output[["vennCluster"]] <- renderPlot({})
+      output[["vennChartButtons"]] <- renderUI({})
+      output[["vennClusterButtons"]] <- renderUI({})
+      shinyjs::hide("vennChart")
+      shinyjs::hide("vennCluster")
+      shinyjs::hide("vennChartButtons")
+      shinyjs::hide("vennClusterButtons")
+      shinyjs::hide("vennChartMenu")
+      shinyjs::hide("vennClusterMenu")
+      
       tmpDir <- paste0("./www/local/")
       if(input$changeThemeToggle == TRUE){ # dark
         theme$textcolor <- "#FFFFFF"
@@ -3268,8 +3281,6 @@ shinyServer(function(input, output, session) {
           chartFullNetwork <- generateNetwork(transactionId=transactionId, cutoff=cutoff, networkMode="chart", inputNetwork=names(enrichmentSets), qval=0.05)
           clusterFullNetwork <- generateNetwork(transactionId=transactionId, cutoff=cutoff, networkMode="cluster", inputNetwork=names(enrichmentSets), qval=0.05)
           
-          
-          
           output[["chartHeatmap"]] <- renderUI(
               fluidRow(
                 column(12,
@@ -3300,12 +3311,16 @@ shinyServer(function(input, output, session) {
                           uiOutput("chartNetwork") %>% withSpinner()
                         )
                       ),
-                      fluidRow(
-                        column(6,
-                          uiOutput("vennChartButtons")
-                        ),
-                        column(6,
-                          plotOutput("vennChart") %>% withSpinner()       
+                      hidden(
+                        fluidRow(id="vennChartMenu",
+                          column(6,
+                            uiOutput("vennChartButtons")
+                          ),
+                          column(6,
+                            plotOutput(
+                              outputId="vennChart"
+                            ) %>% withSpinner()
+                          )
                         )
                       )
                     )
@@ -3338,15 +3353,19 @@ shinyServer(function(input, output, session) {
                           actionButton(inputId="clusterNetworkUpdateButton", label="Update network"),
                         ), 
                         column(9,
-                               uiOutput("clusterNetwork") %>% withSpinner()
+                          uiOutput("clusterNetwork") %>% withSpinner()
                         )
                       ),
-                      fluidRow(
-                        column(6,
-                               uiOutput("vennClusterButtons")
-                        ),
-                        column(6,
-                               plotOutput("vennCluster") %>% withSpinner()       
+                      hidden(
+                        fluidRow(id="vennClusterMenu",
+                          column(6,
+                            uiOutput("vennClusterButtons")
+                          ),
+                          column(6,
+                            plotOutput(
+                              outputId="vennCluster"
+                            ) %>% withSpinner()       
+                          )
                         )
                       )
                     )
@@ -3778,34 +3797,65 @@ shinyServer(function(input, output, session) {
         
         # Set venn diagram color to match theme settings
         vennColor <- "black"
-        if(theme$textcolor == "#FFFFFF"){
+        vennColorBG <- "#FFFFFF"
+        if(theme$textcolor == "#FFFFFF"){ # Dark theme
           vennColor <- "white"
-        } else {
+          vennColorBG <- "#333333"
+        } else { # Light theme
           vennColor <- "black"
+          vennColorBG <- "#FFFFFF"
         }
         
         # Get annotation colors
         classColors <- generateAnnoClassColors()
         classColorsFrom <- classColors[[classFrom]]
         classColorsTo <- classColors[[classTo]]
-  
+        
+        # Color from class of FROM annotation
         colorFrom <- rgb(classColorsFrom[1], classColorsFrom[2], classColorsFrom[3], maxColorValue=255)
+        # Color from class of TO annotation
         colorTo <- rgb(classColorsTo[1], classColorsTo[2], classColorsTo[3], maxColorValue=255)
+        # Average color from classes of FROM and TO annotations
+        greenAvg <- as.integer((strtoi(classColorsFrom[1]) + strtoi(classColorsTo[1]))/2)
+        redAvg <- as.integer((strtoi(classColorsFrom[2]) + strtoi(classColorsTo[2]))/2)
+        blueAvg <- as.integer((strtoi(classColorsFrom[3]) + strtoi(classColorsTo[3]))/2)
+        colorBoth <- rgb(greenAvg, redAvg, blueAvg, maxColorValue=255)
+        
+        # Prepare data and create Venn diagram
+        vennList <- list(casrnsFrom, casrnsTo)
+        names(vennList) <- list(str_wrap(paste0(classFrom, " | ", termFrom), 30) , str_wrap(paste0(classTo, " | ", termTo), 30)) 
+        venn <- Venn(vennList)
+        vennData <- process_data(venn)
+        vennDiagram <- ggplot() +
+          geom_sf(aes(fill=list(colorFrom, colorTo, colorBoth)), data=venn_region(vennData)) +
+          geom_sf(size=1, lty="solid", color=theme$textcolor, data=venn_setedge(vennData), show.legend=FALSE) +
+          geom_sf_text(aes(label=name), fontface="bold", color=theme$textcolor, nudge_y=c(1,1,1), data=venn_setlabel(vennData)) +
+          geom_sf_label(size=18, aes(label=count), fontface="bold", data=venn_region(vennData)) +
+          expand_limits(x=c(-4,4), y=c(-4,6)) + # expand y-axis of graph to make room for top set labels
+          theme_void() +
+          theme(
+            legend.position="none",
+            panel.background=element_rect(
+              fill=vennColorBG,
+              color=NA,
+              size=0,
+              linetype="solid"
+            )
+          ) # remove legend, not really needed
+        vennDiagram <- ggplotGrob(vennDiagram)
+        vennDiagram$respect <- FALSE
         
         if(networkMode == "chart"){
-          vennList <- list(casrnsFrom, casrnsTo)
-          names(vennList) <- list(paste0(termFrom) , paste0(termTo))
           # Render venn diagram
+          shinyjs::show("vennChartMenu")
+          shinyjs::show("vennChart")
           output[["vennChart"]] <- renderPlot(
-            ggVennDiagram(vennList, color=vennColor, lwd=0.8, lty=1) + 
-              #geom_sf(color=vennColor) + 
-              #scale_fill_gradient(low=colorFrom, high=colorTo) +
-              theme(legend.position="none"),
-            width="auto",
-            height="auto"
+            #vennDiagram
+            plot(vennDiagram)
           )
           
-          # Render buttons for venn diagram
+          # Render buttons for Venn diagram
+          shinyjs::show("vennChartButtons")
           output[["vennChartButtons"]] <- renderUI({
             fluidRow(
               column(12,
@@ -3875,17 +3925,15 @@ shinyServer(function(input, output, session) {
           })
           
         } else { # Cluster
-          vennList <- list(casrnsFrom, casrnsTo)
-          names(vennList) <- list(paste0(termFrom) , paste0(termTo))
-          # Render venn diagram
+          # Render Venn diagram
+          shinyjs::show("vennClusterMenu")
+          shinyjs::show("vennCluster")
           output[["vennCluster"]] <- renderPlot(
-            ggVennDiagram(vennList, color=vennColor, lwd=0.8, lty=1) + 
-              theme(legend.position="none"),
-            width="auto",
-            height="auto"
+            plot(vennDiagram)
           )
           
           # Render buttons for venn diagram
+          shinyjs::show("vennClusterButtons")
           output[["vennClusterButtons"]] <- renderUI({
             fluidRow(
               column(12,
@@ -3956,7 +4004,7 @@ shinyServer(function(input, output, session) {
           
         }
       }
-    })
+    }, ignoreNULL = TRUE, ignoreInit = TRUE )
     
     # Re-generate chart network
     observeEvent(input$chartNetworkUpdateButton, {
