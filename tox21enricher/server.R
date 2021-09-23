@@ -11,6 +11,9 @@
 shinyServer(function(input, output, session) {
     # List of observers
     setFilesObservers <- reactiveValues(observers = list())
+    
+    # List of chems with warnings
+    firstCaseWarningChems <- reactiveValues(casrns = list())
   
     # Theme info
     theme <- reactiveValues(textcolor = "#000000")
@@ -361,6 +364,13 @@ shinyServer(function(input, output, session) {
         nodeCutoff <- params[1, 5]
         colorsList <- params[1, 9]
         
+        # Set enrichmentType$enrichType here to original mode of the request
+        enrichmentType$enrichType <- mode
+        originalEnrichModeList$originalEnrichMode <- originalMode
+        
+        # Set originalNamesList$originalNames if similarity/substructure so reenrichment will work correctly
+        originalNamesList$originalNames <- unlist(str_split(params[1,7], "\\|"))
+        
         # Check if result (Input/Output) files exist on the server
         resp <- NULL
         tryPrevious <- tryCatch(
@@ -491,6 +501,9 @@ shinyServer(function(input, output, session) {
         shinyjs::disable(id = "searchForm")
         shinyjs::hide(id = "searchButtonsMenu")
         shinyjs::disable(id = "searchButtonsMenu")
+        
+        print("HERE NOW")
+        
         future({
           enrichmentResults(mode, transactionId, annoSelectStr, nodeCutoff, enrichmentSets, originalNames, reenrichResults, originalMode, colorsList)
         }, seed=TRUE)
@@ -526,7 +539,8 @@ shinyServer(function(input, output, session) {
     
     # update theme data when checkbox is clicked
     observeEvent(input$changeThemeToggle, {
-      
+      print("trigger")
+      print(input$changeThemeToggle)
       # Reset Venn diagrams on theme change
       output[["vennChart"]] <- renderPlot({})
       output[["vennCluster"]] <- renderPlot({})
@@ -1367,8 +1381,9 @@ shinyServer(function(input, output, session) {
         # Hide any previous errors
         shinyjs::hide(id="errorBox")
         
-        # Reset checkboxList$checkboxes
+        # Reset checkboxList$checkboxes and warningcasrns
         checkboxList$checkboxes <- NULL
+        firstCaseWarningChems$casrns <- NULL
       
         # Get node cutoff. If re-enriching, set cutoff to value set by re-enrichment slider
         if(reenrichFlag == TRUE){
@@ -1376,6 +1391,9 @@ shinyServer(function(input, output, session) {
         } else {
           cutoff <- input$nodeCutoff
         }
+        
+        print("cutoff")
+        print(cutoff)
         
         # If TRUE, signifies that client app cannot connect to API
         badConnectionFlag <- FALSE
@@ -1462,7 +1480,7 @@ shinyServer(function(input, output, session) {
                     if(resp$status_code != 200){
                       return(NULL)
                     }
-                    
+
                     outputSimCasrns <- unlist(lapply(content(resp), function(x){
                       return(x$casrn)
                     }))
@@ -1484,7 +1502,6 @@ shinyServer(function(input, output, session) {
                     outputSimEpoxide <- unlist(lapply(content(resp), function(x){
                       return(x$epoxide)
                     }))
-                    
                     reenrichSimilarityResults <- data.frame(casrn=outputSimCasrns, m=outputSimM, similarity=outputSimSimilarity, cyanide=outputSimCyanide, isocyanate=outputSimIsocyanate, aldehyde=outputSimAldehyde, epoxide=outputSimEpoxide, stringsAsFactors=FALSE)
                     reenrichSimilarityResultsReturn <- unlist(sapply(1:nrow(reenrichSimilarityResults), function(j){
                       if(reenrichSimilarityResults[j, "casrn"] == casrn) {
@@ -1506,7 +1523,6 @@ shinyServer(function(input, output, session) {
         } else {
             enrichmentSets <- list()
             setName <- ""
-
             reenrichResults <- lapply(casrnBoxSplit, function(i){
                 setName <- i
                 if(setName != ""){
@@ -1570,7 +1586,7 @@ shinyServer(function(input, output, session) {
                         return(FALSE)
                       }
                     )
-
+                    
                     if(!is.null(trySimilarity)){
                       if(trySimilarity == FALSE){
                         badConnectionFlag <<- TRUE
@@ -1614,7 +1630,7 @@ shinyServer(function(input, output, session) {
                 }
             })
         }
-        
+
         if (enrichmentType$enrichType == "similarity" | enrichmentType$enrichType == "substructure") {
           # Error if no good sets
           if(length(unlist(reenrichResults, recursive=FALSE)) < 1){
@@ -1663,7 +1679,7 @@ shinyServer(function(input, output, session) {
         }
         reenrichResults <- reenrichResults[!sapply(reenrichResults, is.null)]
         enrichmentSets <- enrichmentSets[!sapply(enrichmentSets, is.null)]
-        
+
         # Generate colors for each input sets
         colorsAllSets <- unlist(lapply(names(enrichmentSets), function(x){
           # Generate a random color
@@ -1776,7 +1792,7 @@ shinyServer(function(input, output, session) {
           paste0(paste0(enrichmentSets[[enrichmentSet]], collapse=paste0("__", enrichmentSet, "|")), "__", enrichmentSet)
         })
         enrichmentSetsSanitizedLocal <- paste0(enrichmentSetsSanitizedLocal, collapse="|")
-
+        
         # Convert reenrichResultsList$reenrichResults into a form that is API-friendly
         reenrichResultsSanitized <- ""
         if(length(reenrichResultsList$reenrichResults) > 0){
@@ -1803,7 +1819,6 @@ shinyServer(function(input, output, session) {
         # Create local file so we can reference later
         tmpDir <- paste0("./www/tmp/transaction/")
         
-        
         # Get submission timestamp to put in file
         beginTime <- Sys.time()
         
@@ -1817,7 +1832,7 @@ shinyServer(function(input, output, session) {
         # Write local info file so we can reference this request later
         file.create(paste0(tmpDir, transactionId))
         tmpLocalFile <- file(paste0(tmpDir, transactionId), open="wb")
-        fileContents <- paste0(originalEnrichModeList$originalEnrichMode, "\t", enrichmentType$enrichType, "\t", transactionId, "\t", annoSelectStr, "\t", input$nodeCutoff, "\t", enrichmentSetsSanitizedLocal, "\t", paste0(originalNamesList$originalNames, collapse="|"), "\t", paste0(reenrichResultsSanitized, collapse="|"), "\t", colorsToPrint, "\t", beginTime)
+        fileContents <- paste0(originalEnrichModeList$originalEnrichMode, "\t", enrichmentType$enrichType, "\t", transactionId, "\t", annoSelectStr, "\t", cutoff, "\t", enrichmentSetsSanitizedLocal, "\t", paste0(originalNamesList$originalNames, collapse="|"), "\t", paste0(reenrichResultsSanitized, collapse="|"), "\t", colorsToPrint, "\t", beginTime)
         cat(fileContents, file=tmpLocalFile)
         
         #close(tmpLocalFile)
@@ -2158,10 +2173,12 @@ shinyServer(function(input, output, session) {
           close(tmpLocalFile) 
         }
         
-        # Show results container
-        shinyjs::show(id="resultsContainer")
+        print("HERE NOW 2")
+        
         # Hide waiting page
         shinyjs::hide(id="waitingPage")
+        # Show results container
+        shinyjs::show(id="resultsContainer")
         # Disable View previous results button
         shinyjs::disable(id="searchButton")
         #Show & enable refresh button
@@ -2324,10 +2341,10 @@ shinyServer(function(input, output, session) {
             }, ignoreInit = TRUE)
           }
         } else { # Render enrichment results
+          print("HERE NOW 3")
           
           # Download button
           # Event handler for download full results
-          
           if(is.null(setFilesObservers$observers[[paste0("downloadObserver__")]])){
             setFilesObservers$observers[[paste0("downloadObserver__")]] <- observeEvent(input[["downloadButton"]], {
               # Create directory for request
@@ -2482,12 +2499,12 @@ shinyServer(function(input, output, session) {
                     getAllResultFiles <- append(getAllResultFiles, paste0(inDirWeb, i, ".txt"))
                     
                     originalInputToDisplay <- ""
-                    for(j in originalNames){
+                    lapply(originalNames, function(j){
                       originalSetName <- unlist(str_split(j, "__"))
                       if(originalSetName[2] == i){
-                        originalInputToDisplay <- paste0("Input chemical: ", originalSetName[1])
+                        originalInputToDisplay <<- paste0("Input chemical: ", originalSetName[1])
                       }
-                    }
+                    })
                     
                     # Dynamically create observers for result file links
                     # Input
@@ -2699,457 +2716,456 @@ shinyServer(function(input, output, session) {
           )
 
           # Render reenrichment if Substructure or Similarity
-          #if (mode != "casrn") {
-              reenrichResultsTotalLength <- length(unlist(lapply(names(reenrichResults), function(i){
-                return(unlist(reenrichResults[[i]][,"casrn"]))
-              })))
+          reenrichResultsTotalLength <- length(unlist(lapply(names(reenrichResults), function(i){
+            return(unlist(reenrichResults[[i]][,"casrn"]))
+          })))
+          
+          for (i in names(reenrichResults)) {
+              reenrichResultsTotalLength <- reenrichResultsTotalLength + nrow(reenrichResults[[i]])
+          }
+          
+          # Checkbox input to select chemicals for re-enrichment
+          reenrichChoices <- lapply(names(reenrichResults), function(i){
+            return(reenrichResults[[i]][, "casrn"])
+          })
+          names(reenrichChoices) <- names(reenrichResults)
+          
+          checkboxes <- lapply(names(reenrichChoices), function(reenrichSet){
+            tmp_checkboxes <- lapply(reenrichChoices[[reenrichSet]], function(x){
+              return(checkboxInput(inputId=paste0(x, "__", reenrichSet), value=TRUE, label=NULL, width="4px"))
+            })
+            names(tmp_checkboxes) <- lapply(reenrichChoices[[reenrichSet]], function(x){
+              return(paste0(x, "__", reenrichSet))
+            })
+            return(tmp_checkboxes)
+          })
+          names(checkboxes) <- names(reenrichChoices)
+
+          # Set reactive value so we can access these checkboxes later
+          checkboxList$checkboxes <- checkboxes
+          
+          # Initialize empty list of svg images
+          svgImagesList <- list()
+          
+          if (originalEnrichMode != "casrn") {
+            lapply(names(reenrichResults),function(i) {
+              # Get chemical structure images and add to table
+              imgPath1 <- '<img src="images/structures/'
+              imgPath2 <- ' height="100" width="100"></img>'
+
+              # query API to generate images
+              resultImagesSVG <- unlist(lapply(1:nrow(reenrichResults[[i]]["casrn"]), function(x) {
+                return(paste0(reenrichResults[[i]][x, "casrn"], "__", reenrichResults[[i]][x, "m"]))
+              }))
+              resultImagesSVG <- paste0(resultImagesSVG, collapse="\n")
+              resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="generateStructures", query=list(input=resultImagesSVG))
+              structuresSvg <- content(resp)
+              resultImages <- lapply(reenrichResults[[i]][, "casrn"], function(casrnName) {
+                # Note: this is kind of a hacky way to resize the SVG images generated by rdkit, but it works...
+                resizedSvg <- str_replace(unlist(structuresSvg[casrnName][[1]]) , "width='250px'", "width='50px'")
+                resizedSvg <- str_replace(resizedSvg , "height='200px'", "height='40px'")
+                
+                # Add fetched, resized SVG to list too
+                svgImagesList[paste0(casrnName, "__", i)] <<- resizedSvg
+                
+                # Add tooltip saying CASRN on hover
+                return(HTML(paste0(
+                  tags$div(  
+                    tipify(
+                      actionButton(
+                        inputId=paste0("ab__img__", casrnName, "__", i), 
+                        label=HTML(paste0(resizedSvg))
+                      ),
+                      title=paste0("Chemical structure for ", casrnName, ". Click to expand image with more info."),
+                      placement="bottom"
+                    )
+                  , id=paste0("div__ab__img__", casrnName, "__", i))
+                )))
+              })
               
-              for (i in names(reenrichResults)) {
-                  reenrichResultsTotalLength <- reenrichResultsTotalLength + nrow(reenrichResults[[i]])
+              # Get additional information for each CASRN from database and add to table
+              expandedInfo <- t(sapply(reenrichResults[[i]][,"casrn"], function(casrn){
+                resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="casrnData", query=list(input=casrn))
+                if(resp$status_code != 200){
+                  return(NULL)
+                }
+                
+                # Dynamically create matching observers for zoomed in views of chemical structures
+                chemDetail <- unlist(content(resp), recursive=FALSE)
+                outputTestsubstanceChemname <- chemDetail[["testsubstance_chemname"]]
+                outputFormula <- chemDetail[["mol_formula"]]
+                outputIupac <- chemDetail[["iupac_name"]]
+                outputInchi <- chemDetail[["inchis"]]
+                outputInchikey <- chemDetail[["inchikey"]]
+                outputSmiles <- chemDetail[["smiles"]]
+                outputDtxsid <- chemDetail[["dtxsid"]]
+                outputDtxrid <- chemDetail[["dtxrid"]]
+                outputWeight <- chemDetail[["mol_weight"]]
+                outputCid <- chemDetail[["cid"]]
+                
+                # Resize structural image
+                svgExpanded <- paste0(svgImagesList[paste0(casrn, "__", i)])
+                svgExpanded <- str_replace(svgExpanded , "width='50px'", "width='600px'")
+                svgExpanded <- str_replace(svgExpanded , "height='40px'", "height='480px'")
+
+                # Create observer
+                if(is.null(setFilesObservers$observers[[paste0("svgObserver__", casrn, "__", i)]])){
+                  setFilesObservers$observers[[paste0("svgObserver__", casrn, "__", i)]] <- observeEvent(input[[paste0("ab__img__", casrn, "__", i)]], {
+                    showModal(
+                      modalDialog(
+                        title=casrn,
+                        footer=modalButton("Close"),
+                        size="l",
+                        fluidRow(
+                          column(12, HTML(paste0(svgExpanded)))
+                        ),
+                        fluidRow(
+                          column(3, HTML("<b>DTXSID</b>")),
+                          column(9, HTML(outputDtxsid))
+                        ),
+                        fluidRow(
+                          column(3, HTML("<b>DTXRID</b>")),
+                          column(9, HTML(outputDtxrid))
+                        ),
+                        fluidRow(
+                          column(3, HTML("<b>Chemical Name</b>")),
+                          column(9, HTML(outputTestsubstanceChemname))
+                        ),
+                        fluidRow(
+                          column(3, HTML("<b>IUPAC Name</b>")),
+                          column(9, HTML(outputIupac))
+                        ),
+                        fluidRow(
+                          column(3, HTML("<b>CASRN</b>")),
+                          column(9, HTML(casrn))
+                        ),
+                        fluidRow(
+                          column(3, HTML("<b>SMILES</b>")),
+                          column(9, HTML(outputSmiles))
+                        ),
+                        fluidRow(
+                          column(3, HTML("<b>InChI</b>")),
+                          column(9, HTML(outputInchi))
+                        ),
+                        fluidRow(
+                          column(3, HTML("<b>InChI Key</b>")),
+                          column(9, HTML(outputInchikey))
+                        ),
+                        fluidRow(
+                          column(3, HTML("<b>Molecular Formula</b>")),
+                          column(9, HTML(outputFormula))
+                        ),
+                        fluidRow(
+                          column(3, HTML("<b>Molecular Weight</b>")),
+                          column(9, HTML(outputWeight))
+                        ),
+                        fluidRow(
+                          column(3, HTML(paste0("<a href=\"https://comptox.epa.gov/dashboard/dsstoxdb/results?search=", outputDtxsid, "&abbreviation=TOX21SL\">View at EPA</a>"))),
+                          column(9, HTML(paste0("<a href=\"https://pubchem.ncbi.nlm.nih.gov/compound/", outputCid, "\">View at PubChem</a>")))
+                        )
+                      )
+                    )
+                  }, ignoreInit=TRUE)
+                }
+                infoOutp <- data.frame("iupac_name"=outputIupac, "smiles"=outputSmiles, "dtxsid"=outputDtxsid, "dtxrid"=outputDtxrid, "mol_formula"=outputFormula, "mol_weight"=outputWeight, "inchis"=outputInchi, "inchikey"=outputInchikey, stringsAsFactors=FALSE)
+                return(infoOutp)
+              }))
+              expandedInfo <- data.frame(expandedInfo)
+              row.names(expandedInfo) <- t(sapply(reenrichResults[[i]][,"casrn"], function(casrn) casrn))
+              
+              # Create final data frame
+              fullTableTmp <- t(sapply(row.names(expandedInfo), function(casrn){
+                for (row in 1:nrow(reenrichResults[[i]])){
+                  if(reenrichResults[[i]][row,"casrn"] == casrn){
+                    finalTable <- NULL
+                    if (mode == "similarity" | originalEnrichMode == "similarity") {
+                      finalTable <- data.frame(
+                        "Chemical_Structure"  = resultImages[row], 
+                        "DTXSID"              = expandedInfo[casrn,"dtxsid"], 
+                        "CASRN"               = reenrichResults[[i]][row,"casrn"], 
+                        "IUPAC_Name"          = expandedInfo[casrn,"iupac_name"], 
+                        "SMILES"              = expandedInfo[casrn,"smiles"], 
+                        "InChI"               = expandedInfo[casrn,"inchis"], 
+                        "InChIKey"            = expandedInfo[casrn,"inchikey"],
+                        "Molecular_Formula"   = expandedInfo[casrn,"mol_formula"],
+                        "Molecular_Weight"    = expandedInfo[casrn,"mol_weight"],
+                        "Similarity"          = round(as.numeric(reenrichResults[[i]][row,"similarity"]), digits=2), # Truncate similarity to hundredths place (easier to read)
+                        "Cyanide"             = reenrichResults[[i]][row,"cyanide"],
+                        "Isocyanate"          = reenrichResults[[i]][row,"isocyanate"],
+                        "Aldehyde"            = reenrichResults[[i]][row,"aldehyde"],
+                        "Epoxide"             = reenrichResults[[i]][row,"epoxide"],
+                        stringsAsFactors=FALSE
+                      )
+                    } else if(mode == "substructure" | originalEnrichMode == "substructure") { # Substructure (no similarity column)
+                      finalTable <- data.frame(
+                        "Chemical_Structure"  = resultImages[row], 
+                        "DTXSID"              = expandedInfo[casrn,"dtxsid"], 
+                        "CASRN"               = reenrichResults[[i]][row,"casrn"], 
+                        "IUPAC_Name"          = expandedInfo[casrn,"iupac_name"], 
+                        "SMILES"              = expandedInfo[casrn,"smiles"], 
+                        "InChI"               = expandedInfo[casrn,"inchis"], 
+                        "InChIKey"            = expandedInfo[casrn,"inchikey"],
+                        "Molecular_Formula"   = expandedInfo[casrn,"mol_formula"],
+                        "Molecular_Weight"    = expandedInfo[casrn,"mol_weight"],
+                        "Cyanide"             = reenrichResults[[i]][row,"cyanide"],
+                        "Isocyanate"          = reenrichResults[[i]][row,"isocyanate"],
+                        "Aldehyde"            = reenrichResults[[i]][row,"aldehyde"],
+                        "Epoxide"             = reenrichResults[[i]][row,"epoxide"],
+                        stringsAsFactors=FALSE
+                      )
+                    }
+                    return(finalTable)
+                  }
+                }
+              }))
+              fullTableTmp <- data.frame(fullTableTmp)
+              
+              imgPath1 <- '<img src="images/warnings/'
+              imgPath2 <- ' height="50" width="100"></img>'
+              
+              # Check if original string contains any of the reactive structures
+              originalInputStr <- ""
+              for(j in originalNames){
+                originalSetName <- unlist(str_split(j, "__"))
+                if(originalSetName[2] == i){
+                  originalInputStr <- paste0(originalSetName[1])
+                }
+              }
+              resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="reactiveGroups", query=list(input=originalInputStr))
+              if(resp$status_code != 200){
+                return(NULL)
+              }
+              originalInputStrReactive <- unlist(str_split(content(resp), ","))
+              # 1=cyanide, 2=isocyanate, 3=aldehyde, 4=epoxide
+              
+              # Simplify reactive structure columns into one warning column
+              fullTableWarnings <- lapply(1:nrow(fullTableTmp), function(tableRow){
+                warningToDisplay <- ""
+                nitrileCol <- fullTableTmp[tableRow, (ncol(fullTableTmp)-3)]
+                isocyanateCol <- fullTableTmp[tableRow, (ncol(fullTableTmp)-2)]
+                aldehydeCol <- fullTableTmp[tableRow, (ncol(fullTableTmp)-1)]
+                epoxideCol <- fullTableTmp[tableRow, (ncol(fullTableTmp))]
+
+                if(toString(nitrileCol) != toString(originalInputStrReactive[1])) {
+                  warningToDisplay <- paste0(tipify(div( HTML(paste0(warningToDisplay, imgPath1, 'nitrile.png"', imgPath2))   ), "Nitrile (Cyanide) group.", placement="left"))
+                }
+                
+                if(toString(isocyanateCol) != toString(originalInputStrReactive[2])) {
+                  warningToDisplay <- paste0(tipify(div( HTML(paste0(warningToDisplay, imgPath1, 'isocyanate.png"', imgPath2)) ), "Isocyanate group.", placement="left"))
+                }
+              
+                if(toString(aldehydeCol) != toString(originalInputStrReactive[3])) {
+                  warningToDisplay <- paste0(tipify(div( HTML(paste0(warningToDisplay, imgPath1, 'aldehyde.png"', imgPath2))   ),  "Aldehyde group.", placement="left"))
+                }
+          
+                if(toString(epoxideCol) != toString(originalInputStrReactive[4])) {
+                  warningToDisplay <- paste0(tipify(div( HTML(paste0(warningToDisplay, imgPath1, 'epoxide.png"', imgPath2))     ), "Epoxide group.", placement="left"))
+                }
+    
+                if(warningToDisplay == "") { # if no warnings
+                  warningToDisplay <- "<p>None</p>"
+                }
+                return(warningToDisplay)
+              })
+              
+              # Create final table to display
+              # Truncate to remove individual warning columns
+              if (mode == "similarity" | originalEnrichMode == "similarity") {
+                fullTable <- fullTableTmp[, 1:10]
+              } else if(mode == "substructure" | originalEnrichMode == "substructure") { # Substructure (no similarity column)
+                fullTable <- fullTableTmp[, 1:9]
               }
               
-              # Checkbox input to select chemicals for re-enrichment
-              reenrichChoices <- lapply(names(reenrichResults), function(i){
-                return(reenrichResults[[i]][, "casrn"])
+              # Check if any warnings were generated
+              warningCheck <- lapply(fullTableWarnings, function(x){
+                if(x == "<p>None</p>"){
+                  return(NULL)
+                }
+                return(TRUE)
               })
-              names(reenrichChoices) <- names(reenrichResults)
+              warningCheck <- warningCheck[!sapply(warningCheck, is.null)]
               
-              checkboxes <- lapply(names(reenrichChoices), function(reenrichSet){
-                tmp_checkboxes <- lapply(reenrichChoices[[reenrichSet]], function(x){
-                  return(checkboxInput(inputId=paste0(x, "__", reenrichSet), value=TRUE, label=NULL, width="4px"))
-                })
-                names(tmp_checkboxes) <- lapply(reenrichChoices[[reenrichSet]], function(x){
-                  return(paste0(x, "__", reenrichSet))
-                })
-                return(tmp_checkboxes)
+              # Save warningCheck to reactive value so we can reference outside of this scope
+              warningList$warnings[[i]] <- warningCheck
+              
+              # Create checkbox column to display
+              selectList <- lapply(checkboxes[[i]], function(x) {
+                return(paste0(x))
               })
-              names(checkboxes) <- names(reenrichChoices)
-
-              # Set reactive value so we can access these checkboxes later
-              checkboxList$checkboxes <- checkboxes
               
-              # Initialize empty list of svg images
-              svgImagesList <- list()
+              if(length(warningCheck) > 0){
+                # If we have warnings, then include the warning column
+                fullTable$warning=fullTableWarnings  
+                # Add checkboxes for CASRNs
+                fullTable <- data.frame(select=unlist(selectList), fullTable)
+                # Save this so we can use it outside of the method
+                finalTableToDisplay$table[[i]] <- fullTable
+                # Set appropriate column names to display in table
+                if (mode == "similarity" | originalEnrichMode == "similarity") {
+                  names(fullTable) <- c(
+                    "Select",
+                    "Chemical Structure",
+                    "DSSTox Substance ID",
+                    "CASRN",
+                    "IUPAC Name",
+                    "SMILES",
+                    "InChI",
+                    "InChI Key",
+                    "Molecular Formula",
+                    "Molecular Weight",
+                    "Similarity",
+                    paste0( tipify( div("Reactive Structure Warning"), "Warning: either this chemical contains a known reactive group(s) while your original submission did not, or this chemical does not contain a known reactive group(s) that your original submission contained. It is recommended that you deselect this chemical and perform re-enrichment on your data set.", placement="bottom" ) )
+                  )
+                } else if(mode == "substructure" | originalEnrichMode == "substructure") {
+                  names(fullTable) <- c(
+                    "Select",
+                    "Chemical Structure",
+                    "DSSTox Substance ID",
+                    "CASRN",
+                    "IUPAC Name",
+                    "SMILES",
+                    "InChI",
+                    "InChI Key",
+                    "Molecular Formula",
+                    "Molecular Weight",
+                    paste0( tipify( div("Reactive Structure Warning"), "Warning: either this chemical contains a known reactive group(s) while your original submission did not, or this chemical does not contain a known reactive group(s) that your original submission contained. It is recommended that you deselect this chemical and perform re-enrichment on your data set.", placement="bottom" ) )
+                  )
+                }
+                
+              } else {
+                # Add checkboxes for CASRNs
+                fullTable <- data.frame(select=unlist(selectList), fullTable)
+                
+                # Set appropriate column names to display in table
+                if (mode == "similarity" | originalEnrichMode == "similarity") {
+                  names(fullTable) <- c(
+                    "Select",
+                    "Chemical Structure",
+                    "DSSTox Substance ID",
+                    "CASRN",
+                    "IUPAC Name",
+                    "SMILES",
+                    "InChI",
+                    "InChI Key",
+                    "Molecular Formula",
+                    "Molecular Weight",
+                    "Similarity"
+                  )
+                } else if(mode == "substructure" | originalEnrichMode == "substructure") {
+                  names(fullTable) <- c(
+                    "Select",
+                    "Chemical Structure",
+                    "DSSTox Substance ID",
+                    "CASRN",
+                    "IUPAC Name",
+                    "SMILES",
+                    "InChI",
+                    "InChI Key",
+                    "Molecular Formula",
+                    "Molecular Weight"
+                  )
+                }
+              }
               
-              if (originalEnrichMode != "casrn") {
-                lapply(names(reenrichResults),function(i) {
-                  # Get chemical structure images and add to table
-                  imgPath1 <- '<img src="images/structures/'
-                  imgPath2 <- ' height="100" width="100"></img>'
-  
-                  # query API to generate images
-                  resultImagesSVG <- unlist(lapply(1:nrow(reenrichResults[[i]]["casrn"]), function(x) {
-                    return(paste0(reenrichResults[[i]][x, "casrn"], "__", reenrichResults[[i]][x, "m"]))
-                  }))
-                  resultImagesSVG <- paste0(resultImagesSVG, collapse="\n")
-                  resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="generateStructures", query=list(input=resultImagesSVG))
-                  structuresSvg <- content(resp)
-                  resultImages <- lapply(reenrichResults[[i]][, "casrn"], function(casrnName) {
-                    # Note: this is kind of a hacky way to resize the SVG images generated by rdkit, but it works...
-                    resizedSvg <- str_replace(unlist(structuresSvg[casrnName][[1]]) , "width='250px'", "width='50px'")
-                    resizedSvg <- str_replace(resizedSvg , "height='200px'", "height='40px'")
-                    
-                    # Add fetched, resized SVG to list too
-                    svgImagesList[paste0(casrnName, "__", i)] <<- resizedSvg
-                    
-                    # Add tooltip saying CASRN on hover
-                    return(HTML(paste0(
-                      tags$div(  
-                        tipify(
-                          actionButton(
-                            inputId=paste0("ab__img__", casrnName, "__", i), 
-                            label=HTML(paste0(resizedSvg))
-                          ),
-                          title=paste0("Chemical structure for ", casrnName, ". Click to expand image with more info."),
-                          placement="bottom"
-                        )
-                      , id=paste0("div__ab__img__", casrnName, "__", i))
-                    )))
-                  })
-                  
-                  # Get additional information for each CASRN from database and add to table
-                  expandedInfo <- t(sapply(reenrichResults[[i]][,"casrn"], function(casrn){
-                    resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="casrnData", query=list(input=casrn))
-                    if(resp$status_code != 200){
-                      return(NULL)
-                    }
-                    
-                    # Dynamically create matching observers for zoomed in views of chemical structures
-                    chemDetail <- unlist(content(resp), recursive=FALSE)
-                    outputTestsubstanceChemname <- chemDetail[["testsubstance_chemname"]]
-                    outputFormula <- chemDetail[["mol_formula"]]
-                    outputIupac <- chemDetail[["iupac_name"]]
-                    outputInchi <- chemDetail[["inchis"]]
-                    outputInchikey <- chemDetail[["inchikey"]]
-                    outputSmiles <- chemDetail[["smiles"]]
-                    outputDtxsid <- chemDetail[["dtxsid"]]
-                    outputDtxrid <- chemDetail[["dtxrid"]]
-                    outputWeight <- chemDetail[["mol_weight"]]
-                    outputCid <- chemDetail[["cid"]]
-                    
-                    # Resize structural image
-                    svgExpanded <- paste0(svgImagesList[paste0(casrn, "__", i)])
-                    svgExpanded <- str_replace(svgExpanded , "width='50px'", "width='600px'")
-                    svgExpanded <- str_replace(svgExpanded , "height='40px'", "height='480px'")
-
-                    # Create observer
-                    if(is.null(setFilesObservers$observers[[paste0("svgObserver__", casrn, "__", i)]])){
-                      setFilesObservers$observers[[paste0("svgObserver__", casrn, "__", i)]] <- observeEvent(input[[paste0("ab__img__", casrn, "__", i)]], {
-                        showModal(
-                          modalDialog(
-                            title=casrn,
-                            footer=modalButton("Close"),
-                            size="l",
-                            fluidRow(
-                              column(12, HTML(paste0(svgExpanded)))
-                            ),
-                            fluidRow(
-                              column(3, HTML("<b>DTXSID</b>")),
-                              column(9, HTML(outputDtxsid))
-                            ),
-                            fluidRow(
-                              column(3, HTML("<b>DTXRID</b>")),
-                              column(9, HTML(outputDtxrid))
-                            ),
-                            fluidRow(
-                              column(3, HTML("<b>Chemical Name</b>")),
-                              column(9, HTML(outputTestsubstanceChemname))
-                            ),
-                            fluidRow(
-                              column(3, HTML("<b>IUPAC Name</b>")),
-                              column(9, HTML(outputIupac))
-                            ),
-                            fluidRow(
-                              column(3, HTML("<b>CASRN</b>")),
-                              column(9, HTML(casrn))
-                            ),
-                            fluidRow(
-                              column(3, HTML("<b>SMILES</b>")),
-                              column(9, HTML(outputSmiles))
-                            ),
-                            fluidRow(
-                              column(3, HTML("<b>InChI</b>")),
-                              column(9, HTML(outputInchi))
-                            ),
-                            fluidRow(
-                              column(3, HTML("<b>InChI Key</b>")),
-                              column(9, HTML(outputInchikey))
-                            ),
-                            fluidRow(
-                              column(3, HTML("<b>Molecular Formula</b>")),
-                              column(9, HTML(outputFormula))
-                            ),
-                            fluidRow(
-                              column(3, HTML("<b>Molecular Weight</b>")),
-                              column(9, HTML(outputWeight))
-                            ),
-                            fluidRow(
-                              column(3, HTML(paste0("<a href=\"https://comptox.epa.gov/dashboard/dsstoxdb/results?search=", outputDtxsid, "&abbreviation=TOX21SL\">View at EPA</a>"))),
-                              column(9, HTML(paste0("<a href=\"https://pubchem.ncbi.nlm.nih.gov/compound/", outputCid, "\">View at PubChem</a>")))
-                            )
-                          )
-                        )
-                      }, ignoreInit=TRUE)
-                    }
-                    infoOutp <- data.frame("iupac_name"=outputIupac, "smiles"=outputSmiles, "dtxsid"=outputDtxsid, "dtxrid"=outputDtxrid, "mol_formula"=outputFormula, "mol_weight"=outputWeight, "inchis"=outputInchi, "inchikey"=outputInchikey, stringsAsFactors=FALSE)
-                    return(infoOutp)
-                  }))
-                  expandedInfo <- data.frame(expandedInfo)
-                  row.names(expandedInfo) <- t(sapply(reenrichResults[[i]][,"casrn"], function(casrn) casrn))
-                  
-                  # Create final data frame
-                  fullTableTmp <- t(sapply(row.names(expandedInfo), function(casrn){
-                    for (row in 1:nrow(reenrichResults[[i]])){
-                      if(reenrichResults[[i]][row,"casrn"] == casrn){
-                        finalTable <- NULL
-                        if (mode == "similarity" | originalEnrichMode == "similarity") {
-                          finalTable <- data.frame(
-                            "Chemical_Structure"  = resultImages[row], 
-                            "DTXSID"              = expandedInfo[casrn,"dtxsid"], 
-                            "CASRN"               = reenrichResults[[i]][row,"casrn"], 
-                            "IUPAC_Name"          = expandedInfo[casrn,"iupac_name"], 
-                            "SMILES"              = expandedInfo[casrn,"smiles"], 
-                            "InChI"               = expandedInfo[casrn,"inchis"], 
-                            "InChIKey"            = expandedInfo[casrn,"inchikey"],
-                            "Molecular_Formula"   = expandedInfo[casrn,"mol_formula"],
-                            "Molecular_Weight"    = expandedInfo[casrn,"mol_weight"],
-                            "Similarity"          = round(as.numeric(reenrichResults[[i]][row,"similarity"]), digits=2), # Truncate similarity to hundredths place (easier to read)
-                            "Cyanide"             = reenrichResults[[i]][row,"cyanide"],
-                            "Isocyanate"          = reenrichResults[[i]][row,"isocyanate"],
-                            "Aldehyde"            = reenrichResults[[i]][row,"aldehyde"],
-                            "Epoxide"             = reenrichResults[[i]][row,"epoxide"],
-                            stringsAsFactors=FALSE
-                          )
-                        } else if(mode == "substructure" | originalEnrichMode == "substructure") { # Substructure (no similarity column)
-                          finalTable <- data.frame(
-                            "Chemical_Structure"  = resultImages[row], 
-                            "DTXSID"              = expandedInfo[casrn,"dtxsid"], 
-                            "CASRN"               = reenrichResults[[i]][row,"casrn"], 
-                            "IUPAC_Name"          = expandedInfo[casrn,"iupac_name"], 
-                            "SMILES"              = expandedInfo[casrn,"smiles"], 
-                            "InChI"               = expandedInfo[casrn,"inchis"], 
-                            "InChIKey"            = expandedInfo[casrn,"inchikey"],
-                            "Molecular_Formula"   = expandedInfo[casrn,"mol_formula"],
-                            "Molecular_Weight"    = expandedInfo[casrn,"mol_weight"],
-                            "Cyanide"             = reenrichResults[[i]][row,"cyanide"],
-                            "Isocyanate"          = reenrichResults[[i]][row,"isocyanate"],
-                            "Aldehyde"            = reenrichResults[[i]][row,"aldehyde"],
-                            "Epoxide"             = reenrichResults[[i]][row,"epoxide"],
-                            stringsAsFactors=FALSE
-                          )
-                        }
-                        return(finalTable)
-                      }
-                    }
-                  }))
-                  fullTableTmp <- data.frame(fullTableTmp)
-                  
-                  imgPath1 <- '<img src="images/warnings/'
-                  imgPath2 <- ' height="50" width="100"></img>'
-                  
-                  # Check if original string contains any of the reactive structures
-                  originalInputStr <- ""
-                  for(j in originalNames){
-                    originalSetName <- unlist(str_split(j, "__"))
-                    if(originalSetName[2] == i){
-                      originalInputStr <- paste0(originalSetName[1])
-                    }
-                  }
-                  resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="reactiveGroups", query=list(input=originalInputStr))
-                  if(resp$status_code != 200){
-                    return(NULL)
-                  }
-                  originalInputStrReactive <- unlist(str_split(content(resp), ","))
-                  # 1=cyanide, 2=isocyanate, 3=aldehyde, 4=epoxide
-                  
-                  # Simplify reactive structure columns into one warning column
-                  fullTableWarnings <- lapply(1:nrow(fullTableTmp), function(tableRow){
-                    warningToDisplay <- ""
-                    nitrileCol <- fullTableTmp[tableRow, (ncol(fullTableTmp)-3)]
-                    isocyanateCol <- fullTableTmp[tableRow, (ncol(fullTableTmp)-2)]
-                    aldehydeCol <- fullTableTmp[tableRow, (ncol(fullTableTmp)-1)]
-                    epoxideCol <- fullTableTmp[tableRow, (ncol(fullTableTmp))]
-
-                    if(toString(nitrileCol) != toString(originalInputStrReactive[1])) {
-                      warningToDisplay <- paste0(tipify(div( HTML(paste0(warningToDisplay, imgPath1, 'nitrile.png"', imgPath2))   ), "Nitrile (Cyanide) group.", placement="left"))
-                    }
-                    
-                    if(toString(isocyanateCol) != toString(originalInputStrReactive[2])) {
-                      warningToDisplay <- paste0(tipify(div( HTML(paste0(warningToDisplay, imgPath1, 'isocyanate.png"', imgPath2)) ), "Isocyanate group.", placement="left"))
-                    }
-                  
-                    if(toString(aldehydeCol) != toString(originalInputStrReactive[3])) {
-                      warningToDisplay <- paste0(tipify(div( HTML(paste0(warningToDisplay, imgPath1, 'aldehyde.png"', imgPath2))   ),  "Aldehyde group.", placement="left"))
-                    }
+              # Remove dataframe row names so they will just be numbered
+              rownames(fullTable) <- 1:nrow(fullTable)
               
-                    if(toString(epoxideCol) != toString(originalInputStrReactive[4])) {
-                      warningToDisplay <- paste0(tipify(div( HTML(paste0(warningToDisplay, imgPath1, 'epoxide.png"', imgPath2))     ), "Epoxide group.", placement="left"))
-                    }
-        
-                    if(warningToDisplay == "") { # if no warnings
-                      warningToDisplay <- "<p>None</p>"
-                    }
-                    return(warningToDisplay)
-                  })
-                  
-                  # Create final table to display
-                  # Truncate to remove individual warning columns
-                  if (mode == "similarity" | originalEnrichMode == "similarity") {
-                    fullTable <- fullTableTmp[, 1:10]
-                  } else if(mode == "substructure" | originalEnrichMode == "substructure") { # Substructure (no similarity column)
-                    fullTable <- fullTableTmp[, 1:9]
-                  }
-                  
-                  # Check if any warnings were generated
-                  warningCheck <- lapply(fullTableWarnings, function(x){
-                    if(x == "<p>None</p>"){
-                      return(NULL)
-                    }
-                    return(TRUE)
-                  })
-                  warningCheck <- warningCheck[!sapply(warningCheck, is.null)]
-                  
-                  # Save warningCheck to reactive value so we can reference outside of this scope
-                  warningList$warnings[[i]] <- warningCheck
-                  
-                  # Create checkbox column to display
-                  selectList <- lapply(checkboxes[[i]], function(x) {
-                    return(paste0(x))
-                  })
-                  
-                  if(length(warningCheck) > 0){
-                    # If we have warnings, then include the warning column
-                    fullTable$warning=fullTableWarnings  
-                    # Add checkboxes for CASRNs
-                    fullTable <- data.frame(select=unlist(selectList), fullTable)
-                    # Save this so we can use it outside of the method
-                    finalTableToDisplay$table[[i]] <- fullTable
-                    # Set appropriate column names to display in table
-                    if (mode == "similarity" | originalEnrichMode == "similarity") {
-                      names(fullTable) <- c(
-                        "Select",
-                        "Chemical Structure",
-                        "DSSTox Substance ID",
-                        "CASRN",
-                        "IUPAC Name",
-                        "SMILES",
-                        "InChI",
-                        "InChI Key",
-                        "Molecular Formula",
-                        "Molecular Weight",
-                        "Similarity",
-                        paste0( tipify( div("Reactive Structure Warning"), "Warning: either this chemical contains a known reactive group(s) while your original submission did not, or this chemical does not contain a known reactive group(s) that your original submission contained. It is recommended that you deselect this chemical and perform re-enrichment on your data set.", placement="bottom" ) )
-                      )
-                    } else if(mode == "substructure" | originalEnrichMode == "substructure") {
-                      names(fullTable) <- c(
-                        "Select",
-                        "Chemical Structure",
-                        "DSSTox Substance ID",
-                        "CASRN",
-                        "IUPAC Name",
-                        "SMILES",
-                        "InChI",
-                        "InChI Key",
-                        "Molecular Formula",
-                        "Molecular Weight",
-                        paste0( tipify( div("Reactive Structure Warning"), "Warning: either this chemical contains a known reactive group(s) while your original submission did not, or this chemical does not contain a known reactive group(s) that your original submission contained. It is recommended that you deselect this chemical and perform re-enrichment on your data set.", placement="bottom" ) )
-                      )
-                    }
-                    
-                  } else {
-                    # Add checkboxes for CASRNs
-                    fullTable <- data.frame(select=unlist(selectList), fullTable)
-                    
-                    # Set appropriate column names to display in table
-                    if (mode == "similarity" | originalEnrichMode == "similarity") {
-                      names(fullTable) <- c(
-                        "Select",
-                        "Chemical Structure",
-                        "DSSTox Substance ID",
-                        "CASRN",
-                        "IUPAC Name",
-                        "SMILES",
-                        "InChI",
-                        "InChI Key",
-                        "Molecular Formula",
-                        "Molecular Weight",
-                        "Similarity"
-                      )
-                    } else if(mode == "substructure" | originalEnrichMode == "substructure") {
-                      names(fullTable) <- c(
-                        "Select",
-                        "Chemical Structure",
-                        "DSSTox Substance ID",
-                        "CASRN",
-                        "IUPAC Name",
-                        "SMILES",
-                        "InChI",
-                        "InChI Key",
-                        "Molecular Formula",
-                        "Molecular Weight"
-                      )
-                    }
-                  }
-                  
-                  # Remove dataframe row names so they will just be numbered
-                  rownames(fullTable) <- 1:nrow(fullTable)
-                  
-                  # Check if chemicals with warnings exist
-                  if(length(unlist(warningList$warnings[[i]], recursive=FALSE)) > 0){
-                    haveWarnings$warnings <<- TRUE
-                  }
-                  
+              # Check if chemicals with warnings exist
+              if(length(unlist(warningList$warnings[[i]], recursive=FALSE)) > 0){
+                haveWarnings$warnings <<- TRUE
+              }
+              
+              if(mode != "casrn" | (originalEnrichMode == "substructure" | originalEnrichMode == "similarity")) {
+                output[[paste0("table_", i)]] <- renderUI(
+                  column(12, style="height:500px; overflow-y:scroll;",
+                    DT::datatable({fullTable},
+                    # Render reenrichment table (solution from https://stackoverflow.com/questions/37356625/adding-a-column-with-true-false-and-showing-that-as-a-checkbox/37356792#37356792)
+                        escape = FALSE, 
+                        class = "row-border stripe compact",
+                        rownames = FALSE,
+                        style = "bootstrap",
+                        select = "none",
+                        options = list( 
+                          paging=TRUE,
+                          preDrawCallback = JS('function() { Shiny.unbindAll(this.api().table().node()); }'), 
+                          drawCallback = JS('function() { Shiny.bindAll(this.api().table().node()); } '),
+                          dom="Bfrtip",
+                          pageLength=10,
+                          buttons=list("copy", "csv", "excel", "pdf", "print", list( extend="colvis", columns=as.vector(1:(ncol(fullTable)-1)) ))  
+                          #                                                           ^^ this is so we always keep the select checkboxes in the table (user can't hide them)
+                        ),
+                        extensions="Buttons"
+                    )
+                  )
+                )
+                
+                outputOptions(output, paste0("table_", i), suspendWhenHidden=FALSE)
+              } 
+
+            })
+          }
+          
+          # Render re-enrich cutoff slider
+          output[["reenrichCutoff"]] <- renderUI(
+            fluidRow(
+              # Re-enrichment cutoff slider
+              column(12,
+                h3("Adjust Network Node Cutoff"),
+                bsTooltip(id="nodeCutoffRe", title="This will determine the maximum number of results per data set and may affect how many nodes are generated during network generation. (default = 10). Higher values may cause the enrichment process to take longer (Not available when viewing annotations for Tox21 chemicals).", placement="bottom", trigger="hover"),
+                sliderInput(inputId = "nodeCutoffRe", label="Re-enrichment Cutoff", value=10, min=1, max=50, step=1, width="100%")
+              ),
+              hr()
+            )
+          )
+
+          # Render re-enrich buttons
+          output[["reenrichButtonOut"]] <- renderUI(
+            fluidRow(
+              # Deselect per set button
+              column(id=paste0("selectAllSet__", i), 6, 
+                if(mode != "casrn" | (originalEnrichMode == "substructure" | originalEnrichMode == "similarity")) {
+                  actionButton("selectAllSetButton", "Deselect all chemicals for this set")   
+                }
+              ),
+              # Deselect all chemicals in all sets
+              column(id=paste0("selectAllReenrich", i), 6, 
+                if(mode != "casrn" | (originalEnrichMode == "substructure" | originalEnrichMode == "similarity")) {
+                  actionButton("selectAllReenrichButton", "Deselect all chemicals")   
+                }
+              ),
+              # Deselect all chemicals with warnings
+              column(id=paste0("selectAllWarningsReenrich", i), 6,
+                if(haveWarnings$warnings == TRUE) {
                   if(mode != "casrn" | (originalEnrichMode == "substructure" | originalEnrichMode == "similarity")) {
-                    output[[paste0("table_", i)]] <- renderUI(
-                      column(12, style="height:500px; overflow-y:scroll;",
-                        DT::datatable({fullTable},
-                        # Render reenrichment table (solution from https://stackoverflow.com/questions/37356625/adding-a-column-with-true-false-and-showing-that-as-a-checkbox/37356792#37356792)
-                            escape = FALSE, 
-                            class = "row-border stripe compact",
-                            rownames = FALSE,
-                            style = "bootstrap",
-                            select = "none",
-                            options = list( 
-                              paging=TRUE,
-                              preDrawCallback = JS('function() { Shiny.unbindAll(this.api().table().node()); }'), 
-                              drawCallback = JS('function() { Shiny.bindAll(this.api().table().node()); } '),
-                              dom="Bfrtip",
-                              pageLength=10,
-                              buttons=list("copy", "csv", "excel", "pdf", "print", list( extend="colvis", columns=as.vector(1:(ncol(fullTable)-1)) ))  
-                              #                                                           ^^ this is so we always keep the select checkboxes in the table (user can't hide them)
-                            ),
-                            extensions="Buttons"
-                        )
-                      )
-                    )
-                    
-                    outputOptions(output, paste0("table_", i), suspendWhenHidden=FALSE)
-                  } 
-  
-                })
-              }
+                    actionButton("selectAllWarningsReenrichButton", HTML("<div class=\"text-danger\">Deselect all chemicals with warnings</div>"))
+                  }
+                }
+              ),
               
-              # Render re-enrich cutoff slider
-              output[["reenrichCutoff"]] <- renderUI(
-                fluidRow(
-                  # Re-enrichment cutoff slider
-                  column(12,
-                    h3("Adjust Network Node Cutoff"),
-                    bsTooltip(id="nodeCutoffRe", title="This will determine the maximum number of results per data set and may affect how many nodes are generated during network generation. (default = 10). Higher values may cause the enrichment process to take longer (Not available when viewing annotations for Tox21 chemicals).", placement="bottom", trigger="hover"),
-                    sliderInput(inputId = "nodeCutoffRe", label="Re-enrichment Cutoff", value=10, min=1, max=50, step=1, width="100%")
-                  ),
-                  hr()
+              # Reenrich selected chemicals
+              column(id=paste0("reenrichButtonCol", i), 12, 
+                if(mode != "casrn" | (originalEnrichMode == "substructure" | originalEnrichMode == "similarity")) {
+                  actionButton("reenrichButton", "Reenrich selected chemicals", icon=icon("arrow-alt-circle-right"))    
+                } else {
+                  actionButton("updateNetworkButton", "Update network", icon=icon("arrow-alt-circle-right"))    
+                },
+                hidden(
+                  uiOutput("reenrich_error_box")
                 )
-              )
-
-              # Render re-enrich buttons
-              output[["reenrichButtonOut"]] <- renderUI(
-                fluidRow(
-                  # Deselect per set button
-                  column(id=paste0("selectAllSet__", i), 6, 
-                    if(mode != "casrn" | (originalEnrichMode == "substructure" | originalEnrichMode == "similarity")) {
-                      actionButton("selectAllSetButton", "Deselect all chemicals for this set")   
-                    }
-                  ),
-                  # Deselect all chemicals in all sets
-                  column(id=paste0("selectAllReenrich", i), 6, 
-                    if(mode != "casrn" | (originalEnrichMode == "substructure" | originalEnrichMode == "similarity")) {
-                      actionButton("selectAllReenrichButton", "Deselect all chemicals")   
-                    }
-                  ),
-                  # Deselect all chemicals with warnings
-                  column(id=paste0("selectAllWarningsReenrich", i), 6,
-                    if(haveWarnings$warnings == TRUE) {
-                      if(mode != "casrn" | (originalEnrichMode == "substructure" | originalEnrichMode == "similarity")) {
-                        actionButton("selectAllWarningsReenrichButton", HTML("<div class=\"text-danger\">Deselect all chemicals with warnings</div>"))
-                      }
-                    }
-                  ),
-                  
-                  # Reenrich selected chemicals
-                  column(id=paste0("reenrichButtonCol", i), 12, 
-                    if(mode != "casrn" | (originalEnrichMode == "substructure" | originalEnrichMode == "similarity")) {
-                      actionButton("reenrichButton", "Reenrich selected chemicals", icon=icon("arrow-alt-circle-right"))    
-                    } else {
-                      actionButton("updateNetworkButton", "Update network", icon=icon("arrow-alt-circle-right"))    
-                    },
-                    hidden(
-                      uiOutput("reenrich_error_box")
-                    )
-                  ),
-                  hr()
-                )
-              )
-          #}
+              ),
+              hr()
+            )
+          )
 
           # Render Chart & Cluster heatmaps for all sets
-          
+          print("HERE NOW 4")
+          print(cutoff)
           # Query API to read in gct file
           # Fetch setFiles from server via API
           resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="readGct", query=list(transactionId=transactionId, cutoff=cutoff, mode="chart"))
           #TODO: error check
           if(resp$status_code != 200){
-            
+            print("HERE NOW 5")
             # Hide results container
             shinyjs::hide(id="resultsContainer")
             # Show waiting page
@@ -3195,9 +3211,7 @@ shinyServer(function(input, output, session) {
             gctFileChartInner <- gctFileChartInner[!sapply(gctFileChartInner, is.null)]
             return(gctFileChartInner)
           })))
-          
-          
-          
+
           gctFileChartRowNames <- unique(unlist(lapply(content(resp), function(x){
             gctFileChartInner <- unlist(lapply(names(x), function(y) {
               if(y != "_row"){
@@ -3278,9 +3292,10 @@ shinyServer(function(input, output, session) {
           gctFileChartMatrix <- t(gctFileChartMatrix)
           gctFileClusterMatrix <- t(gctFileClusterMatrix)
           
+          # Generate networks for chart & cluster
           chartFullNetwork <- generateNetwork(transactionId=transactionId, cutoff=cutoff, networkMode="chart", inputNetwork=names(enrichmentSets), qval=0.05)
           clusterFullNetwork <- generateNetwork(transactionId=transactionId, cutoff=cutoff, networkMode="cluster", inputNetwork=names(enrichmentSets), qval=0.05)
-          
+
           output[["chartHeatmap"]] <- renderUI(
               fluidRow(
                 column(12,
@@ -3313,10 +3328,10 @@ shinyServer(function(input, output, session) {
                       ),
                       hidden(
                         fluidRow(id="vennChartMenu",
-                          column(6,
+                          column(4,
                             uiOutput("vennChartButtons")
                           ),
-                          column(6,
+                          column(8,
                             plotOutput(
                               outputId="vennChart"
                             ) %>% withSpinner()
@@ -3358,10 +3373,10 @@ shinyServer(function(input, output, session) {
                       ),
                       hidden(
                         fluidRow(id="vennClusterMenu",
-                          column(6,
+                          column(4,
                             uiOutput("vennClusterButtons")
                           ),
-                          column(6,
+                          column(8,
                             plotOutput(
                               outputId="vennCluster"
                             ) %>% withSpinner()       
@@ -3498,9 +3513,15 @@ shinyServer(function(input, output, session) {
         selectAllReenrichButtonStatus <- reactiveValues(option = "deselect")
         if(is.null(setFilesObservers$observers[["selectAllReenrichButtonObserver"]])){
           setFilesObservers$observers[["selectAllReenrichButtonObserver"]] <- observeEvent(input$selectAllReenrichButton, {
-            
+            allChemNames <- unname(unlist(lapply(checkboxList$checkboxes, function(i) {
+              unlist(lapply(names(i), function(j){
+                return(j)
+              }))
+            })))
+
             if(selectAllReenrichButtonStatus$option == "select") { # Selecting
-              selectAllReenrichButtonStatus$option = "deselect"
+              firstCaseWarningChems$casrns <- list()
+              selectAllReenrichButtonStatus$option <- "deselect"
               updateActionButton(session, "selectAllReenrichButton", label="Deselect all chemicals")
               for (i in checkboxList$checkboxes) {
                 for(j in names(i)){
@@ -3508,7 +3529,8 @@ shinyServer(function(input, output, session) {
                 }
               }
             } else { # Deselecting
-              selectAllReenrichButtonStatus$option = "select"
+              firstCaseWarningChems$casrns <- allChemNames # If deselecting, set this first case list to contain all chemicals
+              selectAllReenrichButtonStatus$option <- "select"
               updateActionButton(session, "selectAllReenrichButton", label="Select all chemicals")
               for (i in checkboxList$checkboxes) {
                 for(j in names(i)){
@@ -3570,6 +3592,7 @@ shinyServer(function(input, output, session) {
             }))
             
             if(selectAllWarningsReenrichButtonStatus$option == "select") { # Selecting
+              firstCaseWarningChems$casrns <- list() # If selecting, remove warning chems from this list
               selectAllWarningsReenrichButtonStatus$option <- "deselect"
               updateActionButton(session, "selectAllWarningsReenrichButton", label="<div class=\"text-danger\">Deselect all chemicals with warnings</div>")
               for (i in checkboxList$checkboxes) {
@@ -3580,6 +3603,7 @@ shinyServer(function(input, output, session) {
                 }
               }
             } else { # Deselecting
+              firstCaseWarningChems$casrns <- chemicalsWithWarningsList # If deselecting, add warning chems to this list
               selectAllWarningsReenrichButtonStatus$option <- "select"
               updateActionButton(session, "selectAllWarningsReenrichButton", label="<div class=\"text-danger\">Select all chemicals with warnings</div>")
               for (i in checkboxList$checkboxes) {
@@ -3669,7 +3693,6 @@ shinyServer(function(input, output, session) {
       if(resp$status_code != 200){
         return(HTML("<p class=\"text-danger\"><b>Error:</b> An error occurred while generating the network.</p>"))
       }
-      
       if(length(content(resp)) == 0){
         return(HTML("<p class=\"text-danger\"><b>Error:</b> The generated network has zero nodes.</p>"))
       }
@@ -3703,26 +3726,29 @@ shinyServer(function(input, output, session) {
       
       # Create rows and classes
       # 1
-      rowsSet1 <- lapply(1:nrow(outpNetwork), function(x) paste0(outpNetwork[[x, "name1"]], "@", outpNetwork[[x, "class1"]], "@", outpNetwork[[x, "url1"]], "@", classToColor(outpNetwork[[x, "class1"]], classColors)))
+      #rowsSet1 <- lapply(1:nrow(outpNetwork), function(x) paste0(outpNetwork[[x, "name1"]], "@", outpNetwork[[x, "class1"]], "@", outpNetwork[[x, "url1"]], "@", classToColor(outpNetwork[[x, "class1"]], classColors)))
+      rowsSet1 <- mclapply(1:nrow(outpNetwork), mc.cores=4, function(x) paste0(outpNetwork[[x, "name1"]], "@", outpNetwork[[x, "class1"]], "@", outpNetwork[[x, "url1"]], "@", classToColor(outpNetwork[[x, "class1"]], classColors)))
       # 2
-      rowsSet2 <- lapply(1:nrow(outpNetwork), function(x) paste0(outpNetwork[[x, "name2"]], "@", outpNetwork[[x, "class2"]], "@", outpNetwork[[x, "url2"]], "@", classToColor(outpNetwork[[x, "class2"]], classColors)))
+      #rowsSet2 <- lapply(1:nrow(outpNetwork), function(x) paste0(outpNetwork[[x, "name2"]], "@", outpNetwork[[x, "class2"]], "@", outpNetwork[[x, "url2"]], "@", classToColor(outpNetwork[[x, "class2"]], classColors)))
+      rowsSet2 <- mclapply(1:nrow(outpNetwork), mc.cores=4, function(x) paste0(outpNetwork[[x, "name2"]], "@", outpNetwork[[x, "class2"]], "@", outpNetwork[[x, "url2"]], "@", classToColor(outpNetwork[[x, "class2"]], classColors)))
       rowsSet <- list(unlist(rowsSet1), unlist(rowsSet2))
       rowsSet <- unique(unlist(rowsSet, recursive = FALSE))
-      
       # 1
-      classes1 <- lapply(1:nrow(outpNetwork), function(x) paste0(outpNetwork[[x, "class1"]]))
+      #classes1 <- lapply(1:nrow(outpNetwork), function(x) paste0(outpNetwork[[x, "class1"]]))
+      classes1 <- mclapply(1:nrow(outpNetwork), mc.cores=4, function(x) paste0(outpNetwork[[x, "class1"]]))
       # 2
-      classes2 <- lapply(1:nrow(outpNetwork), function(x) paste0(outpNetwork[[x, "class2"]]))
+      #classes2 <- lapply(1:nrow(outpNetwork), function(x) paste0(outpNetwork[[x, "class2"]]))
+      classes2 <- mclapply(1:nrow(outpNetwork), mc.cores=4, function(x) paste0(outpNetwork[[x, "class2"]]))
       classes <- list(unlist(classes1), unlist(classes2))
       classes <- unique(unlist(classes, recursive = FALSE))
-      
+
       # Generate list of nodes for network
       networkFullNodes <- t(sapply(rowsSet, function(s){
         rowsSetSplit <- unlist(str_split(s, "@"))
         # split: 1 = Term, 2 = Class (Category), 3 = URL, 4 = Color 
-        id     <- paste0(rowsSetSplit[1], "@", rowsSetSplit[2])
-        url    <- paste0(rowsSetSplit[3], rowsSetSplit[1])
-        rgbCss  <- rowsSetSplit[4]
+        id <- paste0(rowsSetSplit[1], "@", rowsSetSplit[2])
+        url <- paste0(rowsSetSplit[3], rowsSetSplit[1])
+        rgbCss <- rowsSetSplit[4]
         return(data.frame( id=id, label=rowsSetSplit[1], group=rowsSetSplit[2], shape="ellipse", url=url, color=rgbCss, stringsAsFactors=FALSE ))
       }))
       networkFullNodes <- as.data.frame(networkFullNodes)
@@ -3736,20 +3762,20 @@ shinyServer(function(input, output, session) {
       }))
       networkFullEdges <- as.data.frame(networkFullEdges)
       rownames(networkFullEdges) <- 1:nrow(networkFullEdges)
-      
+
       fullNetwork <- visNetwork(networkFullNodes, networkFullEdges, height="500px", width="100%") %>%
         visOptions(highlightNearest=TRUE, nodesIdSelection=TRUE, selectedBy="group") %>%
         visLayout(randomSeed=runif(1)) %>%
         visPhysics(solver="forceAtlas2Based", enabled=physicsEnabled, stabilization=list(enabled=FALSE, iterations=1000, updateInterval=25)) %>%
         visEdges(smooth=smoothCurve) %>%
-        visInteraction(navigationButtons=TRUE, keyboard=FALSE, selectable=TRUE) %>%
+        visInteraction(navigationButtons=TRUE, keyboard=FALSE, selectable=TRUE, selectConnectedEdges=FALSE) %>%
         # Venn Diagram handler when clicking on network edges
-        visEvents(selectEdge = "
+        visEvents(selectEdge = '
           function(properties) {
-            Shiny.onInputChange('selectEdge', properties.edges);
+            Shiny.setInputValue("selectEdge", properties, {priority:"event"});
           }
-        ")
-      
+        ')
+ 
       # Add groups for legend
       for (x in classes) {
         groupColor <- paste0( "rgb(", paste0(classColors[[x]], collapse=", "), ")" )
@@ -3766,9 +3792,9 @@ shinyServer(function(input, output, session) {
     
     # Observe network edge being clicked
     observeEvent(input$selectEdge, {
-      if(length(input$selectEdge) == 1) { #if selecting edge
+      if(length(input$selectEdge$edges) == 1 & length(input$selectEdge$nodes) == 0) { #if selecting edge
         # Get from node (2), to node (3), and chart - chart or cluster (4)
-        tmpSplit <- unlist(str_split(input$selectEdge, "__"))
+        tmpSplit <- unlist(str_split(input$selectEdge$edges, "__"))
         tmpFrom <- unlist(str_split(tmpSplit[2], "@"))
         tmpTo <- unlist(str_split(tmpSplit[3], "@"))
         networkMode <- tmpSplit[4]
@@ -3780,10 +3806,10 @@ shinyServer(function(input, output, session) {
         # Get overlapping chemicals
         resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="getNodeChemicals", query=list( termFrom=termFrom, termTo=termTo, classFrom=classFrom, classTo=classTo ))
         if(resp$status_code != 200){
-          output[["vennChart"]] <- renderplot({
+          output[["vennChart"]] <- renderPlot({
           #  HTML("<p class=\"text-danger\"><b>Error:</b> An error occurred while fetching the chemicals.</p>")
           })
-          output[["vennCluster"]] <- renderplot({
+          output[["vennCluster"]] <- renderPlot({
             #  HTML("<p class=\"text-danger\"><b>Error:</b> An error occurred while fetching the chemicals.</p>")
           })
         }
@@ -3816,9 +3842,22 @@ shinyServer(function(input, output, session) {
         # Color from class of TO annotation
         colorTo <- rgb(classColorsTo[1], classColorsTo[2], classColorsTo[3], maxColorValue=255)
         # Average color from classes of FROM and TO annotations
-        greenAvg <- as.integer((strtoi(classColorsFrom[1]) + strtoi(classColorsTo[1]))/2)
-        redAvg <- as.integer((strtoi(classColorsFrom[2]) + strtoi(classColorsTo[2]))/2)
-        blueAvg <- as.integer((strtoi(classColorsFrom[3]) + strtoi(classColorsTo[3]))/2)
+        darkenValue <- 0
+        if(colorFrom == colorTo){
+          darkenValue <- 50 # If both region colors are identical, just darken it a bit
+        }
+        greenAvg <- as.integer(((strtoi(classColorsFrom[1]) + strtoi(classColorsTo[1]))/2)-darkenValue)
+        redAvg <- as.integer(((strtoi(classColorsFrom[2]) + strtoi(classColorsTo[2]))/2)-darkenValue)
+        blueAvg <- as.integer(((strtoi(classColorsFrom[3]) + strtoi(classColorsTo[3]))/2)-darkenValue)
+        if(greenAvg < 0) {
+          greenAvg <- 0
+        }
+        if(redAvg < 0) {
+          redAvg <- 0
+        }
+        if(blueAvg < 0) {
+          blueAvg <- 0
+        }
         colorBoth <- rgb(greenAvg, redAvg, blueAvg, maxColorValue=255)
         
         # Prepare data and create Venn diagram
@@ -3826,7 +3865,7 @@ shinyServer(function(input, output, session) {
         names(vennList) <- list(str_wrap(paste0(classFrom, " | ", termFrom), 30) , str_wrap(paste0(classTo, " | ", termTo), 30)) 
         venn <- Venn(vennList)
         vennData <- process_data(venn)
-        vennDiagram <- ggplot() +
+        vennDiagramPlot <- ggplot() +
           geom_sf(aes(fill=list(colorFrom, colorTo, colorBoth)), data=venn_region(vennData)) +
           geom_sf(size=1, lty="solid", color=theme$textcolor, data=venn_setedge(vennData), show.legend=FALSE) +
           geom_sf_text(aes(label=name), fontface="bold", color=theme$textcolor, nudge_y=c(1,1,1), data=venn_setlabel(vennData)) +
@@ -3842,7 +3881,7 @@ shinyServer(function(input, output, session) {
               linetype="solid"
             )
           ) # remove legend, not really needed
-        vennDiagram <- ggplotGrob(vennDiagram)
+        vennDiagram <- ggplotGrob(vennDiagramPlot)
         vennDiagram$respect <- FALSE
         
         if(networkMode == "chart"){
@@ -3866,6 +3905,12 @@ shinyServer(function(input, output, session) {
               ),
               column(12,
                      actionButton(inputId="vennSharedButtonChart", label="View shared chemicals")
+              ),
+              column(12,
+                     downloadLink("vennChartDownloadImg", "Download plot as .png")
+              ),
+              column(12,
+                     downloadLink("vennChartDownloadPdf", "Download plot as .pdf")
               )
             )
           })
@@ -3883,7 +3928,7 @@ shinyServer(function(input, output, session) {
                 )
               )
             )
-          })
+          }, ignoreNULL=TRUE, ignoreInit=TRUE)
           observeEvent(input$vennFromButtonCloseChart, {
             removeModal()
           })
@@ -3901,7 +3946,7 @@ shinyServer(function(input, output, session) {
                 )
               )
             )
-          })
+          }, ignoreNULL=TRUE, ignoreInit=TRUE)
           observeEvent(input$vennToButtonCloseChart, {
             removeModal()
           })
@@ -3919,10 +3964,25 @@ shinyServer(function(input, output, session) {
                 )
               )
             )
-          })
+          }, ignoreNULL=TRUE, ignoreInit=TRUE)
           observeEvent(input$vennSharedButtonCloseChart, {
             removeModal()
           })
+          
+          output$vennChartDownloadImg <- downloadHandler(
+            filename=paste0("venndiagram.png"),
+            content=function(file){
+              ggsave(file, plot=vennDiagramPlot)
+            }
+          )
+          
+          output$vennChartDownloadPdf <- downloadHandler(
+            filename=paste0("venndiagram.pdf"),
+            content=function(file){
+              ggsave(file, plot=vennDiagramPlot)
+            }
+          )
+
           
         } else { # Cluster
           # Render Venn diagram
@@ -3944,6 +4004,12 @@ shinyServer(function(input, output, session) {
               ),
               column(12,
                      actionButton(inputId="vennSharedButtonCluster", label="View shared chemicals")
+              ),
+              column(12,
+                     downloadLink("vennClusterDownloadImg", "Download plot as .png")
+              ),
+              column(12,
+                     downloadLink("vennClusterDownloadPdf", "Download plot as .pdf")
               )
             )
           })
@@ -3961,7 +4027,7 @@ shinyServer(function(input, output, session) {
                 )
               )
             )
-          })
+          }, ignoreNULL=TRUE, ignoreInit=TRUE)
           observeEvent(input$vennFromButtonCloseCluster, {
             removeModal()
           })
@@ -3979,7 +4045,7 @@ shinyServer(function(input, output, session) {
                 )
               )
             )
-          })
+          }, ignoreNULL=TRUE, ignoreInit=TRUE)
           observeEvent(input$vennToButtonCloseCluster, {
             removeModal()
           })
@@ -3997,14 +4063,32 @@ shinyServer(function(input, output, session) {
                 )
               )
             )
-          })
+          }, ignoreNULL=TRUE, ignoreInit=TRUE)
           observeEvent(input$vennSharedButtonCloseCluster, {
             removeModal()
           })
           
+          output$vennClusterDownloadImg <- downloadHandler(
+            filename=paste0("venndiagram.png"),
+            content=function(file){
+              ggsave(file, plot=vennDiagramPlot)
+            }
+          )
+          
+          output$vennClusterDownloadPdf <- downloadHandler(
+            filename=paste0("venndiagram.pdf"),
+            content=function(file){
+              ggsave(file, plot=vennDiagramPlot)
+            }
+          )
+          
         }
+      } else { # selecting a node
+        # TODO: make it so that selecting a node will show you a link to more details about the annotation
+        print("selected node")
+        print(input$selectEdge$nodes)
       }
-    }, ignoreNULL = TRUE, ignoreInit = TRUE )
+    }, ignoreNULL = FALSE, ignoreInit = TRUE )
     
     # Re-generate chart network
     observeEvent(input$chartNetworkUpdateButton, {
@@ -4104,6 +4188,7 @@ shinyServer(function(input, output, session) {
     generateJaccardColor <- function(jaccard) {
       if (jaccard < 0.0) {
         # invalid
+        return("-1")
       }
       else if (jaccard >= 0.0 & jaccard < 0.1) {
         return("rgb(132, 232, 246)")
@@ -4165,7 +4250,6 @@ shinyServer(function(input, output, session) {
     
     # Generate bargraphs
     createBargraph <- function(bgChartFull=bgChartFull, bgChartAllCategories=bgChartAllCategories, orderSet, colorsList){
-      
       output[["bargraph"]] <- renderUI(
         do.call(tabsetPanel, c(id="pvaluetab", lapply(bgChartAllCategories, function(catName){
           tmpBgNames <- unique(unlist(unname(lapply(bgChartFull[[catName]], function(x){
@@ -4226,40 +4310,55 @@ shinyServer(function(input, output, session) {
 
     # Perform re-enrichment on selected result chemicals
     observeEvent(input$reenrichButton, {
-      reenrichCASRNBox <- ""
-      reenrichCurrentSet <- ""
-      for (i in checkboxList$checkboxes) {
-        for(j in names(i)){
-          if(is.null(input[[j]]) == TRUE){
-            reenrichTmpSplit <- unlist(str_split(j, "__"))
-            if (reenrichCurrentSet == "") {
-              reenrichCASRNBox <- paste0(reenrichCASRNBox, "#", reenrichTmpSplit[2], "\n", reenrichTmpSplit[1], "\n")
-              reenrichCurrentSet = reenrichTmpSplit[2]
-            }
-            else if (reenrichCurrentSet != reenrichTmpSplit[2] & reenrichCurrentSet != "") {
-              reenrichCASRNBox <- paste0(reenrichCASRNBox, "\n#", reenrichTmpSplit[2], "\n", reenrichTmpSplit[1], "\n")
-              reenrichCurrentSet = reenrichTmpSplit[2]
-            }
-            else {
-              reenrichCASRNBox <- paste0(reenrichCASRNBox, "\n", reenrichTmpSplit[1], "\n")
-            }
-          } else if((is.null(input[[j]]) == FALSE & input[[j]] == TRUE)){
-            reenrichTmpSplit <- unlist(str_split(j, "__"))
-            if (reenrichCurrentSet == "") {
-              reenrichCASRNBox <- paste0(reenrichCASRNBox, "#", reenrichTmpSplit[2], "\n", reenrichTmpSplit[1], "\n")
-              reenrichCurrentSet = reenrichTmpSplit[2]
-            }
-            else if (reenrichCurrentSet != reenrichTmpSplit[2] & reenrichCurrentSet != "") {
-              reenrichCASRNBox <- paste0(reenrichCASRNBox, "\n#", reenrichTmpSplit[2], "\n", reenrichTmpSplit[1], "\n")
-              reenrichCurrentSet = reenrichTmpSplit[2]
-            }
-            else {
-              reenrichCASRNBox <- paste0(reenrichCASRNBox, "\n", reenrichTmpSplit[1], "\n")
-            }
-          }
-        }
-      }
       
+      # Get set names
+      reenrichSetNames <- unlist(lapply(checkboxList$checkboxes, function(i) {
+        unlist(lapply(names(i), function(j){
+          if(is.null(input[[j]]) & !(j %in% firstCaseWarningChems$casrns)){
+            tmpSplit <- unlist(str_split(j, "__"))
+            return(tmpSplit[2])
+          } else if((is.null(input[[j]]) == FALSE)){
+            if(input[[j]] == TRUE) {
+              tmpSplit <- unlist(str_split(j, "__"))
+              return(tmpSplit[2])
+            } else {
+              return(NULL)
+            }
+          } else {
+            return(NULL)
+          }
+        }))
+      }))
+      reenrichSetNames <- reenrichSetNames[!sapply(reenrichSetNames, is.null)]
+      reenrichSetNames <- unique(reenrichSetNames)
+      
+      reenrichCASRNBox <- ""
+
+      # Construct text string
+      reenrichCASRNBox <- lapply(reenrichSetNames, function(x){
+        reenrichSets <- unname(unlist(lapply(checkboxList$checkboxes, function(i) {
+          reenrichSetsInner <- unlist(lapply(names(i), function(j){
+            tmpSplit <- unlist(str_split(j, "__"))
+            if(tmpSplit[2] == x) {
+              if(is.null(input[[j]]) & !(j %in% firstCaseWarningChems$casrns)){
+                return(tmpSplit[1])
+              } else if((is.null(input[[j]]) == FALSE)){
+                if(input[[j]] == TRUE) {
+                  return(tmpSplit[1])
+                }
+              }
+            }
+            return(NULL)
+          }))
+        })))
+        reenrichSets <- reenrichSets[!sapply(reenrichSets, is.null)]
+      })
+      names(reenrichCASRNBox) <- reenrichSetNames
+      reenrichCASRNBox <- lapply(names(reenrichCASRNBox), function(x) {
+        return(paste0("#", x, "\n", paste0(reenrichCASRNBox[[x]], collapse="\n")))
+      })
+      reenrichCASRNBox <- paste0(reenrichCASRNBox, collapse="\n")
+
       if(reenrichCASRNBox == ""){
         # error if nothing selected
         # Show error msg
@@ -4269,7 +4368,7 @@ shinyServer(function(input, output, session) {
         )
         return(FALSE)
       }
-
+      
       # This is to preserve original names if we want to re-enrich similarity/substructure
       originalNamesToReturn <- lapply(originalNamesList$originalNames, function(originalName){
         tmpSplit <- unlist(str_split(originalName, "__"))
@@ -4285,13 +4384,21 @@ shinyServer(function(input, output, session) {
       enrichmentSetsList$enrichmentSets <- NULL
 
       checkboxList$checkboxes <- NULL
-
+      firstCaseWarningChems$casrns <- NULL
+      
       # Perform enrichment again
       performEnrichment(reenrichCASRNBox, reenrichFlag=TRUE, originalNamesToReturn=originalNamesToReturn)
     })
     
-    
-    
+    # Set dark theme as default if preferred by user's browser
+    js$initDarkTheme()
+    observeEvent(input$initDarkTheme, {
+      if(!is.null(input$initDarkTheme)){
+        if(input$initDarkTheme == TRUE){
+          updateCheckboxInput(session, "changeThemeToggle", value=TRUE)
+        }
+      }
+    }, ignoreInit = FALSE, ignoreNULL = TRUE)
     
 })
 

@@ -346,13 +346,22 @@ performEnrichment <- function(enrichmentUUID="-1", annoSelectStr="MESH=checked,P
     return(tmpSplitName)
   })
   setNames <- unique(unlist(setNames)) # Get only 1 copy of each set name
-  
+
   # Create Excel spreadsheets of existing files
   lapply(setNames, function(i){
-    xlsxChart <- read.table(paste0(baseDirName, "/", i, "__Chart.txt"), header=TRUE, sep="\t", comment.char="", fill=FALSE)
-    xlsxChartSimple <- read.table(paste0(baseDirName, "/", i, "__ChartSimple.txt"), header=TRUE, sep="\t", comment.char="", fill=FALSE)
-    xlsxCluster <- read.table(paste0(baseDirName, "/", i, "__Cluster.txt"), header=FALSE, sep="\t", comment.char="", 
+    xlsxChart <- NULL
+    if(file.exists(paste0(baseDirName, "/", i, "__Chart.txt"))){
+      xlsxChart <- read.table(paste0(baseDirName, "/", i, "__Chart.txt"), header=TRUE, sep="\t", comment.char="", fill=FALSE)
+    }
+    xlsxChartSimple <- NULL
+    if(file.exists(paste0(baseDirName, "/", i, "__ChartSimple.txt"))){
+      xlsxChartSimple <- read.table(paste0(baseDirName, "/", i, "__ChartSimple.txt"), header=TRUE, sep="\t", comment.char="", fill=FALSE)
+    }
+    xlsxCluster <- NULL
+    if(file.exists(paste0(baseDirName, "/", i, "__Cluster.txt"))){
+      xlsxCluster <- read.table(paste0(baseDirName, "/", i, "__Cluster.txt"), header=FALSE, sep="\t", comment.char="", 
                               col.names=seq_len(13), fill=TRUE ) #this needs to be treated differently due to having different # of columns
+    }
     write.xlsx2(xlsxChart, paste0(baseDirName, "/", i, "__Chart.xlsx"), sheetName=paste0(i), col.names=TRUE, row.names=TRUE, append=FALSE)
     write.xlsx2(xlsxChartSimple, paste0(baseDirName, "/", i, "__ChartSimple.xlsx"), sheetName=paste0(i), col.names=TRUE, row.names=TRUE, append=FALSE)
     write.xlsx2(xlsxCluster, paste0(baseDirName, "/", i, "__Cluster.xlsx"), sheetName=paste0(i), col.names=TRUE, row.names=TRUE, append=FALSE)
@@ -870,7 +879,6 @@ process_variable_DAVID_CLUSTER_directories <- function(dirName, outputDir, extTa
     summaryFileNameExt		<- paste0(summaryFileNameExt,  "Cluster_Top", topTermLimit, "_", mode, "__", sigColumnName, "_", sigCutoff, "_", valueColumnName, sep="")
   }
   
-  
   # -----------------------------------------------------------------------------
   # Load DAVID cluster files
   
@@ -1066,15 +1074,13 @@ process_variable_DAVID_CLUSTER_directories <- function(dirName, outputDir, extTa
           tmpID	<- paste0(tmpSplit[[1]], " | ", tmpSplit[[2]])
           if (is.null(ID2Term[tmpID]) == FALSE) {
             pvalueMatrix[[tmpID]][tmp3[1]]  <- -1 * log10(as.double(tmpSplit[[valueColumnIndex]]))
-            fcMatrix[[tmpID]][tmp3[1]]      <- tmpSplit[10]
+            fcMatrix[[tmpID]][tmp3[1]] <- tmpSplit[10]
           }
         }
       }
     }
   }
-  
-  
-  
+
   # Create a summary file
   summaryFileName <- paste0(summaryFileNameBase, "__ValueMatrix.txt", sep="")
   file.create(paste0(outputDir, summaryFileName, sep=""))
@@ -1806,9 +1812,8 @@ perform_CASRN_enrichment_analysis <- function(CASRNRef, outputBaseDir, outfileBa
     }
   })
   RINPUT_df <- data.frame(X1=unlist(RINPUT_index1), X2=unlist(RINPUT_index2), X3=unlist(RINPUT_index3), X4=unlist(RINPUT_index4))
-  
   print(paste0(">> TIME | RINPUT_df: ", Sys.time()))
-  
+
   if(nrow(RINPUT_df) < 2){
     # Print out the matrix file
     sortedHeaderTerms <- sigTerm2CASRNMatrix[order(unlist(sigTerm2CASRNMatrix), decreasing = FALSE)]
@@ -1834,7 +1839,7 @@ perform_CASRN_enrichment_analysis <- function(CASRNRef, outputBaseDir, outfileBa
     close(OUTFILE)
     close(SIMPLE)
     # Open and create a blank cluster file
-    outfileCluster		<- paste0(outputBaseDir, outfileBase, "__Cluster.txt")
+    outfileCluster <- paste0(outputBaseDir, outfileBase, "__Cluster.txt")
     file.create(outfileCluster)
     return(FALSE)
   }
@@ -2021,7 +2026,7 @@ kappa_cluster <- function(x, deg=NULL, useTerm=FALSE, cutoff=0.5, overlap=0.5, m
   # ----------------------------------------------------------------------
   # 	Step#1: Calculate kappa score
   # ----------------------------------------------------------------------
-  
+
   mappedCASRNCheck	<- list()
   mappedCASRNIDs		<- list()
   posTermCASRNCount	<- list()
@@ -2104,7 +2109,7 @@ kappa_cluster <- function(x, deg=NULL, useTerm=FALSE, cutoff=0.5, overlap=0.5, m
   #    }
   #  })
   #})
-  
+
   termpair2kappaOverThreshold <- mclapply ((1:(sortedFunCatTermsCount-1)), mc.cores=4, mc.silent=FALSE, function(i) {
     termpair2kappaOverThresholdInner <- lapply (((i+1):(sortedFunCatTermsCount)), function(j) {
       #calculate_kappa_statistics 
@@ -2280,7 +2285,6 @@ kappa_cluster <- function(x, deg=NULL, useTerm=FALSE, cutoff=0.5, overlap=0.5, m
     })
   }
   writeToClusterFinal <- paste0(paste0(writeToClusterFinal, collapse="\n"), "\n")
-  
   write(writeToClusterFinal, CLUSTER, append=TRUE)
   close(CLUSTER)
   

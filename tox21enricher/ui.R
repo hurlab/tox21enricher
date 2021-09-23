@@ -33,7 +33,7 @@ js_theme <-  "
                     dark: 'css/tox21enricher-dark.css',
                     light: 'css/tox21enricher-light.css'
                 }
-
+                
                 // function that creates a new link element
                 function newLink(theme) {
                     let el = document.createElement('link');
@@ -61,9 +61,7 @@ js_theme <-  "
                 extraDarkThemeElement.appendChild(document.createTextNode(extraDarkThemeCSS));
                 head.appendChild(extraDarkThemeElement);
         
-        
                 // define event - checked === 'light'
-
                 toggle.addEventListener('input', function(event) {
                   // if checked, switch to dark theme
                   if (toggle.checked) {
@@ -77,8 +75,52 @@ js_theme <-  "
                       head.appendChild(lightTheme);
                   }
                 })
-
+        }
+        
+        shinyjs.initDarkTheme = function() {
+          // detect user theme and change to dark theme if enabled
+          // define css theme filepaths
+          const themes = {
+              dark: 'css/tox21enricher-dark.css',
+              light: 'css/tox21enricher-light.css'
           }
+          
+          // function that creates a new link element
+          function newLink(theme) {
+              let el = document.createElement('link');
+              el.setAttribute('rel', 'stylesheet');
+              el.setAttribute('text', 'text/css');
+              el.setAttribute('href', theme);
+              return el;
+          }
+  
+          // function that remove <link> of current theme by href
+          function removeLink(theme) {
+              let el = document.querySelector(`link[href='${theme}']`)
+              return el.parentNode.removeChild(el);
+          }
+  
+          // define vars
+          const darkTheme = newLink(themes.dark);
+          const lightTheme = newLink(themes.light);
+          const head = document.getElementsByTagName('head')[0];
+          const toggle = document.getElementById('changeThemeToggle');
+  
+          // define extra css and add as default
+          const extraDarkThemeCSS = '.dataTables_length label, .dataTables_filter label, .dataTables_info {       color: white!important;} .paginate_button { background: white!important;} thead { color: white;}'
+          const extraDarkThemeElement = document.createElement('style');
+          extraDarkThemeElement.appendChild(document.createTextNode(extraDarkThemeCSS));
+          head.appendChild(extraDarkThemeElement);
+          
+          if (window.matchMedia('(prefers-color-scheme)').media !== 'not all') {
+            if (window.matchMedia('(prefers-color-scheme: dark)').matches === true) {
+              removeLink(themes.light);
+              head.appendChild(extraDarkThemeElement);
+              head.appendChild(darkTheme);
+              Shiny.onInputChange('initDarkTheme', 'TRUE');
+            }
+          }
+        }
         "
 
 # Define UI for Tox21Enricher application
@@ -111,7 +153,7 @@ shinyUI(function(){
             style="position:fixed; overflow:visible; width:15%; height:600px; z-index:9999; overflow-y:scroll;",
             useShinyjs(),
             extendShinyjs(text = js_code, functions = 'browseURL'),
-            extendShinyjs(text = js_theme, functions = c('init', 'toggleTheme')),
+            extendShinyjs(text = js_theme, functions = c('init', 'initDarkTheme')),
             extendShinyjs(text = js_cbx, functions = c('check', 'uncheck')),
             p("Welcome to Tox21 Enricher! Please see this ", actionLink(inputId="manualLink", label="link"), "for instructions on using this application and the descriptions about the chemical / biological categories. Other resources from the Tox21 toolbox can be viewed", tags$a(href="https://ntp.niehs.nih.gov/results/tox21/tbox/","here."), "A sufficiently robust internet connection and JavaScript are required to use all of this application's features."),
             # Manual link error output

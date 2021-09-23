@@ -444,7 +444,7 @@ substructure <- function(res, req, input, reenrich=FALSE){
 #* @param input SMILES Input string
 #* @param threshold Tanimoto similarity threshold
 #* @get /similarity
-similarity <- function(res, req, input, threshold){
+similarity <- function(res, req, input="", threshold){
   # async
   #future_promise({
   # Connect to db
@@ -456,6 +456,9 @@ similarity <- function(res, req, input, threshold){
     password = tox21config$pwd,
     idleTimeout = 3600000
   )
+  
+  print(">> INPUT")
+  print(input)
   
   # Sanitize input, convert InChI strings to SMILES
   if (grepl("InChI=", input, fixed=TRUE)) {
@@ -815,15 +818,17 @@ generateNetwork <- function(res, req, transactionId, cutoff, mode, input, qval){
   }
   
   # Isolate Terms and UID columns
-  chartNetworkTerms <- unlist(lapply(1:nrow(chartForNetFile), function(x){
-    include <- FALSE
-    for(y in input) {
+  chartNetworkTerms <- unlist(mclapply(1:nrow(chartForNetFile), mc.cores=4, function(x){
+    include <- lapply(input, function(y) {
       i <- gsub("\\s+", ".", y)
       if(!is.na(chartForNetFile[x, i])) {
-        include <- TRUE
+        return(TRUE)
       }
-    }
-    if(include == TRUE) {
+      return(NULL)
+    })
+    include <- include[!sapply(include, is.null)]
+    
+    if(length(include) > 0) {
       return(chartForNetFile[x,"Terms"])  
     } else {
       return(NULL)
@@ -831,15 +836,17 @@ generateNetwork <- function(res, req, transactionId, cutoff, mode, input, qval){
   }))
   chartNetworkTerms <- chartNetworkTerms[!sapply(chartNetworkTerms, is.null)]
   
-  chartNetworkUIDs <- unlist(lapply(1:nrow(chartForNetFile), function(x){
-    include <- FALSE
-    for(y in input) {
+  chartNetworkUIDs <- unlist(mclapply(1:nrow(chartForNetFile), mc.cores=4, function(x){
+    include <- lapply(input, function(y) {
       i <- gsub("\\s+", ".", y)
       if(is.na(chartForNetFile[x, i]) == FALSE) {
-        include <- TRUE
+        return(TRUE)
       }
-    }
-    if(include == TRUE) {
+      return(NULL)
+    })
+    include <- include[!sapply(include, is.null)]
+    
+    if(length(include) > 0) {
       return(chartForNetFile[x,"UID"])  
     } else {
       return(NULL)
@@ -859,7 +866,7 @@ generateNetwork <- function(res, req, transactionId, cutoff, mode, input, qval){
     password = tox21config$pwd,
     idleTimeout = 3600000
   )
-  
+
   # Query database
   queryNetwork <- sqlInterpolate(ANSI(), paste0(
     "SELECT
@@ -876,7 +883,7 @@ generateNetwork <- function(res, req, transactionId, cutoff, mode, input, qval){
               WHERE p.term1uid IN (", termsStringPlaceholder, ") AND p.term2uid IN (", termsStringPlaceholder, ") AND p.qvalue <", qval, ";"
   ), id="addToDb")
   outpNetwork <- dbGetQuery(poolNetwork, queryNetwork)
-  
+
   # Close pool
   poolClose(poolNetwork)
   
