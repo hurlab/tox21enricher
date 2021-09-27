@@ -502,8 +502,6 @@ shinyServer(function(input, output, session) {
         shinyjs::hide(id = "searchButtonsMenu")
         shinyjs::disable(id = "searchButtonsMenu")
         
-        print("HERE NOW")
-        
         future({
           enrichmentResults(mode, transactionId, annoSelectStr, nodeCutoff, enrichmentSets, originalNames, reenrichResults, originalMode, colorsList)
         }, seed=TRUE)
@@ -539,8 +537,6 @@ shinyServer(function(input, output, session) {
     
     # update theme data when checkbox is clicked
     observeEvent(input$changeThemeToggle, {
-      print("trigger")
-      print(input$changeThemeToggle)
       # Reset Venn diagrams on theme change
       output[["vennChart"]] <- renderPlot({})
       output[["vennCluster"]] <- renderPlot({})
@@ -552,6 +548,8 @@ shinyServer(function(input, output, session) {
       shinyjs::hide("vennClusterButtons")
       shinyjs::hide("vennChartMenu")
       shinyjs::hide("vennClusterMenu")
+      shinyjs::hide("nodeLinkChartMenu")
+      shinyjs::hide("nodeLinkClusterMenu")
       
       tmpDir <- paste0("./www/local/")
       if(input$changeThemeToggle == TRUE){ # dark
@@ -2173,8 +2171,6 @@ shinyServer(function(input, output, session) {
           close(tmpLocalFile) 
         }
         
-        print("HERE NOW 2")
-        
         # Hide waiting page
         shinyjs::hide(id="waitingPage")
         # Show results container
@@ -2341,8 +2337,6 @@ shinyServer(function(input, output, session) {
             }, ignoreInit = TRUE)
           }
         } else { # Render enrichment results
-          print("HERE NOW 3")
-          
           # Download button
           # Event handler for download full results
           if(is.null(setFilesObservers$observers[[paste0("downloadObserver__")]])){
@@ -3158,14 +3152,11 @@ shinyServer(function(input, output, session) {
           )
 
           # Render Chart & Cluster heatmaps for all sets
-          print("HERE NOW 4")
-          print(cutoff)
           # Query API to read in gct file
           # Fetch setFiles from server via API
           resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="readGct", query=list(transactionId=transactionId, cutoff=cutoff, mode="chart"))
           #TODO: error check
           if(resp$status_code != 200){
-            print("HERE NOW 5")
             # Hide results container
             shinyjs::hide(id="resultsContainer")
             # Show waiting page
@@ -3319,11 +3310,20 @@ shinyServer(function(input, output, session) {
                           checkboxInput(inputId="physicsEnabledChart", label="Enable physics?", value=FALSE),
                           checkboxInput(inputId="smoothCurveChart", label="Smooth curve for edges?", value=TRUE),
                           actionButton(inputId="chartNetworkUpdateButton", label="Update network"),
+                          h4("More Information for Selected Annotation"),
+                          HTML("<p>Click on any <b>node</b> to view additional information for the annotation in the selected node.</p>"),
                           h4("Overlapping Chemicals"),
-                          p("Click on any edge to view a Venn diagram of the chemicals associated with the annotations of its two nodes."),
+                          HTML("<p>Click on any <b>edge</b> to view a Venn diagram of the chemicals associated with the annotations in its two nodes.</p>"),
                         ), 
                         column(9,
                           uiOutput("chartNetwork") %>% withSpinner()
+                        )
+                      ),
+                      hidden(
+                        fluidRow(id="nodeLinkChartMenu",
+                          column(12, 
+                            uiOutput("nodeLinkChart")       
+                          )
                         )
                       ),
                       hidden(
@@ -3369,6 +3369,13 @@ shinyServer(function(input, output, session) {
                         ), 
                         column(9,
                           uiOutput("clusterNetwork") %>% withSpinner()
+                        )
+                      ),
+                      hidden(
+                        fluidRow(id="nodeLinkClusterMenu",
+                          column(12, 
+                            uiOutput("nodeLinkCluster")       
+                          )
                         )
                       ),
                       hidden(
@@ -3726,19 +3733,19 @@ shinyServer(function(input, output, session) {
       
       # Create rows and classes
       # 1
-      #rowsSet1 <- lapply(1:nrow(outpNetwork), function(x) paste0(outpNetwork[[x, "name1"]], "@", outpNetwork[[x, "class1"]], "@", outpNetwork[[x, "url1"]], "@", classToColor(outpNetwork[[x, "class1"]], classColors)))
-      rowsSet1 <- mclapply(1:nrow(outpNetwork), mc.cores=4, function(x) paste0(outpNetwork[[x, "name1"]], "@", outpNetwork[[x, "class1"]], "@", outpNetwork[[x, "url1"]], "@", classToColor(outpNetwork[[x, "class1"]], classColors)))
+      rowsSet1 <- lapply(1:nrow(outpNetwork), function(x) paste0(outpNetwork[[x, "name1"]], "@", outpNetwork[[x, "class1"]], "@", outpNetwork[[x, "url1"]], "@", classToColor(outpNetwork[[x, "class1"]], classColors)))
+      #rowsSet1 <- mclapply(1:nrow(outpNetwork), mc.cores=4, function(x) paste0(outpNetwork[[x, "name1"]], "@", outpNetwork[[x, "class1"]], "@", outpNetwork[[x, "url1"]], "@", classToColor(outpNetwork[[x, "class1"]], classColors)))
       # 2
-      #rowsSet2 <- lapply(1:nrow(outpNetwork), function(x) paste0(outpNetwork[[x, "name2"]], "@", outpNetwork[[x, "class2"]], "@", outpNetwork[[x, "url2"]], "@", classToColor(outpNetwork[[x, "class2"]], classColors)))
-      rowsSet2 <- mclapply(1:nrow(outpNetwork), mc.cores=4, function(x) paste0(outpNetwork[[x, "name2"]], "@", outpNetwork[[x, "class2"]], "@", outpNetwork[[x, "url2"]], "@", classToColor(outpNetwork[[x, "class2"]], classColors)))
+      rowsSet2 <- lapply(1:nrow(outpNetwork), function(x) paste0(outpNetwork[[x, "name2"]], "@", outpNetwork[[x, "class2"]], "@", outpNetwork[[x, "url2"]], "@", classToColor(outpNetwork[[x, "class2"]], classColors)))
+      #rowsSet2 <- mclapply(1:nrow(outpNetwork), mc.cores=4, function(x) paste0(outpNetwork[[x, "name2"]], "@", outpNetwork[[x, "class2"]], "@", outpNetwork[[x, "url2"]], "@", classToColor(outpNetwork[[x, "class2"]], classColors)))
       rowsSet <- list(unlist(rowsSet1), unlist(rowsSet2))
       rowsSet <- unique(unlist(rowsSet, recursive = FALSE))
       # 1
-      #classes1 <- lapply(1:nrow(outpNetwork), function(x) paste0(outpNetwork[[x, "class1"]]))
-      classes1 <- mclapply(1:nrow(outpNetwork), mc.cores=4, function(x) paste0(outpNetwork[[x, "class1"]]))
+      classes1 <- lapply(1:nrow(outpNetwork), function(x) paste0(outpNetwork[[x, "class1"]]))
+      #classes1 <- mclapply(1:nrow(outpNetwork), mc.cores=4, function(x) paste0(outpNetwork[[x, "class1"]]))
       # 2
-      #classes2 <- lapply(1:nrow(outpNetwork), function(x) paste0(outpNetwork[[x, "class2"]]))
-      classes2 <- mclapply(1:nrow(outpNetwork), mc.cores=4, function(x) paste0(outpNetwork[[x, "class2"]]))
+      classes2 <- lapply(1:nrow(outpNetwork), function(x) paste0(outpNetwork[[x, "class2"]]))
+      #classes2 <- mclapply(1:nrow(outpNetwork), mc.cores=4, function(x) paste0(outpNetwork[[x, "class2"]]))
       classes <- list(unlist(classes1), unlist(classes2))
       classes <- unique(unlist(classes, recursive = FALSE))
 
@@ -3746,7 +3753,7 @@ shinyServer(function(input, output, session) {
       networkFullNodes <- t(sapply(rowsSet, function(s){
         rowsSetSplit <- unlist(str_split(s, "@"))
         # split: 1 = Term, 2 = Class (Category), 3 = URL, 4 = Color 
-        id <- paste0(rowsSetSplit[1], "@", rowsSetSplit[2])
+        id <- paste0(rowsSetSplit[1], "@", rowsSetSplit[2], "@", networkMode)
         url <- paste0(rowsSetSplit[3], rowsSetSplit[1])
         rgbCss <- rowsSetSplit[4]
         return(data.frame( id=id, label=rowsSetSplit[1], group=rowsSetSplit[2], shape="ellipse", url=url, color=rgbCss, stringsAsFactors=FALSE ))
@@ -3754,11 +3761,14 @@ shinyServer(function(input, output, session) {
       networkFullNodes <- as.data.frame(networkFullNodes)
       rownames(networkFullNodes) <- 1:nrow(networkFullNodes)
       
+      print("networkFullNodes")
+      print(networkFullNodes)
+      
       # Generate list of edges for network
       networkFullEdges <- t(sapply(1:nrow(outpNetwork), function(p){
         rgbCss = generateJaccardColor(as.numeric(outpNetwork[[p, "jaccardindex"]]))
-        edgeUUID <- paste0(UUIDgenerate(), "__", paste0(outpNetwork[[p, "name1"]], "@", outpNetwork[[p, "class1"]]), "__", paste0(outpNetwork[[p, "name2"]], "@", outpNetwork[[p, "class2"]]), "__", networkMode)
-        return(data.frame( from=paste0(outpNetwork[[p, "name1"]], "@", outpNetwork[[p, "class1"]]), to=paste0(outpNetwork[[p, "name2"]], "@", outpNetwork[[p, "class2"]]), jaccard=outpNetwork[[p, "jaccardindex"]], color=rgbCss, id=edgeUUID, stringsAsFactors=FALSE ))
+        edgeUUID <- paste0(UUIDgenerate(), "__", paste0(outpNetwork[[p, "name1"]], "@", outpNetwork[[p, "class1"]]), "@", networkMode, "__", paste0(outpNetwork[[p, "name2"]], "@", outpNetwork[[p, "class2"]]), "@", networkMode, "__", networkMode)
+        return(data.frame( from=paste0(outpNetwork[[p, "name1"]], "@", outpNetwork[[p, "class1"]], "@", networkMode), to=paste0(outpNetwork[[p, "name2"]], "@", outpNetwork[[p, "class2"]], "@", networkMode), jaccard=outpNetwork[[p, "jaccardindex"]], color=rgbCss, id=edgeUUID, stringsAsFactors=FALSE ))
       }))
       networkFullEdges <- as.data.frame(networkFullEdges)
       rownames(networkFullEdges) <- 1:nrow(networkFullEdges)
@@ -3770,11 +3780,16 @@ shinyServer(function(input, output, session) {
         visEdges(smooth=smoothCurve) %>%
         visInteraction(navigationButtons=TRUE, keyboard=FALSE, selectable=TRUE, selectConnectedEdges=FALSE) %>%
         # Venn Diagram handler when clicking on network edges
-        visEvents(selectEdge = '
-          function(properties) {
-            Shiny.setInputValue("selectEdge", properties, {priority:"event"});
-          }
-        ')
+        visEvents(
+          selectEdge = '
+            function(properties) {
+              Shiny.setInputValue("selectEdge", properties, {priority:"event"});
+            }',
+          selectNode = '
+            function(properties) {
+              Shiny.setInputValue("selectNode", properties, {priority:"event"});
+            }'
+        )
  
       # Add groups for legend
       for (x in classes) {
@@ -3789,6 +3804,58 @@ shinyServer(function(input, output, session) {
       )
       return(fluidRow(id=paste0(networkMode,"NetworkContainer"), fullNetworkExport))
     }
+    
+    # Observe network node being clicked
+    observeEvent(input$selectNode, {
+      selectedNodeTerm <- unlist(str_split(input$selectNode$nodes[[1]], "@"))[1]
+      selectedNodeClass <- unlist(str_split(input$selectNode$nodes[[1]], "@"))[2]
+      networkMode <- unlist(str_split(input$selectNode$nodes[[1]], "@"))[3]
+      
+      # Get link for node annotation details
+      resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="getNodeDetails", query=list(class=selectedNodeClass))
+      if(resp$status_code != 200){
+        if(networkMode == "chart") {
+          output[["nodeLinkChart"]] <- renderUI({
+            HTML(paste0("<p>Could not fetch link for ", selectedNodeTerm, ".</p>"))
+          }) 
+        } else {
+          output[["nodeLinkCluster"]] <- renderPlot({
+            HTML(paste0("<p>Could not fetch link for ", selectedNodeTerm, ".</p>"))
+          }) 
+        }
+      } else {
+        baseurl <- unname(unlist(content(resp)))
+        
+        # If missing baseurl, don't provide link
+        if(networkMode == "chart") {
+          shinyjs::show(id="nodeLinkChartMenu")
+          shinyjs::hide(id="vennChartMenu")
+          if(is.null(baseurl) | baseurl == "placeholder") {
+            output[["nodeLinkChart"]] <- renderUI({
+              HTML(paste0("<p>Could not fetch link for ", selectedNodeTerm, ".</p>"))
+            })  
+          } else {
+            output[["nodeLinkChart"]] <- renderUI({
+              HTML(paste0("<p><i>Click <b><a href='", baseurl, selectedNodeTerm, "'>here</a></b> to view more details about ", selectedNodeTerm, ".</i></p>"))
+            })
+          }
+        } else {
+          shinyjs::show(id="nodeLinkClusterMenu")
+          shinyjs::hide(id="vennClusterMenu")
+          if(is.null(baseurl) | baseurl == "placeholder") {
+            output[["nodeLinkCluster"]] <- renderUI({
+              HTML(paste0("<p>Could not fetch link for ", selectedNodeTerm, ".</p>"))
+            })  
+          } else {
+            output[["nodeLinkCluster"]] <- renderUI({
+              HTML(paste0("<p><i>Click <b><a href='", baseurl, selectedNodeTerm, "'>here</a></b> to view more details about ", selectedNodeTerm, ".</i></p>"))
+            }) 
+          }
+        }
+        
+        
+      }
+    })
     
     # Observe network edge being clicked
     observeEvent(input$selectEdge, {
@@ -3888,6 +3955,7 @@ shinyServer(function(input, output, session) {
           # Render venn diagram
           shinyjs::show("vennChartMenu")
           shinyjs::show("vennChart")
+          shinyjs::hide("nodeLinkChartMenu")
           output[["vennChart"]] <- renderPlot(
             #vennDiagram
             plot(vennDiagram)
@@ -3988,6 +4056,7 @@ shinyServer(function(input, output, session) {
           # Render Venn diagram
           shinyjs::show("vennClusterMenu")
           shinyjs::show("vennCluster")
+          shinyjs::hide("nodeLinkClusterMenu")
           output[["vennCluster"]] <- renderPlot(
             plot(vennDiagram)
           )
@@ -4087,6 +4156,16 @@ shinyServer(function(input, output, session) {
         # TODO: make it so that selecting a node will show you a link to more details about the annotation
         print("selected node")
         print(input$selectEdge$nodes)
+        # Get overlapping chemicals
+        #resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="getNodeChemicals", query=list( termFrom=termFrom, termTo=termTo, classFrom=classFrom, classTo=classTo ))
+        #if(resp$status_code != 200){
+        #  output[["vennChart"]] <- renderPlot({
+        #    #  HTML("<p class=\"text-danger\"><b>Error:</b> An error occurred while fetching the chemicals.</p>")
+        #  })
+        #  output[["vennCluster"]] <- renderPlot({
+        #    #  HTML("<p class=\"text-danger\"><b>Error:</b> An error occurred while fetching the chemicals.</p>")
+        #  })
+        #}
       }
     }, ignoreNULL = FALSE, ignoreInit = TRUE )
     

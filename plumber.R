@@ -933,6 +933,31 @@ getNodeChemicals <- function(res, req, termFrom, termTo, classFrom, classTo){
   return(list(casrnsFrom=casrnsFrom[, "casrn"], casrnsTo=casrnsTo[, "casrn"]))
 }
 
+#* Get link from database to view additional info for a selected node in the network (internal use only)
+#* @param term
+#* @param class
+#* @get /getNodeDetails
+getNodeDetails <- function(res, req, class){
+  # Connect to db
+  poolNode <- dbPool(
+    drv = dbDriver("PostgreSQL", max.con = 100),
+    dbname = tox21config$database,
+    host = tox21config$host,
+    user = tox21config$uid,
+    password = tox21config$pwd,
+    idleTimeout = 3600000
+  )
+  
+  # Get annotation detail link
+  nodeQuery <- sqlInterpolate(ANSI(), paste0( "SELECT baseurl FROM annotation_class WHERE annoclassname='", class, "';" ), id = "getNodeDetailsFromClass")
+  nodeOutp <- dbGetQuery(poolNode, nodeQuery)
+  baseurl <- nodeOutp
+  
+  # Close pool
+  poolClose(poolNode)
+  return(baseurl)
+}
+
 ########################################################################################################################################################################################################################################################
 
 ### SECTION 6: API CLIENT ENDPOINTS FOR OPERATING IN NO-GUI MODE ###
