@@ -1389,10 +1389,7 @@ shinyServer(function(input, output, session) {
         } else {
           cutoff <- input$nodeCutoff
         }
-        
-        print("cutoff")
-        print(cutoff)
-        
+
         # If TRUE, signifies that client app cannot connect to API
         badConnectionFlag <- FALSE
         
@@ -3760,10 +3757,7 @@ shinyServer(function(input, output, session) {
       }))
       networkFullNodes <- as.data.frame(networkFullNodes)
       rownames(networkFullNodes) <- 1:nrow(networkFullNodes)
-      
-      print("networkFullNodes")
-      print(networkFullNodes)
-      
+
       # Generate list of edges for network
       networkFullEdges <- t(sapply(1:nrow(outpNetwork), function(p){
         rgbCss = generateJaccardColor(as.numeric(outpNetwork[[p, "jaccardindex"]]))
@@ -3982,12 +3976,13 @@ shinyServer(function(input, output, session) {
               )
             )
           })
+          
           # Create observers for Venn Diagram buttons
           observeEvent(input$vennFromButtonChart, {
             showModal(
               modalDialog(
                 title=paste0("Chemicals for ", termFrom),
-                footer=actionButton(inputId="vennFromButtonCloseChart", label="Close"),
+                footer=div(rclipButton("clipboardChartFrom", "Copy chemical list to clipboard (comma-separated)", paste0(casrnsFrom, collapse=","), icon("clipboard"), modal=TRUE), actionButton(inputId="vennFromButtonCloseChart", label="Close")),
                 size="l",
                 fluidRow(
                   column(12, 
@@ -4005,7 +4000,7 @@ shinyServer(function(input, output, session) {
             showModal(
               modalDialog(
                 title=paste0("Chemicals for ", termTo),
-                footer=actionButton(inputId="vennToButtonCloseChart", label="Close"),
+                footer=div(rclipButton("clipboardChartTo", "Copy chemical list to clipboard (comma-separated)", paste0(casrnsTo, collapse=","), icon("clipboard"), modal=TRUE), actionButton(inputId="vennToButtonCloseChart", label="Close")),
                 size="l",
                 fluidRow(
                   column(12, 
@@ -4023,7 +4018,7 @@ shinyServer(function(input, output, session) {
             showModal(
               modalDialog(
                 title=paste0("Shared chemicals"),
-                footer=actionButton(inputId="vennSharedButtonCloseChart", label="Close"),
+                footer=div(rclipButton("clipboardChartShared", "Copy chemical list to clipboard (comma-separated)", paste0(casrnsShared, collapse=","), icon("clipboard"), modal=TRUE), actionButton(inputId="vennSharedButtonCloseChart", label="Close")),
                 size="l",
                 fluidRow(
                   column(12, 
@@ -4050,8 +4045,6 @@ shinyServer(function(input, output, session) {
               ggsave(file, plot=vennDiagramPlot)
             }
           )
-
-          
         } else { # Cluster
           # Render Venn diagram
           shinyjs::show("vennClusterMenu")
@@ -4087,7 +4080,7 @@ shinyServer(function(input, output, session) {
             showModal(
               modalDialog(
                 title=paste0("Chemicals for ", termFrom),
-                footer=actionButton(inputId="vennFromButtonCloseCluster", label="Close"),
+                footer=div(rclipButton("clipboardClusterFrom", "Copy chemical list to clipboard (comma-separated)", paste0(casrnsFrom, collapse=","), icon("clipboard"), modal=TRUE), actionButton(inputId="vennFromButtonCloseCluster", label="Close")),
                 size="l",
                 fluidRow(
                   column(12, 
@@ -4105,7 +4098,7 @@ shinyServer(function(input, output, session) {
             showModal(
               modalDialog(
                 title=paste0("Chemicals for ", termTo),
-                footer=actionButton(inputId="vennToButtonCloseCluster", label="Close"),
+                footer=div(rclipButton("clipboardClusterTo", "Copy chemical list to clipboard (comma-separated)", paste0(casrnsTo, collapse=","), icon("clipboard"), modal=TRUE), actionButton(inputId="vennToButtonCloseCluster", label="Close")),
                 size="l",
                 fluidRow(
                   column(12, 
@@ -4123,7 +4116,7 @@ shinyServer(function(input, output, session) {
             showModal(
               modalDialog(
                 title=paste0("Shared chemicals"),
-                footer=actionButton(inputId="vennSharedButtonCloseCluster", label="Close"),
+                footer=div(rclipButton("clipboardClusterShared", "Copy chemical list to clipboard (comma-separated)", paste0(casrnsShared, collapse=","), icon("clipboard"), modal=TRUE), actionButton(inputId="vennSharedButtonCloseCluster", label="Close")),
                 size="l",
                 fluidRow(
                   column(12, 
@@ -4153,19 +4146,6 @@ shinyServer(function(input, output, session) {
           
         }
       } else { # selecting a node
-        # TODO: make it so that selecting a node will show you a link to more details about the annotation
-        print("selected node")
-        print(input$selectEdge$nodes)
-        # Get overlapping chemicals
-        #resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="getNodeChemicals", query=list( termFrom=termFrom, termTo=termTo, classFrom=classFrom, classTo=classTo ))
-        #if(resp$status_code != 200){
-        #  output[["vennChart"]] <- renderPlot({
-        #    #  HTML("<p class=\"text-danger\"><b>Error:</b> An error occurred while fetching the chemicals.</p>")
-        #  })
-        #  output[["vennCluster"]] <- renderPlot({
-        #    #  HTML("<p class=\"text-danger\"><b>Error:</b> An error occurred while fetching the chemicals.</p>")
-        #  })
-        #}
       }
     }, ignoreNULL = FALSE, ignoreInit = TRUE )
     
