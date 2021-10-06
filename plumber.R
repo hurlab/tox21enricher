@@ -670,27 +670,59 @@ createInput <- function(res, req, transactionId, enrichmentSets, setNames, mode,
   )
   
   # Create input set txt for enrichment
-  for (i in names(enrichmentSets)) {
+  lapply(names(enrichmentSets), function(i) {
     outString <- ""
-    for (j in enrichmentSets[[i]]) {
+
+    # Fetch chemical name from database to match to CASRN
+    fetchedNames <- unlist(lapply(enrichmentSets[[i]], function(j) {
       query <- sqlInterpolate(ANSI(), paste0("SELECT testsubstance_chemname FROM chemical_detail WHERE CASRN LIKE '", j, "';"), id = j)
       outp <- dbGetQuery(poolInput, query)
       if (dim(outp)[1] > 0 & dim(outp)[2] > 0) {
-        outString <- paste0(outString, j, "\t", outp, "\n\n")
+        return(paste0(j, "\t", outp))
+      } else {
+        return(paste0("err__", j))
       }
-    }
+    }))
+    
+    # Initialize list to store good CASRNS
+    goodCasrns <- fetchedNames[sapply(fetchedNames, function(x){
+      if(grepl("^err__", x)){
+        return(FALSE)
+      }
+      return(TRUE)
+    })]
+    # Initialize list to store error CASRNS
+    errorCasrns <- fetchedNames[!sapply(fetchedNames, function(x){
+      if(grepl("^err__", x)){
+        return(FALSE)
+      }
+      return(TRUE)
+    })]
+    
+    # Format fetched data to print to file
+    outString <- paste0(goodCasrns, collapse="\n")
+    errorCasrnsFormatted <- unlist(lapply(errorCasrns, function(x){ # Strip "err__" from beginning of CASRNs
+      return(unlist(str_split(x, "err__"))[2])
+    }))
+    errString <- paste0(errorCasrnsFormatted, collapse="\n")
+
     # Only write if there are matching chemicals (don't create input files for empty sets)
     if(nchar(outString) > 0){
       inFile <- file(paste0(inDir, i, ".txt"))
       writeLines(outString,inFile)
       close(inFile) 
     }
-  }
+    # If errors exist, create error CASRNs file
+    if(nchar(errString) > 0){
+      errFile <- file(paste0(outDir,  i, "__ErrorCASRNs.txt"))
+      writeLines(errString,errFile)
+      close(errFile) 
+    }
+  })
   
   # Close pool
   poolClose(poolInput)
   return(TRUE)
-
 }
 
 #* Returns list of sets that are valid/existing for a given transaction
@@ -845,17 +877,31 @@ generateNetwork <- function(res, req, transactionId, cutoff, mode, input, qval){
       return(NULL)
     })
     include <- include[!sapply(include, is.null)]
-    
     if(length(include) > 0) {
-      return(chartForNetFile[x,"UID"])  
-    } else {
-      return(NULL)
+      #return(chartForNetFile[x,"UID"])
+      # If significant to multiple input sets
+      print("chartForNetFile[x,'UID']")
+      print(chartForNetFile[x,"UID"])
+      return(paste0(chartForNetFile[x,"UID"], collapse=","))
     }
+    return(NULL)
   }))
   chartNetworkUIDs <- chartNetworkUIDs[!sapply(chartNetworkUIDs, is.null)]
   
+  #print("chartForNetFile")
+  #print(chartForNetFile)
+  
+  #print("chartNetworkTerms")
+  #print(chartNetworkTerms)
+  
+  print("chartNetworkUIDs")
+  print(chartNetworkUIDs)
+  
   # Create placeholder string for querying database
   termsStringPlaceholder <- paste0(chartNetworkUIDs, collapse=",")
+
+  print("termsStringPlaceholder")
+  print(termsStringPlaceholder)
   
   # Connect to db
   poolNetwork <- dbPool(

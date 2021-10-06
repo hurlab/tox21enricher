@@ -1227,6 +1227,15 @@ shinyServer(function(input, output, session) {
         # Reset reenrichResultsList$reenrichResults
         reenrichResultsList$reenrichResults <- NULL
         
+        # Reset enrichmentSetsList$enrichmentSets
+        enrichmentSetsList$enrichmentSets <- NULL
+        
+        # Reset setFilesObservers$observers
+        for(x in setFilesObservers$observers){
+          x$destroy()
+        }
+        setFilesObservers$observers <- NULL
+        
         # clear the previous enrichment's results and hide
         shinyjs::hide("resultsContainer")
         shinyjs::reset("resultsContainer")
@@ -2321,8 +2330,8 @@ shinyServer(function(input, output, session) {
           })
 
           # Event handler for download full results
-          if(is.null(setFilesObservers$observers[[paste0("downloadObserver__")]])){
-            setFilesObservers$observers[[paste0("downloadObserver__")]] <- observeEvent(input[["downloadButton"]], {
+          if(is.null(setFilesObservers$observers[[paste0("downloadObserver__", transactionId)]])){
+            setFilesObservers$observers[[paste0("downloadObserver__", transactionId)]] <- observeEvent(input[["downloadButton"]], {
               # Create directory for request
               dir.create(paste0("./www/tmp/output/", transactionId, "/"))
               if(file.exists(paste0("./www/tmp/output/", transactionId, "/tox21enricher_", transactionId, ".zip")) == FALSE){
@@ -2333,6 +2342,7 @@ shinyServer(function(input, output, session) {
               js$browseURL(paste0("tmp/output/", transactionId, "/tox21enricher_", transactionId, ".zip"))
             }, ignoreInit = TRUE)
           }
+          
         } else { # Render enrichment results
           # Download button
           # Event handler for download full results
@@ -2353,7 +2363,6 @@ shinyServer(function(input, output, session) {
           radioNames <- lapply(names(enrichmentSets), function(setName){
             return( HTML(paste0("<div style='width:100%;height:20px;background-color:", colorsList[setName], "'>",  setName, "</div>")) )
           })
-          
           output$resultsTabset <- renderUI({
               fluidRow(
                   fluidRow(
@@ -2609,6 +2618,20 @@ shinyServer(function(input, output, session) {
                         js$browseURL(paste0("tmp/output/", transactionId, "/", i, "__Matrix.txt"))
                       }, ignoreInit = TRUE)
                     }
+                    
+                    # ErrorCASRNs.txt
+                    if(is.null(setFilesObservers$observers[[paste0("errorfileObserver__", i)]])){
+                      setFilesObservers$observers[[paste0("errorfileObserver__", i)]] <- observeEvent(input[[paste0(i, "__ErrorCASRNs.txt__link")]], {
+                        # Create directory for request
+                        dir.create(paste0("./www/tmp/output/", transactionId, "/"))
+                        if(file.exists(paste0("./www/tmp/output/", transactionId, "/", i, "__ErrorCASRNs.txt")) == FALSE){
+                          # TODO: error check if download fails
+                          download.file(paste0("http://", API_HOST, ":", API_PORT, "/serveFileText?transactionId=", transactionId, "&filename=", i, "__ErrorCASRNs.txt&subDir=Output"), destfile=paste0("./www/tmp/output/", transactionId, "/", i, "__ErrorCASRNs.txt"))
+                        }
+                        # Next, use custom JavaScript to open manual from disk in new tab
+                        js$browseURL(paste0("tmp/output/", transactionId, "/", i, "__ErrorCASRNs.txt"))
+                      }, ignoreInit = TRUE)
+                    }
 
                     # Render result file links
                     output[[paste0("outTab_", i)]] <- renderUI(
@@ -2622,50 +2645,53 @@ shinyServer(function(input, output, session) {
                               },
                               fluidRow(
                                 lapply(getAllResultFiles, function(resultFile){
-                                    # If input file
-                                    tooltipToUse <- ""
-                                    if(resultFile == paste0(inDirWeb, i, ".txt")) {
-                                      column(4, id=paste0(unlist(str_split(resultFile, inDirWeb))[2]),
-                                        # Add tooltips
-                                        # Input
-                                        if(paste0(unlist(str_split(resultFile, inDirWeb))[2]) == paste0(i, ".txt")){
-                                          tipify( div(actionLink(inputId=paste0(i, "__", i, ".txt__link"), label=paste0(unlist(str_split(unlist(str_split(resultFile, inDirWeb))[2], ".txt"))[1], " Input"))), "A list of input chemicals for this set (.txt format).", placement="bottom")
-                                        }
-                                      )
-                                    } else {
-                                      column(4, id=paste0(unlist(str_split(resultFile, outDirWeb))[2]), 
-                                        # Add links to result files with corresponding tooltips
-                                        # Chart.txt
-                                        if(paste0(unlist(str_split(resultFile, outDirWeb))[2]) == paste0(i, "__Chart.txt")){
-                                          tipify( div(actionLink(inputId=paste0(i, "__Chart.txt__link"), label=paste0(unlist(str_split(resultFile, outDirWeb))[2]))), "A list of all significant annotations (.txt format).", placement="bottom")
-                                        },
-                                        # Chart.xlsx
-                                        if(paste0(unlist(str_split(resultFile, outDirWeb))[2]) == paste0(i, "__Chart.xlsx")){
-                                          tipify( div(actionLink(inputId=paste0(i, "__Chart.xlsx__link"), label=paste0(unlist(str_split(resultFile, outDirWeb))[2]))), "A list of all significant annotations (.xlsx format).", placement="bottom")
-                                        },
-                                        # ChartSimple.txt
-                                        if(paste0(unlist(str_split(resultFile, outDirWeb))[2]) == paste0(i, "__ChartSimple.txt")){
-                                          tipify( div(actionLink(inputId=paste0(i, "__ChartSimple.txt__link"), label=paste0(unlist(str_split(resultFile, outDirWeb))[2]))), "A list of the top 10 most significant annotations for each annotation class (.txt format).", placement="bottom")
-                                        },
-                                        # ChartSimple.xlsx
-                                        if(paste0(unlist(str_split(resultFile, outDirWeb))[2]) == paste0(i, "__ChartSimple.xlsx")){
-                                          tipify( div(actionLink(inputId=paste0(i, "__ChartSimple.xlsx__link"), label=paste0(unlist(str_split(resultFile, outDirWeb))[2]))), "A list of the top 10 most significant annotations for each annotation class (.xlsx format).", placement="bottom")
-                                        },
-                                        # Cluster.txt
-                                        if(paste0(unlist(str_split(resultFile, outDirWeb))[2]) == paste0(i, "__Cluster.txt")){
-                                          tipify( div(actionLink(inputId=paste0(i, "__Cluster.txt__link"), label=paste0(unlist(str_split(resultFile, outDirWeb))[2]))), "A list of significant terms in which functionally similar annotations are grouped together to remove redundancy. This is performed with respect to the whole annotation set rather than to individual annotation classes (.txt format).", placement="bottom")
-                                        },
-                                        # Cluster.xlsx
-                                        if(paste0(unlist(str_split(resultFile, outDirWeb))[2]) == paste0(i, "__Cluster.xlsx")){
-                                          tipify( div(actionLink(inputId=paste0(i, "__Cluster.xlsx__link"), label=paste0(unlist(str_split(resultFile, outDirWeb))[2]))), "A list of significant terms in which functionally similar annotations are grouped together to remove redundancy. This is performed with respect to the whole annotation set rather than to individual annotation classes (.xlsx format).", placement="bottom")
-                                        },
-                                        # Matrix
-                                        if(paste0(unlist(str_split(resultFile, outDirWeb))[2]) == paste0(i, "__Matrix.txt")){
-                                          tipify( div(actionLink(inputId=paste0(i, "__Matrix.txt__link"), label=paste0(unlist(str_split(resultFile, outDirWeb))[2]))), "A text representation of the heatmap (.txt format).", placement="bottom")
-                                        },
-
-                                      )
-                                    }
+                                  # If input file
+                                  tooltipToUse <- ""
+                                  if(resultFile == paste0(inDirWeb, i, ".txt")) {
+                                    column(4, id=paste0(unlist(str_split(resultFile, inDirWeb))[2]),
+                                      # Add tooltips
+                                      # Input
+                                      if(paste0(unlist(str_split(resultFile, inDirWeb))[2]) == paste0(i, ".txt")){
+                                        tipify( div(actionLink(inputId=paste0(i, "__", i, ".txt__link"), label=paste0(unlist(str_split(unlist(str_split(resultFile, inDirWeb))[2], ".txt"))[1], " Input"))), "A list of input chemicals for this set (.txt format).", placement="bottom")
+                                      }
+                                    )
+                                  } else {
+                                    column(4, id=paste0(unlist(str_split(resultFile, outDirWeb))[2]), 
+                                      # Add links to result files with corresponding tooltips
+                                      # Chart.txt
+                                      if(paste0(unlist(str_split(resultFile, outDirWeb))[2]) == paste0(i, "__Chart.txt")){
+                                        tipify( div(actionLink(inputId=paste0(i, "__Chart.txt__link"), label=paste0(unlist(str_split(resultFile, outDirWeb))[2]))), "A list of all significant annotations (.txt format).", placement="bottom")
+                                      },
+                                      # Chart.xlsx
+                                      if(paste0(unlist(str_split(resultFile, outDirWeb))[2]) == paste0(i, "__Chart.xlsx")){
+                                        tipify( div(actionLink(inputId=paste0(i, "__Chart.xlsx__link"), label=paste0(unlist(str_split(resultFile, outDirWeb))[2]))), "A list of all significant annotations (.xlsx format).", placement="bottom")
+                                      },
+                                      # ChartSimple.txt
+                                      if(paste0(unlist(str_split(resultFile, outDirWeb))[2]) == paste0(i, "__ChartSimple.txt")){
+                                        tipify( div(actionLink(inputId=paste0(i, "__ChartSimple.txt__link"), label=paste0(unlist(str_split(resultFile, outDirWeb))[2]))), "A list of the top 10 most significant annotations for each annotation class (.txt format).", placement="bottom")
+                                      },
+                                      # ChartSimple.xlsx
+                                      if(paste0(unlist(str_split(resultFile, outDirWeb))[2]) == paste0(i, "__ChartSimple.xlsx")){
+                                        tipify( div(actionLink(inputId=paste0(i, "__ChartSimple.xlsx__link"), label=paste0(unlist(str_split(resultFile, outDirWeb))[2]))), "A list of the top 10 most significant annotations for each annotation class (.xlsx format).", placement="bottom")
+                                      },
+                                      # Cluster.txt
+                                      if(paste0(unlist(str_split(resultFile, outDirWeb))[2]) == paste0(i, "__Cluster.txt")){
+                                        tipify( div(actionLink(inputId=paste0(i, "__Cluster.txt__link"), label=paste0(unlist(str_split(resultFile, outDirWeb))[2]))), "A list of significant terms in which functionally similar annotations are grouped together to remove redundancy. This is performed with respect to the whole annotation set rather than to individual annotation classes (.txt format).", placement="bottom")
+                                      },
+                                      # Cluster.xlsx
+                                      if(paste0(unlist(str_split(resultFile, outDirWeb))[2]) == paste0(i, "__Cluster.xlsx")){
+                                        tipify( div(actionLink(inputId=paste0(i, "__Cluster.xlsx__link"), label=paste0(unlist(str_split(resultFile, outDirWeb))[2]))), "A list of significant terms in which functionally similar annotations are grouped together to remove redundancy. This is performed with respect to the whole annotation set rather than to individual annotation classes (.xlsx format).", placement="bottom")
+                                      },
+                                      # Matrix
+                                      if(paste0(unlist(str_split(resultFile, outDirWeb))[2]) == paste0(i, "__Matrix.txt")){
+                                        tipify( div(actionLink(inputId=paste0(i, "__Matrix.txt__link"), label=paste0(unlist(str_split(resultFile, outDirWeb))[2]))), "A text representation of the heatmap (.txt format).", placement="bottom")
+                                      },
+                                      # Error CASRNs list
+                                      if(paste0(unlist(str_split(resultFile, outDirWeb))[2]) == paste0(i, "__ErrorCASRNs.txt")){
+                                        tipify( div(actionLink(inputId=paste0(i, "__ErrorCASRNs.txt__link"), label=paste0(unlist(str_split(resultFile, outDirWeb))[2]))), "A list of submitted CASRNs that were not found in the Tox21 Enricher database (.txt format).", placement="bottom")
+                                      }
+                                    )
+                                  }
                                 })  
                               )
                             ),

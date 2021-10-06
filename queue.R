@@ -340,12 +340,13 @@ performEnrichment <- function(enrichmentUUID="-1", annoSelectStr="MESH=checked,P
   # Generate heatmaps for multiple sets
   create_clustering_images (baseOutputDirGct, "-color=BR")
   # Create xlsx spreadsheets
-  setNames <- lapply(Sys.glob(paste0(baseDirName, "/*.*"), dirmark=FALSE), function(resultFile){
+  setNames <- unlist(lapply(Sys.glob(paste0(baseDirName, "/*.*"), dirmark=FALSE), function(resultFile){
     tmpSplit <- unlist(str_split(resultFile, paste0(baseDirName, "/"))) # remove path from file
     tmpSplitName <- unlist(str_split(tmpSplit[2], "__"))[1] # Get set name
     return(tmpSplitName)
-  })
-  setNames <- unique(unlist(setNames)) # Get only 1 copy of each set name
+  }))
+  setNames <- setNames[!sapply(setNames, is.null)]
+  setNames <- unique(setNames) # Get only 1 copy of each set name
 
   # Create Excel spreadsheets of existing files
   lapply(setNames, function(i){
@@ -682,6 +683,7 @@ create_clustering_images <- function(outDir = "", imageFlags = "-color=BR"){
       perform_hclustering_per_directory (paste0(dirName, '/', x, baseShortDirName, '/', sep=""), outputBaseDir, dirTypeTag, libDir, cluster_program, row_distance_measure, column_distance_measure, clustering_method, java_flags, output_format, column_size, row_size, show_grid, grid_color, show_row_description, show_row_names, row_to_highlight, row_highlight_color, color_scheme, color_palette, use_color_gradient)
     })
   }
+
   print("\n! COMPLETE ...\n")
   return("success")
 }
@@ -831,18 +833,25 @@ create_david_chart_cluster <- function(baseDirName="", topTermLimit=10, mode="AL
   classID2className	<- lapply(1:nrow(outpClasses), function(line) outpClasses[line, "annoclassname"])
   names(classID2className) <- lapply(1:nrow(outpClasses), function(line) outpClasses[line, "annoclassid"])
   
-  #TODO: Map
+  # TODO: This is not being populated correctly  
   classID2annotationTerm2termUniqueID_lv1 <- lapply(split(outpAnnoDetail, outpAnnoDetail$annoclassid), function(x) {
+    print(split(x, x$annoterm))
     return(split(x, x$annoterm))
   })
+
   classID2annotationTerm2termUniqueID <- lapply(classID2annotationTerm2termUniqueID_lv1, function(x) {
     return(lapply(x, function(y) {
-      inner_classID2annotationTerm2termUniqueID <- lapply(y$annotermid, function(z) y$annotermid) 
+      inner_classID2annotationTerm2termUniqueID <- lapply(y$annotermid, function(z) y$annotermid)
+      #inner_classID2annotationTerm2termUniqueID <- y$annotermid 
       names(inner_classID2annotationTerm2termUniqueID) <- y$annotermid
+      
+      print(">> inner_classID2annotationTerm2termUniqueID")
+      print(inner_classID2annotationTerm2termUniqueID)
+      
       return(inner_classID2annotationTerm2termUniqueID)
     }))
   })
-  
+
   # -------------------------------------
   # Enumerate all possible directories
   # -------------------------------------
@@ -1087,62 +1096,68 @@ process_variable_DAVID_CLUSTER_directories <- function(dirName, outputDir, extTa
   SUMMARY <- file(paste0(outputDir, summaryFileName, sep=""))
   fileHeaderNames <- unlist(fileHeaderNames)
   fileHeaderNames <- sort_by_file_number(fileHeaderNames)
-  writeToSummary <- paste0("GROUP\tID\tTerms\t", paste0(fileHeaderNames, collapse="\t"), "\n", sep="")
+  writeToSummaryHeader <- paste0("GROUP\tID\tTerms\t", paste0(fileHeaderNames, collapse="\t"), "\n", sep="")
   writeToSummary2 <- ""
   
   #Get not null elements
   IDs <- IDs[!sapply(IDs, is.na)]
   IDs <- unlist(IDs, recursive = FALSE)
   
-  # TODO: This, but efficiently
-  for(ID in IDs) {	
-    # TODO: to make this faster, we could create a data frame in here and then just write that to the file at the end
-    writeToSummary2 <- paste0(writeToSummary2, ID2Class[ID],"\t",ID,"\t")
+  IDs <- unique(IDs)
+  
+  writeToSummary <- lapply(IDs, function(ID) {	
+    writeToSummaryLabel <- paste0(ID2Class[ID],"\t",ID,"\t")
     IDSplit <- str_split(ID, "\\|")[[1]]
-    for(header in fileHeaderNames){
-      if (is.null(pvalueMatrix[[ID]][header]) == FALSE | is.na(pvalueMatrix[[ID]][header]) == FALSE){
+    writeToSummary2 <- lapply(fileHeaderNames, function(header){
+      if (is.null(pvalueMatrix[[ID]][header]) == FALSE & is.na(pvalueMatrix[[ID]][header]) == FALSE){
         if(header %in% names(pvalueMatrix[[ID]])) {
-          writeToSummary2 <- paste0(writeToSummary2, "\t", pvalueMatrix[[ID]][header])
+          return(paste0(pvalueMatrix[[ID]][header]))
         } else {
-          writeToSummary2 <- paste0(writeToSummary2, "\t0")
+          return("0")
         }
       } else {
-        writeToSummary2 <- paste0(writeToSummary2, "\t")
+        return("#")
       }
-    }
-    writeToSummary2 <- paste0(writeToSummary2, "\n")
-  }
-  writeToSummaryList <- paste0(unique(unlist(str_split(writeToSummary2, "\n"))), collapse="\n")
-  write(paste0(writeToSummary, writeToSummaryList, sep=""), SUMMARY, append=TRUE)
+    })
+    writeToSummary2 <- paste0(writeToSummary2, collapse="\t")
+    writeToSummary2 <- gsub("#", "", writeToSummary2)
+    return(paste0(writeToSummaryLabel, "\t", writeToSummary2))
+  })
+
+  writeToSummary <- paste0(writeToSummary, collapse="\n")
+  write(paste0(writeToSummaryHeader, writeToSummary), SUMMARY, append=TRUE)
   close(SUMMARY)
-  
+
   # Create a network summary file for Cluster
   ForNetworkFile <- paste0(summaryFileNameBase, "__ValueMatrix.ForNet")
   file.create(paste0(outputDir, ForNetworkFile))
   NETWORK <- file(paste0(outputDir, ForNetworkFile))
-  writeToNetwork <- paste0("GROUPID\tUID\tTerms\t", paste0(fileHeaderNames, collapse="\t"), "\n", sep="")
+  writeToNetworkHeader <- paste0("GROUPID\tUID\tTerms\t", paste0(fileHeaderNames, collapse="\t"), "\n", sep="")
   writeToNetwork2 <- ""
-  # TODO: This, but efficiently
-  for(ID in IDs) {
-    idTermSplits <- str_split(ID, " \\| ")[[1]]
-    tmpHashRef	 <- classID2annotationTerm2termUniqueID[[className2classID[[idTermSplits[1]]]]]
-    
-    # TODO want to have the names for this just be the terms and not the classes
-    writeToNetwork2 <- paste0(writeToNetwork2, className2classID[[idTermSplits[1]]], "\t", tmpHashRef[[idTermSplits[2]]], "\t", idTermSplits[2])
-    for (header in fileHeaderNames) {
-      if (is.na(unname(pvalueMatrix[[ID]][header])) == FALSE) {
-        writeToNetwork2 <- paste0(writeToNetwork2, "\t", pvalueMatrix[[ID]][header])
-      } else {
-        writeToNetwork2 <- paste0(writeToNetwork2, "\t")
-      }
-    }
-    writeToNetwork2 <- paste0(writeToNetwork2, "\n")
-  }
-  # remove trailing newline
-  writeToNetwork2 <- substr(writeToNetwork2, 1, nchar(writeToNetwork2)-1)
   
-  write(paste0(writeToNetwork, writeToNetwork2), NETWORK, append=TRUE)
+  writeToNetwork <- lapply(IDs, function(ID) {
+    idTermSplits <- unlist(str_split(ID, " \\| "))
+    tmpHashRef <- classID2annotationTerm2termUniqueID[[className2classID[[idTermSplits[1]]]]]
+    writeToNetwork2 <- paste0(className2classID[[idTermSplits[1]]], "\t", tmpHashRef[[idTermSplits[2]]], "\t", idTermSplits[2])
+    writeToNetwork_inner <- unname(unlist(lapply(fileHeaderNames, function(header) {
+      print("pvalueMatrix[[ID]][header])")
+      print(pvalueMatrix[[ID]][header])
+      if (is.na(unname(pvalueMatrix[[ID]][header])) == FALSE) {
+        return(pvalueMatrix[[ID]][header])
+      } else {
+        return("#") # delete these later
+      }
+    })))
+    writeToNetwork_inner <- paste0(writeToNetwork_inner, collapse="\t")
+    writeToNetwork_inner <- gsub("#", "", writeToNetwork_inner, fixed=TRUE)
+    writeToNetwork2 <- paste0(writeToNetwork2, "\t", writeToNetwork_inner)
+  })
+  writeToNetwork <- paste0(writeToNetwork, collapse="\n")
+  write(paste0(writeToNetworkHeader, writeToNetwork), NETWORK, append=TRUE)
   close(NETWORK)
+  
+  #Sys.sleep(10)
+  #stop()
   
   # Create a gct file from ValueMatrix
   INFILE <- read.delim(paste0(outputDir, summaryFileNameBase, "__ValueMatrix.txt"), sep="\t", comment.char="", quote="", stringsAsFactors = FALSE, header=TRUE, fill=TRUE)
@@ -1395,58 +1410,55 @@ process_variable_DAVID_CHART_directories <- function(dirName, outputDir, extTag,
   SUMMARY <- file(paste0(outputDir, summaryFileName, sep=""))
   fileHeaderNames <- unlist(fileHeaderNames)
   fileHeaderNames <- sort_by_file_number(fileHeaderNames)
-  writeToSummary <- paste0("GROUP\tID\tTerms\t", paste0(fileHeaderNames, collapse="\t"), "\n", sep="")
+  writeToSummaryHeader <- paste0("GROUP\tID\tTerms\t", paste0(fileHeaderNames, collapse="\t"), "\n", sep="")
   writeToSummary2 <- ""
   
-  # TODO: This, but efficiently
-  for(ID in IDs) {	
-    writeToSummary2 <- paste0(writeToSummary2, ID2Class[ID],"\t",ID,"\t")
-    # IDToUse == ID if doing Chart because of the way the file is formatted
-    IDToUse <- ID
-    for(header in fileHeaderNames){
-      if (is.null(pvalueMatrix[[IDToUse]][header]) == FALSE | is.na(pvalueMatrix[[IDToUse]][header]) == FALSE){
-        if(header %in% names(pvalueMatrix[[IDToUse]])) {
-          writeToSummary2 <- paste0(writeToSummary2, "\t", pvalueMatrix[[IDToUse]][header])
+  IDs <- unique(IDs)
+  
+  writeToSummary <- lapply(IDs, function(ID) {	
+    writeToSummaryLabel <- paste0(ID2Class[ID], "\t", ID)
+    writeToSummary2 <- lapply(fileHeaderNames, function(header){
+      if (is.null(pvalueMatrix[[ID]][header]) == FALSE & is.na(pvalueMatrix[[ID]][header]) == FALSE){
+        if(header %in% names(pvalueMatrix[[ID]])) {
+          return(paste0(pvalueMatrix[[ID]][header]))
         } else {
-          writeToSummary2 <- paste0(writeToSummary2, "\t0")
+          return("0")
         }
       } else {
-        writeToSummary2 <- paste0(writeToSummary2, "\t")
+        return("#")
       }
-    }
-    writeToSummary2 <- paste0(writeToSummary2, "\n")
-  }	
-  
-  # Delete duplicate lines
-  writeToSummaryList <- paste0(unique(unlist(str_split(writeToSummary2, "\n"))), collapse="\n")
-  write(paste0(writeToSummary, writeToSummaryList), SUMMARY, append=TRUE)
+    })
+    writeToSummary2 <- paste0(writeToSummary2, collapse="\t")
+    writeToSummary2 <- gsub("#", "", writeToSummary2)
+    return(paste0(writeToSummaryLabel, "\t\t", writeToSummary2))
+  })
+  writeToSummary <- paste0(writeToSummary, collapse="\n")
+  write(paste0(writeToSummaryHeader, writeToSummary), SUMMARY, append=TRUE)
   close(SUMMARY)
-  
+
   # Create a network summary file for Chart
   ForNetworkFile <- paste0(summaryFileNameBase, "__ValueMatrix.ForNet")
   file.create(paste0(outputDir, ForNetworkFile))
   NETWORK <- file(paste0(outputDir, ForNetworkFile))
-  writeToNetwork <- paste0("GROUPID\tUID\tTerms\t", paste0(fileHeaderNames, collapse="\t"), "\n", sep="")
+  writeToNetworkHeader <- paste0("GROUPID\tUID\tTerms\t", paste0(fileHeaderNames, collapse="\t"), "\n", sep="")
   writeToNetwork2 <- ""
-  # TODO: This, but efficiently
-  for(ID in IDs) {
-    idTermSplits <- str_split(ID, " \\| ")[[1]]
-    tmpHashRef	 <- classID2annotationTerm2termUniqueID[[className2classID[[idTermSplits[1]]]]]
-    writeToNetwork2 <- paste0(writeToNetwork2, className2classID[[idTermSplits[1]]], "\t", tmpHashRef[[idTermSplits[2]]], "\t", idTermSplits[2])
-    for (header in fileHeaderNames) {
-      IDToUse <- ID
-      if (is.na(unname(pvalueMatrix[[IDToUse]][header])) == FALSE) {
-        writeToNetwork2 <- paste0(writeToNetwork2, "\t", pvalueMatrix[[IDToUse]][header])
+  writeToNetwork <- lapply(IDs, function(ID) {
+    idTermSplits <- unlist(str_split(ID, " \\| "))
+    tmpHashRef <- classID2annotationTerm2termUniqueID[[className2classID[[idTermSplits[1]]]]]
+    writeToNetwork2 <- paste0(className2classID[[idTermSplits[1]]], "\t", tmpHashRef[[idTermSplits[2]]], "\t", idTermSplits[2])
+    writeToNetwork_inner <- unname(unlist(lapply(fileHeaderNames, function(header) {
+      if (is.na(unname(pvalueMatrix[[ID]][header])) == FALSE) {
+        return(pvalueMatrix[[ID]][header])
       } else {
-        writeToNetwork2 <- paste0(writeToNetwork2, "\t")
+        return("#") # delete these later
       }
-    }
-    writeToNetwork2 <- paste0(writeToNetwork2, "\n")
-  }
-  # remove trailing newline
-  writeToNetwork2 <- substr(writeToNetwork2, 1, nchar(writeToNetwork2)-1)
-  
-  write(paste0(writeToNetwork, writeToNetwork2), NETWORK, append=TRUE)
+    })))
+    writeToNetwork_inner <- paste0(writeToNetwork_inner, collapse="\t")
+    writeToNetwork_inner <- gsub("#", "", writeToNetwork_inner, fixed=TRUE)
+    writeToNetwork2 <- paste0(writeToNetwork2, "\t", writeToNetwork_inner)
+  })
+  writeToNetwork <- paste0(writeToNetwork, collapse="\n")
+  write(paste0(writeToNetworkHeader, writeToNetwork), NETWORK, append=TRUE)
   close(NETWORK)
   
   # Create a gct file from ValueMatrix
@@ -1876,13 +1888,13 @@ perform_CASRN_enrichment_analysis <- function(CASRNRef, outputBaseDir, outfileBa
     
     # finalize the hashes
     term2Contents[[paste0(annoArray[[annoArrayIndex]][1], "|", annoArray[[annoArrayIndex]][2])]]	<<- paste0(annoArray[[annoArrayIndex]])
-    term2Pvalue[[paste0(annoArray[[annoArrayIndex]][1], "|", annoArray[[annoArrayIndex]][2])]]	<<- ROutputData[[annoArrayIndex]][1]
+    term2Pvalue[[paste0(annoArray[[annoArrayIndex]][1], "|", annoArray[[annoArrayIndex]][2])]]	<<- ROutputData[[annoArrayIndex]][[1]]
     
     annoArrayIndex <<- annoArrayIndex + 1
   })
   
   print(paste0(">> TIME | term2Contents/term2Pvalue: ", Sys.time()))
-  
+ 
   # Sort by the p-values across multiple funCat
   sortedFunCatTerms <- term2Pvalue[order(unlist(term2Pvalue), decreasing = FALSE)]
   sortedFunCatTermsCount <- length(sortedFunCatTerms)
@@ -1902,20 +1914,21 @@ perform_CASRN_enrichment_analysis <- function(CASRNRef, outputBaseDir, outfileBa
   
   #TODO: fill this list in a better way vvv
   sortFunCatProcess <- unlist(lapply(names(sortedFunCatTerms), function(funCatTerm){ 
+    print("term2Pvalue[[funCatTerm]]")
+    print(term2Pvalue[[funCatTerm]])
     if (term2Pvalue[[funCatTerm]] <= pvalueThresholdToDisplay){	
       toSimple <- 0
       tmpSplit <- term2Contents[[funCatTerm]]
       if (tmpSplit[[10]] > 1){
         localFunCat <- get_funCat_from_funCatTerm(funCatTerm)
-        if (is.null(simpleFunCatTermCount[[localFunCat]]) == TRUE){
+        if (is.null(simpleFunCatTermCount[[localFunCat]])){
           simpleFunCatTermCount[[localFunCat]] <<- 1
           toSimple <- 1
         } 
-        else if(simpleFunCatTermCount[[localFunCat]] < 11){
+        else if(simpleFunCatTermCount[[localFunCat]] < 10){
           simpleFunCatTermCount[[localFunCat]] <<- simpleFunCatTermCount[[localFunCat]] + 1
           toSimple <- 1
         }
-        
         if(toSimple > 0){
           return(paste0(tmpSplit[[1]], "\t", tmpSplit[[2]], "\t", tmpSplit[[3]], "\t", tmpSplit[[4]], "\t", tmpSplit[[5]], "\t", tmpSplit[[10]], "\t", tmpSplit[[12]]))
         } else {
@@ -1925,6 +1938,7 @@ perform_CASRN_enrichment_analysis <- function(CASRNRef, outputBaseDir, outfileBa
     }
   }))
   sortFunCatProcess <- sortFunCatProcess[!sapply(sortFunCatProcess, is.null)]
+  sortFunCatProcess <- sort(sortFunCatProcess)
   write(paste0(sortFunCatProcess, collapse="\n"), outfileSimple, append=TRUE)
   close(OUTFILE)
   close(SIMPLE)
@@ -2016,8 +2030,8 @@ check_CASRN <- function(CASRN, CASRN2DSSTox){
 }
 
 get_funCat_from_funCatTerm <- function(funCatTerm){
-  tmpSplit <- str_split(funCatTerm, '\\|')
-  return(tmpSplit[[1]][1])
+  tmpSplit <- unlist(str_split(funCatTerm, '\\|'))
+  return(tmpSplit[1])
 }
 
 kappa_cluster <- function(x, deg=NULL, useTerm=FALSE, cutoff=0.5, overlap=0.5, minSize=5, escore=3, outputBaseDir, outfileBase, sortedFunCatTerms, sigTerm2CASRNMatrix, sortedFunCatTermsCount, inputCASRNsCount=0, similarityThreshold=0.50, initialGroupMembership, multipleLinkageThreshold=0.5, EASEThreshold=1.0, term2Pvalue, term2Contents) {
@@ -2070,46 +2084,7 @@ kappa_cluster <- function(x, deg=NULL, useTerm=FALSE, cutoff=0.5, overlap=0.5, m
   
   # Calculate kappa score for each term pair
   termpair2kappaOverThreshold <- list()
-  #termpair2kappaOverThreshold <- NULL
-  
-  # TODO: Clean this up earlier but this should clean things up from this point and down
   sortedFunCatTerms <- names(sortedFunCatTerms)
-  
-  #lapply ((1:(sortedFunCatTermsCount-1)), function(i) {
-  #  lapply (((i+1):(sortedFunCatTermsCount)), function(j) {
-  #    #calculate_kappa_statistics 
-  #    term1term2		<- 0
-  #    term1only			<- 0
-  #    term2only			<- 0
-  #    term1term2Non	<- 0
-  
-  #    posTerm1Total	<- posTermCASRNCount[[sortedFunCatTerms[i]]]
-  #    posTerm2Total	<- posTermCASRNCount[[sortedFunCatTerms[j]]]
-  #    negTerm1Total	<- inputCASRNsCount - posTerm1Total			# note that the total is inputCASRNsCount not the mapped total
-  #    negTerm2Total	<- inputCASRNsCount - posTerm2Total			# note that the total is inputCASRNsCount not the mapped total
-  
-  #    # Get number of chemicals that are shared or not for term1 and term2
-  #    sharedTerms <- intersect(names(sigTerm2CASRNMatrix[[sortedFunCatTerms[i]]]), names(sigTerm2CASRNMatrix[[sortedFunCatTerms[j]]]))
-  #    term1term2		<- length(sharedTerms)
-  #    term1only			<- length(names(sigTerm2CASRNMatrix[[sortedFunCatTerms[i]]])) - length(sharedTerms)
-  #    term2only			<- length(names(sigTerm2CASRNMatrix[[sortedFunCatTerms[j]]])) - length(sharedTerms)
-  #    term1term2Non	<- inputCASRNsCount - term1term2 - term1only - term2only
-  
-  #    # Calculate the kappa score 
-  #    # http://david.abcc.ncifcrf.gov/content.jsp?file=linear_search.html
-  #    Oab <- (term1term2 + term1term2Non)/inputCASRNsCount
-  #    Aab <- ((posTerm1Total * posTerm2Total) + (negTerm1Total * negTerm2Total))/(inputCASRNsCount * inputCASRNsCount)
-  
-  #    if (Aab != 1) {
-  #      Kappa	<- as.double(sprintf("%.2f", (Oab - Aab)/(1 - Aab)))
-  #      if (Kappa > similarityThreshold) {
-  #        termpair2kappaOverThreshold[[sortedFunCatTerms[i]]][[sortedFunCatTerms[j]]] <<- 1
-  #        termpair2kappaOverThreshold[[sortedFunCatTerms[j]]][[sortedFunCatTerms[i]]] <<- 1
-  #      }
-  #    }
-  #  })
-  #})
-
   termpair2kappaOverThreshold <- mclapply ((1:(sortedFunCatTermsCount-1)), mc.cores=4, mc.silent=FALSE, function(i) {
     termpair2kappaOverThresholdInner <- lapply (((i+1):(sortedFunCatTermsCount)), function(j) {
       #calculate_kappa_statistics 
@@ -2138,8 +2113,6 @@ kappa_cluster <- function(x, deg=NULL, useTerm=FALSE, cutoff=0.5, overlap=0.5, m
       if (Aab != 1) {
         Kappa	<- as.double(sprintf("%.2f", (Oab - Aab)/(1 - Aab)))
         if (Kappa > similarityThreshold) {
-          #termpair2kappaOverThreshold[[sortedFunCatTerms[i]]][[sortedFunCatTerms[j]]] <<- 1
-          #termpair2kappaOverThreshold[[sortedFunCatTerms[j]]][[sortedFunCatTerms[i]]] <<- 1
           iTerm <- paste0(sortedFunCatTerms[i])
           jTerm <- paste0(sortedFunCatTerms[j])
           ijFrame <- data.frame(iTerm=paste0(jTerm), jTerm=paste0(iTerm), stringsAsFactors=FALSE)
@@ -2167,21 +2140,16 @@ kappa_cluster <- function(x, deg=NULL, useTerm=FALSE, cutoff=0.5, overlap=0.5, m
   #   with more than > 2 or any designated number of other members. 
   term2sToPass <- NULL
   if(length(termpair2kappaOverThreshold) > 0){
-    #termpair2kappaOverThreshold <- termpair2kappaOverThreshold[order(unlist(termpair2kappaOverThreshold), decreasing = TRUE)]
     termpair2kappaOverThreshold <- termpair2kappaOverThreshold[order(names(termpair2kappaOverThreshold), decreasing = TRUE)]
-
     # Prepend sortedFunCatTerms to each element in list
     term2sToPass <- lapply((1:sortedFunCatTermsCount), function(i){
-      #return( append(names(termpair2kappaOverThreshold[[sortedFunCatTerms[i]]]), sortedFunCatTerms[i], after=0) )
       return( append(termpair2kappaOverThreshold[[sortedFunCatTerms[i]]], sortedFunCatTerms[i], after=0) )
     })
-    #names(term2sToPass) <- lapply((1:sortedFunCatTermsCount), function(i){
     names(term2sToPass) <- mclapply((1:sortedFunCatTermsCount), mc.cores=4, mc.silent=FALSE, function(i){
       return( sortedFunCatTerms[i] )
     })
   }
 
-  #qualifiedSeeds <- lapply((1:sortedFunCatTermsCount), function(i){
   qualifiedSeeds <- mclapply((1:sortedFunCatTermsCount), mc.cores=4, mc.silent=FALSE, function(i){
     # Seed condition #1: initial group membership
     if (length(termpair2kappaOverThreshold[[sortedFunCatTerms[i]]]) > 0 & length(termpair2kappaOverThreshold[[sortedFunCatTerms[i]]]) >= (initialGroupMembership-1)) {
@@ -2231,12 +2199,21 @@ kappa_cluster <- function(x, deg=NULL, useTerm=FALSE, cutoff=0.5, overlap=0.5, m
     finalGroupsIndex <- finalGroupsIndex+ 1
   }
   
+  print("length(finalGroups) original")
+  print(length(finalGroups))
+  
   # Remove null elements
   finalGroups <- lapply(finalGroups, function(innerList){
     if(length(innerList) > 0) {
       return(innerList)
     }
   })
+  
+  print("length(finalGroups)")
+  print(length(finalGroups))
+  #Sys.sleep(10)
+  #stop()
+  
   finalGroups <- finalGroups[!sapply(finalGroups, is.null)]
   
   print(paste0(">> TIME | Step 3 final groups: ", Sys.time()))
@@ -2248,8 +2225,13 @@ kappa_cluster <- function(x, deg=NULL, useTerm=FALSE, cutoff=0.5, overlap=0.5, m
   outfileCluster	<- paste0(outputBaseDir, outfileBase, "__Cluster.txt")
   CLUSTER         <- file(outfileCluster)
   
-  clusterHeader <- "Category	Term	Count	%	PValue	CASRNs	List Total	Pop Hits	Pop Total	Fold Enrichment	Bonferroni	Benjamini	FDR\n"
+  clusterHeader <- "Category\tTerm\tCount\t%\tPValue\tCASRNs\tList Total\tPop Hits\tPop Total\tFold Enrichment\tBonferroni\tBenjamini\tFDR\n"
   EASEScore	    <- list()
+  
+  print("length(finalGroups)")
+  print(length(finalGroups))
+  #Sys.sleep(10)
+  #stop()
   
   if(length(finalGroups) > 0){
     EASEScore <- lapply(1:length(finalGroups), function(i){
@@ -2262,7 +2244,17 @@ kappa_cluster <- function(x, deg=NULL, useTerm=FALSE, cutoff=0.5, overlap=0.5, m
   clusterNumber	<- 0
   sortedIndex <- finalGroups
   names(sortedIndex) <- EASEScore
-  sortedIndex <- sortedIndex[order(names(sortedIndex), decreasing=TRUE)]
+  sortedIndexFloat <- unlist(lapply(names(sortedIndex), function(x){
+    return(as.numeric(x))
+  }))
+  sortedIndex <- sortedIndex[order(sortedIndexFloat, decreasing=TRUE)]
+  
+  # Below is a fix to remove duplicate clusters, which show up in certain sets (i.e., the PAH example set). This is kind of a band-aid solution until I can figure out why this is happening in the first place.
+  sortedIndex <- lapply(sortedIndex, function(x){
+    return(sort(x))
+  })
+  sortedIndex <- sortedIndex[!duplicated(sortedIndex)]
+
   
   writeToClusterFinal <- NULL
   if(length(sortedIndex) > 0){
@@ -2318,11 +2310,8 @@ calculate_percentage_of_membership_over_threshold <- function(termpair2kappaOver
   #passedPair <- lapply (1:(length(term2s)-1), function(i) {
   passedPair <- lapply (1:(length(term2s)), function(i) {
     passedPairInner <- lapply (((i+1):length(term2s)), function(j) {
-      #if (!is.null(termpair2kappaOverThresholdRef[[term2s[i]]][term2s[j]]) ) {
       if(term2s[j] %in% termpair2kappaOverThresholdRef[[term2s[i]]]) {
-      #  if(!is.na(termpair2kappaOverThresholdRef[[term2s[i]]][term2s[j]])){
-          return(1)
-      #  }
+        return(1)
       }
       return(NULL)
     })
@@ -2359,14 +2348,13 @@ get_the_best_seed <- function(currentSeedRef, remainingSeedsRef, newSeedRef, mul
     } 
   }
   
-  #print(paste0("down here best overlapping", bestOverlapping))
   if (bestOverlapping == 0) {
     # no more merging is possible
     return(list(remainingSeedsRef=remainingSeedsRef, newSeedRef=newSeedRef, finished=0))
   } else {
     # best mergable seed found
     newSeedRef <- union(currentSeedTerms, remainingSeedsRef[[bestSeedIndex]])
-    #splice
+    # splice
     remainingSeedsRef <- remainingSeedsRef[-bestSeedIndex]
     return(list(remainingSeedsRef=remainingSeedsRef, newSeedRef=newSeedRef, finished=1))
   }
