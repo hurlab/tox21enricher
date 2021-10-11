@@ -533,7 +533,6 @@ process_variable_DAVID_CHART_directories_individual_file <- function(inputDirNam
       names(CASRN2TermMatrix) <- unique(names(CASRN2TermMatrix_lv2))
       
       # Now create new output files
-      print(paste0("GCT file at: ,", outputDir, tmp2[length(tmp2)], sep="\t"))
       OUTFILE           <- file(paste0(outputDir, tmp2[length(tmp2)], ".gct", sep=""))
       
       if(typeof(CASRN2TermMatrix) == "list"){
@@ -835,19 +834,13 @@ create_david_chart_cluster <- function(baseDirName="", topTermLimit=10, mode="AL
   
   # TODO: This is not being populated correctly  
   classID2annotationTerm2termUniqueID_lv1 <- lapply(split(outpAnnoDetail, outpAnnoDetail$annoclassid), function(x) {
-    print(split(x, x$annoterm))
     return(split(x, x$annoterm))
   })
 
   classID2annotationTerm2termUniqueID <- lapply(classID2annotationTerm2termUniqueID_lv1, function(x) {
     return(lapply(x, function(y) {
       inner_classID2annotationTerm2termUniqueID <- lapply(y$annotermid, function(z) y$annotermid)
-      #inner_classID2annotationTerm2termUniqueID <- y$annotermid 
       names(inner_classID2annotationTerm2termUniqueID) <- y$annotermid
-      
-      print(">> inner_classID2annotationTerm2termUniqueID")
-      print(inner_classID2annotationTerm2termUniqueID)
-      
       return(inner_classID2annotationTerm2termUniqueID)
     }))
   })
@@ -1140,8 +1133,6 @@ process_variable_DAVID_CLUSTER_directories <- function(dirName, outputDir, extTa
     tmpHashRef <- classID2annotationTerm2termUniqueID[[className2classID[[idTermSplits[1]]]]]
     writeToNetwork2 <- paste0(className2classID[[idTermSplits[1]]], "\t", tmpHashRef[[idTermSplits[2]]], "\t", idTermSplits[2])
     writeToNetwork_inner <- unname(unlist(lapply(fileHeaderNames, function(header) {
-      print("pvalueMatrix[[ID]][header])")
-      print(pvalueMatrix[[ID]][header])
       if (is.na(unname(pvalueMatrix[[ID]][header])) == FALSE) {
         return(pvalueMatrix[[ID]][header])
       } else {
@@ -1155,9 +1146,6 @@ process_variable_DAVID_CLUSTER_directories <- function(dirName, outputDir, extTa
   writeToNetwork <- paste0(writeToNetwork, collapse="\n")
   write(paste0(writeToNetworkHeader, writeToNetwork), NETWORK, append=TRUE)
   close(NETWORK)
-  
-  #Sys.sleep(10)
-  #stop()
   
   # Create a gct file from ValueMatrix
   INFILE <- read.delim(paste0(outputDir, summaryFileNameBase, "__ValueMatrix.txt"), sep="\t", comment.char="", quote="", stringsAsFactors = FALSE, header=TRUE, fill=TRUE)
@@ -1584,9 +1572,6 @@ sort_by_file_number <- function(originalArray) {
 
 ###### Perform enrichment analysis ######
 perform_CASRN_enrichment_analysis <- function(CASRNRef, outputBaseDir, outfileBase, mappedCASRNsFromProcess, funCat2Selected, CASRN2funCatTerm, funCatTerm2CASRN, funCat2CASRNCount, funCat2termCount, funCatTerm2CASRNCount, pvalueThresholdToDisplay, similarityThreshold=0.50, initialGroupMembership, multipleLinkageThreshold, EASEThreshold){
-  
-  print(paste0(">> TIME | process start: ", Sys.time()))
-  
   # Define output file names
   outfileChart    <- paste0(outputBaseDir, outfileBase, "__Chart.txt")
   outfileSimple		<- paste0(outputBaseDir, outfileBase, "__ChartSimple.txt")
@@ -1655,9 +1640,7 @@ perform_CASRN_enrichment_analysis <- function(CASRNRef, outputBaseDir, outfileBa
   })
   funCat2SelectedProcessed_sigTerm2CASRNMatrix <- funCat2SelectedProcessed_sigTerm2CASRNMatrix[!sapply(funCat2SelectedProcessed_sigTerm2CASRNMatrix, is.null)]
   sigTerm2CASRNMatrix <- unlist(funCat2SelectedProcessed_sigTerm2CASRNMatrix, recursive=FALSE)
-  
-  print(paste0(">> TIME | sigTerm2CASRNMatrix: ", Sys.time()))
-  
+
   # Populate datArray
   #funCat2SelectedProcessed_datArray <- lapply(names(funCat2Selected), function(funCat){
   funCat2SelectedProcessed_datArray <- mclapply(names(funCat2Selected), mc.cores=4, mc.silent=FALSE, function(funCat){
@@ -1731,8 +1714,6 @@ perform_CASRN_enrichment_analysis <- function(CASRNRef, outputBaseDir, outfileBa
   })
   funCat2SelectedProcessed_datArray <- funCat2SelectedProcessed_datArray[!sapply(funCat2SelectedProcessed_datArray, is.null)]
   datArray <- unlist(funCat2SelectedProcessed_datArray, recursive=FALSE)
-  
-  print(paste0(">> TIME | datArray: ", Sys.time()))
 
   # Populate annoArray
   #funCat2SelectedProcessed_annoArray <- lapply(names(funCat2Selected), function(funCat){
@@ -1807,9 +1788,7 @@ perform_CASRN_enrichment_analysis <- function(CASRNRef, outputBaseDir, outfileBa
   funCat2SelectedProcessed_annoArray <- unlist(funCat2SelectedProcessed_annoArray, recursive=FALSE)
   funCat2SelectedProcessed_annoArray <- funCat2SelectedProcessed_annoArray[!sapply(funCat2SelectedProcessed_annoArray, is.null)]
   annoArray <- funCat2SelectedProcessed_annoArray
-  
-  print(paste0(">> TIME | annoArray: ", Sys.time()))
-  
+
   # Save the data file -> create "RINPUT" but as a data frame here
   RINPUT_index1 <- list()
   RINPUT_index2 <- list()
@@ -1824,7 +1803,6 @@ perform_CASRN_enrichment_analysis <- function(CASRNRef, outputBaseDir, outfileBa
     }
   })
   RINPUT_df <- data.frame(X1=unlist(RINPUT_index1), X2=unlist(RINPUT_index2), X3=unlist(RINPUT_index3), X4=unlist(RINPUT_index4))
-  print(paste0(">> TIME | RINPUT_df: ", Sys.time()))
 
   if(nrow(RINPUT_df) < 2){
     # Print out the matrix file
@@ -1893,8 +1871,6 @@ perform_CASRN_enrichment_analysis <- function(CASRNRef, outputBaseDir, outfileBa
     annoArrayIndex <<- annoArrayIndex + 1
   })
   
-  print(paste0(">> TIME | term2Contents/term2Pvalue: ", Sys.time()))
- 
   # Sort by the p-values across multiple funCat
   sortedFunCatTerms <- term2Pvalue[order(unlist(term2Pvalue), decreasing = FALSE)]
   sortedFunCatTermsCount <- length(sortedFunCatTerms)
@@ -1914,8 +1890,6 @@ perform_CASRN_enrichment_analysis <- function(CASRNRef, outputBaseDir, outfileBa
   
   #TODO: fill this list in a better way vvv
   sortFunCatProcess <- unlist(lapply(names(sortedFunCatTerms), function(funCatTerm){ 
-    print("term2Pvalue[[funCatTerm]]")
-    print(term2Pvalue[[funCatTerm]])
     if (term2Pvalue[[funCatTerm]] <= pvalueThresholdToDisplay){	
       toSimple <- 0
       tmpSplit <- term2Contents[[funCatTerm]]
@@ -1942,9 +1916,7 @@ perform_CASRN_enrichment_analysis <- function(CASRNRef, outputBaseDir, outfileBa
   write(paste0(sortFunCatProcess, collapse="\n"), outfileSimple, append=TRUE)
   close(OUTFILE)
   close(SIMPLE)
-  
-  print(paste0(">> TIME | write to OUTFILE: ", Sys.time()))
-  
+
   # Print out the matrix file
   sortedHeaderTerms <- sigTerm2CASRNMatrix[order(unlist(sigTerm2CASRNMatrix), decreasing = FALSE)]
   # Clean out NA values (TODO: Probably a better way to do this?)
@@ -1965,17 +1937,13 @@ perform_CASRN_enrichment_analysis <- function(CASRNRef, outputBaseDir, outfileBa
   
   write(matrixOutput, outfileMatrix, append=TRUE)
   close(MATRIX)
-  
-  print(paste0(">> TIME | write to MATRIX: ", Sys.time()))
-  
+
   # ----------------------------------------------------------------------
   #	Perform functional term clustering
   # ----------------------------------------------------------------------
   # Calculate enrichment score
   df<-read.delim(outfileChart, sep="\t", comment.char="", quote="", stringsAsFactors = FALSE)
   res<-kappa_cluster(x=df, outputBaseDir=outputBaseDir, outfileBase=outfileBase, sortedFunCatTerms=sortedFunCatTerms, sigTerm2CASRNMatrix=sigTerm2CASRNMatrix, sortedFunCatTermsCount=sortedFunCatTermsCount, inputCASRNsCount=inputCASRNsCount, similarityThreshold=similarityThreshold, initialGroupMembership=initialGroupMembership, multipleLinkageThreshold=multipleLinkageThreshold, EASEThreshold=EASEThreshold, term2Pvalue=term2Pvalue, term2Contents=term2Contents)
-  
-  print(paste0(">> TIME | kappa_cluster: ", Sys.time()))
 }
 
 calculate_funcat_mapped_total_CASRN_count <- function(mappedCASRNsRef, funCat, CASRN2funCatTerm){
@@ -2083,7 +2051,6 @@ kappa_cluster <- function(x, deg=NULL, useTerm=FALSE, cutoff=0.5, overlap=0.5, m
   totalMappedCASRNIDCount	<- length(mappedCASRNIDs)
   
   # Calculate kappa score for each term pair
-  termpair2kappaOverThreshold <- list()
   sortedFunCatTerms <- names(sortedFunCatTerms)
   termpair2kappaOverThreshold <- mclapply ((1:(sortedFunCatTermsCount-1)), mc.cores=4, mc.silent=FALSE, function(i) {
     termpair2kappaOverThresholdInner <- lapply (((i+1):(sortedFunCatTermsCount)), function(j) {
@@ -2150,26 +2117,25 @@ kappa_cluster <- function(x, deg=NULL, useTerm=FALSE, cutoff=0.5, overlap=0.5, m
     })
   }
 
+  #qualifiedSeeds <- lapply((1:sortedFunCatTermsCount), function(i){
   qualifiedSeeds <- mclapply((1:sortedFunCatTermsCount), mc.cores=4, mc.silent=FALSE, function(i){
     # Seed condition #1: initial group membership
-    if (length(termpair2kappaOverThreshold[[sortedFunCatTerms[i]]]) > 0 & length(termpair2kappaOverThreshold[[sortedFunCatTerms[i]]]) >= (initialGroupMembership-1)) {
+    #if (length(termpair2kappaOverThreshold[[sortedFunCatTerms[i]]]) > 0 & length(termpair2kappaOverThreshold[[sortedFunCatTerms[i]]]) >= (initialGroupMembership-1)) {
+    if (!is.null(termpair2kappaOverThreshold[[sortedFunCatTerms[i]]]) & length(termpair2kappaOverThreshold[[sortedFunCatTerms[i]]]) >= (initialGroupMembership-1)) {
       # Seed condition #2: majority of the members 
       results_calculate_percentage_of_membership_over_threshold <- calculate_percentage_of_membership_over_threshold (termpair2kappaOverThreshold, term2sToPass[[sortedFunCatTerms[i]]])
       over_percentage <- unlist(results_calculate_percentage_of_membership_over_threshold["overPercentage"])
       term2sRef <- results_calculate_percentage_of_membership_over_threshold["term2s"]
-      if (as.double(over_percentage) > as.double(multipleLinkageThreshold)) {
+      if (as.numeric(over_percentage) > as.numeric(multipleLinkageThreshold)) {
         # this seed group is qualified
         return(unlist(unname(term2sRef)))
       }
     }
     return(NULL)
   })
-  
   # remove empty nested lists
   qualifiedSeeds <- lapply(qualifiedSeeds, function(innerList) innerList[sapply(innerList, length) > 0])
   qualifiedSeeds <- qualifiedSeeds[!sapply(qualifiedSeeds, is.null)]
-  
-  print(paste0(">> TIME | Step 2 seeds: ", Sys.time()))
   
   # ----------------------------------------------------------------------
   # 	Step#3: Iteratively merge qualifying seeds
@@ -2178,7 +2144,7 @@ kappa_cluster <- function(x, deg=NULL, useTerm=FALSE, cutoff=0.5, overlap=0.5, m
   finalGroups <- vector("list", length(remainingSeeds))
   finalGroupsIndex <- 1
   
-  while(is.null(unlist(remainingSeeds[1])) == FALSE){
+  while(!is.null(unlist(remainingSeeds[1]))){
     currentSeedRef	 <- remainingSeeds[[1]]
     remainingSeeds	 <- remainingSeeds[-1]
     newSeeds <- list()
@@ -2199,24 +2165,13 @@ kappa_cluster <- function(x, deg=NULL, useTerm=FALSE, cutoff=0.5, overlap=0.5, m
     finalGroupsIndex <- finalGroupsIndex+ 1
   }
   
-  print("length(finalGroups) original")
-  print(length(finalGroups))
-  
   # Remove null elements
   finalGroups <- lapply(finalGroups, function(innerList){
     if(length(innerList) > 0) {
       return(innerList)
     }
   })
-  
-  print("length(finalGroups)")
-  print(length(finalGroups))
-  #Sys.sleep(10)
-  #stop()
-  
   finalGroups <- finalGroups[!sapply(finalGroups, is.null)]
-  
-  print(paste0(">> TIME | Step 3 final groups: ", Sys.time()))
   
   # ----------------------------------------------------------------------
   # 	Step#4: Calculate enrichment score and print out the results
@@ -2227,11 +2182,6 @@ kappa_cluster <- function(x, deg=NULL, useTerm=FALSE, cutoff=0.5, overlap=0.5, m
   
   clusterHeader <- "Category\tTerm\tCount\t%\tPValue\tCASRNs\tList Total\tPop Hits\tPop Total\tFold Enrichment\tBonferroni\tBenjamini\tFDR\n"
   EASEScore	    <- list()
-  
-  print("length(finalGroups)")
-  print(length(finalGroups))
-  #Sys.sleep(10)
-  #stop()
   
   if(length(finalGroups) > 0){
     EASEScore <- lapply(1:length(finalGroups), function(i){
@@ -2248,14 +2198,7 @@ kappa_cluster <- function(x, deg=NULL, useTerm=FALSE, cutoff=0.5, overlap=0.5, m
     return(as.numeric(x))
   }))
   sortedIndex <- sortedIndex[order(sortedIndexFloat, decreasing=TRUE)]
-  
-  # Below is a fix to remove duplicate clusters, which show up in certain sets (i.e., the PAH example set). This is kind of a band-aid solution until I can figure out why this is happening in the first place.
-  sortedIndex <- lapply(sortedIndex, function(x){
-    return(sort(x))
-  })
-  sortedIndex <- sortedIndex[!duplicated(sortedIndex)]
 
-  
   writeToClusterFinal <- NULL
   if(length(sortedIndex) > 0){
     writeToClusterFinal <- lapply(1:length(sortedIndex), function(myIndex) {
@@ -2279,9 +2222,6 @@ kappa_cluster <- function(x, deg=NULL, useTerm=FALSE, cutoff=0.5, overlap=0.5, m
   writeToClusterFinal <- paste0(paste0(writeToClusterFinal, collapse="\n"), "\n")
   write(writeToClusterFinal, CLUSTER, append=TRUE)
   close(CLUSTER)
-  
-  print(paste0(">> TIME | Step 4 write to cluster: ", Sys.time()))
-  
   return(1)
 }
 
@@ -2307,18 +2247,19 @@ calculate_Enrichment_Score <- function(tmp_groupRef, term2PvalueRef) {
 
 calculate_percentage_of_membership_over_threshold <- function(termpair2kappaOverThresholdRef, term2s) {
   # calculate 
-  #passedPair <- lapply (1:(length(term2s)-1), function(i) {
-  passedPair <- lapply (1:(length(term2s)), function(i) {
-    passedPairInner <- lapply (((i+1):length(term2s)), function(j) {
+  passedPair <- unlist(lapply (1:(length(term2s)-1), function(i) {
+    passedPairInner <- lapply ( ( (i+1):(length(term2s)) ), function(j) {
       if(term2s[j] %in% termpair2kappaOverThresholdRef[[term2s[i]]]) {
         return(1)
-      }
+      } 
       return(NULL)
     })
     passedPairInner <- unlist(passedPairInner[!sapply(passedPairInner, is.null)])
     return(passedPairInner)
-  })
-  passedPair <- length(unlist(passedPair))
+  }))
+  passedPair <- passedPair[!sapply(passedPair, is.null)]
+  passedPair <- length(passedPair)
+  
   #use n choose k to calculate total number of unique pairs
   totalPairs <- choose(length(term2s), 2)
   return(list(overPercentage=(passedPair/totalPairs), term2s=term2s))
@@ -2331,7 +2272,8 @@ get_the_best_seed <- function(currentSeedRef, remainingSeedsRef, newSeedRef, mul
   currentSeedTermCount	<- length(currentSeedTerms)
   
   if(length(remainingSeedsRef) > 1){
-    for (i in 1:(length(remainingSeedsRef))) {
+    #for (i in 1:(length(remainingSeedsRef))) {
+    for (i in 1:(length(remainingSeedsRef)-1)) {
       # calculate the overlapping
       secondSeedTerms	<- remainingSeedsRef[[i]]
       commonCount		  <- length(intersect(secondSeedTerms, currentSeedTerms))

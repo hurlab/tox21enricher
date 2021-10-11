@@ -3855,9 +3855,15 @@ shinyServer(function(input, output, session) {
               HTML(paste0("<p>Could not fetch link for ", selectedNodeTerm, ".</p>"))
             })  
           } else {
-            output[["nodeLinkChart"]] <- renderUI({
-              HTML(paste0("<p><i>Click <b><a href='", baseurl, selectedNodeTerm, "'>here</a></b> to view more details about ", selectedNodeTerm, ".</i></p>"))
-            })
+            if(!selectedNodeClass %in% list("CTD_CHEMICALS_DISEASES", "CTD_CHEMICALS_GENES", "CTD_CHEMICALS_GOENRICH_CELLCOMP", "CTD_CHEMICALS_GOENRICH_MOLFUNCT", "CTD_CHEMICALS_PATHWAYS", "CTD_GOFAT_BIOPROCESS", "CTD_GOSLIM_BIOPROCESS", "DRUGBANK_ATC", "DRUGBANK_ATC_CODE", "DRUGBANK_CARRIERS", "DRUGBANK_ENZYMES", "DRUGBANK_TARGETS", "DRUGBANK_TRANSPORTERS", "TOXINS_TARGETS", "MESH")){
+              output[["nodeLinkChart"]] <- renderUI({
+                HTML(paste0("<p><i>Click <b><a href='", baseurl, "'>here</a></b> to view more details about ", selectedNodeTerm, ".</i></p>"))
+              })
+            } else {
+              output[["nodeLinkChart"]] <- renderUI({
+                HTML(paste0("<p><i>Click <b><a href='", baseurl, selectedNodeTerm, "'>here</a></b> to view more details about ", selectedNodeTerm, ".</i></p>"))
+              })
+            }
           }
         } else {
           shinyjs::show(id="nodeLinkClusterMenu")
@@ -3867,9 +3873,15 @@ shinyServer(function(input, output, session) {
               HTML(paste0("<p>Could not fetch link for ", selectedNodeTerm, ".</p>"))
             })  
           } else {
-            output[["nodeLinkCluster"]] <- renderUI({
-              HTML(paste0("<p><i>Click <b><a href='", baseurl, selectedNodeTerm, "'>here</a></b> to view more details about ", selectedNodeTerm, ".</i></p>"))
-            }) 
+            if(!selectedNodeClass %in% list("CTD_CHEMICALS_DISEASES", "CTD_CHEMICALS_GENES", "CTD_CHEMICALS_GOENRICH_CELLCOMP", "CTD_CHEMICALS_GOENRICH_MOLFUNCT", "CTD_CHEMICALS_PATHWAYS", "CTD_GOFAT_BIOPROCESS", "CTD_GOSLIM_BIOPROCESS", "DRUGBANK_ATC", "DRUGBANK_ATC_CODE", "DRUGBANK_CARRIERS", "DRUGBANK_ENZYMES", "DRUGBANK_TARGETS", "DRUGBANK_TRANSPORTERS", "TOXINS_TARGETS", "MESH")){
+              output[["nodeLinkCluster"]] <- renderUI({
+                HTML(paste0("<p><i>Click <b><a href='", baseurl, "'>here</a></b> to view more details about ", selectedNodeTerm, ".</i></p>"))
+              })
+            } else {
+              output[["nodeLinkCluster"]] <- renderUI({
+                HTML(paste0("<p><i>Click <b><a href='", baseurl, selectedNodeTerm, "'>here</a></b> to view more details about ", selectedNodeTerm, ".</i></p>"))
+              })
+            }
           }
         }
         
