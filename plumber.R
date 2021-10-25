@@ -151,7 +151,7 @@ print("! Ready to accept connections.")
 #* @param annoSelectStr
 #* @param nodeCutoff
 #* @get /queue
-queue <- function(mode="", enrichmentUUID="-1", annoSelectStr="MESH=checked,PHARMACTIONLIST=checked,ACTIVITY_CLASS=checked,ADVERSE_EFFECT=checked,INDICATION=checked,KNOWN_TOXICITY=checked,MECH_LEVEL_1=checked,MECH_LEVEL_2=checked,MECH_LEVEL_3=checked,MECHANISM=checked,MODE_CLASS=checked,PRODUCT_CLASS=checked,STRUCTURE_ACTIVITY=checked,TA_LEVEL_1=checked,TA_LEVEL_2=checked,TA_LEVEL_3=checked,THERAPEUTIC_CLASS=checked,TISSUE_TOXICITY=checked,DRUGBANK_ATC=checked,DRUGBANK_ATC_CODE=checked,DRUGBANK_CARRIERS=checked,DRUGBANK_ENZYMES=checked,DRUGBANK_TARGETS=checked,DRUGBANK_TRANSPORTERS=checked,CTD_CHEM2DISEASE=checked,CTD_CHEM2GENE_25=checked,CTD_CHEMICALS_DISEASES=checked,CTD_CHEMICALS_GENES=checked,CTD_CHEMICALS_GOENRICH_CELLCOMP=checked,CTD_CHEMICALS_GOENRICH_MOLFUNCT=checked,CTD_CHEMICALS_PATHWAYS=checked,CTD_GOSLIM_BIOPROCESS=checked,CTD_PATHWAY=checked,HTS_ACTIVE=checked,LEADSCOPE_TOXICITY=checked,MULTICASE_TOX_PREDICTION=checked,TOXCAST_ACTIVE=checked,TOXINS_TARGETS=checked,TOXPRINT_STRUCTURE=checked,TOXREFDB=checked,", nodeCutoff=10){
+queue <- function(mode="", enrichmentUUID="-1", annoSelectStr="MESH=checked,PHARMACTIONLIST=checked,ACTIVITY_CLASS=checked,ADVERSE_EFFECT=checked,INDICATION=checked,KNOWN_TOXICITY=checked,MECH_LEVEL_1=checked,MECH_LEVEL_2=checked,MECH_LEVEL_3=checked,MECHANISM=checked,MODE_CLASS=checked,PRODUCT_CLASS=checked,STRUCTURE_ACTIVITY=checked,TA_LEVEL_1=checked,TA_LEVEL_2=checked,TA_LEVEL_3=checked,THERAPEUTIC_CLASS=checked,TISSUE_TOXICITY=checked,DRUGBANK_ATC=checked,DRUGBANK_ATC_CODE=checked,DRUGBANK_CARRIERS=checked,DRUGBANK_ENZYMES=checked,DRUGBANK_TARGETS=checked,DRUGBANK_TRANSPORTERS=checked,CTD_CHEM2DISEASE=checked,CTD_CHEM2GENE_25=checked,CTD_CHEMICALS_DISEASES=checked,CTD_CHEMICALS_GENES=checked,CTD_CHEMICALS_GOENRICH_CELLCOMP=checked,CTD_CHEMICALS_GOENRICH_MOLFUNCT=checked,CTD_CHEMICALS_PATHWAYS=checked,CTD_GOSLIM_BIOPROCESS=checked,CTD_PATHWAY=checked,HTS_ACTIVE=checked,LEADSCOPE_TOXICITY=checked,MULTICASE_TOX_PREDICTION=checked,TOXCAST_ACTIVE=checked,TOXINS_TARGETS=checked,TOXPRINT_STRUCTURE=checked,TOXREFDB=checked,", nodeCutoff=10, setNames){
   # async
   #future_promise({
   queueDir <- paste0(APP_DIR, "Queue/")
@@ -175,13 +175,24 @@ queue <- function(mode="", enrichmentUUID="-1", annoSelectStr="MESH=checked,PHAR
   queueFile <- file(paste0(queueDir, QUEUE_ORDER, "__queue__", enrichmentUUID))
   writeLines(paste0(mode, "\t", enrichmentUUID, "\t", annoSelectStr, "\t", nodeCutoff), queueFile)
   close(queueFile)
+  
+  # Create status file(s) in Queue dir
+  setNamesSplit <- unlist(str_split(setNames, "\n"))
+  for(x in setNamesSplit){
+    file.create(paste0(queueDir, "__status__", enrichmentUUID, "__", x))
+    statusFile <- file(paste0(queueDir, "__status__", enrichmentUUID, "__", x))
+    writeLines(paste0("waiting"), statusFile)
+    close(statusFile)
+  }
+  
+  
   #})
 }
 
 #* Get queue position for given enrichment request
 #* @param transactionId
 #* @get /getQueuePos
-getQueuePos <- function(transactionId="-1"){
+getQueuePos <- function(transactionId="-1", mode="none"){
   queueDir <- paste0(APP_DIR, "Queue/")
   queueDirContents <- Sys.glob(paste0(APP_DIR, "Queue/*__queue__*"))
   
@@ -199,15 +210,87 @@ getQueuePos <- function(transactionId="-1"){
   })
   queueDirIDs <- unlist(queueDirIDs[!sapply(queueDirIDs, is.null)])
   
-  index <- 1
-  for(i in queueDirIDs) {
-    if(i == transactionId) {
-      return(index)
-    } else {
-      index <- index + 1
-    }
+  # Determine status
+  statusFilePath <- paste0(APP_DIR, "Queue/__status__", transactionId)
+  statusFilesGlob <- Sys.glob(paste0(statusFilePath, "__*"))
+  
+  statusFiles <- lapply(statusFilesGlob, function(x){
+    statusFile <- read.table(x, sep="\t", stringsAsFactors=FALSE) 
+    statusFileUpdate <- length(statusFile[1,])
+    
+  })
+  
+  names(statusFiles) <- lapply(statusFilesGlob, function(x){
+    tmp <- unlist(str_split(x, paste0(transactionId, "__")))[2]
+    return(tmp)
+  })
+  
+  # Determine step for each set:
+  statusList <- NULL
+  if(mode != "annotation"){ # if enrichment mode
+    statusList <- lapply(statusFiles, function(statusFileUpdate){
+      # waiting in queue
+      if(statusFileUpdate == 1){
+        index <- 1
+        for(i in queueDirIDs) {
+          if(i == transactionId) {
+            return(paste0("Waiting in queue position: ", index, "."))
+          } else {
+            index <- index + 1
+          }
+        }
+      } else if(statusFileUpdate == 2){
+        return("(Step 1/4): Processing input file(s).")
+      } else if(statusFileUpdate == 3){
+        return("(Step 2/4): Creating chart and matrix files.")
+      } else if(statusFileUpdate == 4){
+        return("(Step 3/4): Clustering (Step 1/4) - calculating kappa score.")
+      } else if(statusFileUpdate == 5){
+        return("(Step 3/4): Clustering (Step 2/4) - creating qualified initial seeding groups.")
+      } else if(statusFileUpdate == 6){
+        return("(Step 3/4): Clustering (Step 3/4) - merging qualiied seeds.")
+      } else if(statusFileUpdate == 7){
+        return("(Step 3/4): Clustering (Step 4/4) - calculating enrichment score.")
+      } else if(statusFileUpdate == 8){
+        return("(Step 4/4): Creating .gct files.")
+      } 
+      return("Complete!")
+    })
+    names(statusList) <- names(statusFiles)
+  } else { # if fetch annotations mode
+    statusList <- lapply(statusFiles, function(statusFileUpdate){
+      # waiting in queue
+      if(statusFileUpdate == 1){
+        index <- 1
+        for(i in queueDirIDs) {
+          if(i == transactionId) {
+            return(paste0("Waiting in queue position: ", index, "."))
+          } else {
+            index <- index + 1
+          }
+        }
+      } else if(statusFileUpdate == 2){
+        return("(Step 1/4): Processing input file(s).")
+      } else if(statusFileUpdate == 3){
+        return("(Step 2/4): Fetching annotations.")
+      } else if(statusFileUpdate == 4){
+        return("(Step 3/4): Creating annotations list file.")
+      } else if(statusFileUpdate == 5){
+        return("(Step 4/4): Creating annotation matrix file.")
+      }
+      return("Complete!")
+    })
   }
-  return("complete")
+  
+  if(length(statusList) > 0){
+    statusListToReturn <- lapply(1:length(statusList), function(i){
+      return(paste0(names(statusList)[i], ": \t", statusList[i]))
+    })
+    statusListToReturn <- paste0(statusListToReturn, collapse="\n")
+    return(statusListToReturn) 
+  } else {
+    return("Complete!")
+  }
 }
 
 #* Check if enrichment process has terminated for given request
@@ -456,10 +539,7 @@ similarity <- function(res, req, input="", threshold){
     password = tox21config$pwd,
     idleTimeout = 3600000
   )
-  
-  print(">> INPUT")
-  print(input)
-  
+
   # Sanitize input, convert InChI strings to SMILES
   if (grepl("InChI=", input, fixed=TRUE)) {
     input <- convertInchi(inchi=input)
@@ -646,12 +726,7 @@ createInput <- function(res, req, transactionId, enrichmentSets, setNames, mode,
     innerList <- innerList[!sapply(innerList, is.null)]
   })
   names(enrichmentSets) <- enrichmentSetNames
-  
-  print("enrichmentSets")
-  print(enrichmentSets)
-  print("setNames")
-  print(setNames)
-  
+
   # Create input directory
   inDir <- paste0(APP_DIR, "Input/", transactionId, "/")
   dir.create(inDir)
@@ -821,7 +896,6 @@ bargraph <- function(res, req, transactionId, inputSet){
   # Reformat P-Values to character vectors so they don't get truncated when being converted to json upon response
   for(setName in 1:length(bgChart)){
     for(x in 1:nrow(bgChart[[setName]])){
-      #bgChart[[setName]][x, "PValue"] <- as.numeric(sprintf("%.9f", bgChart[[setName]][x, "PValue"]))
       bgChart[[setName]][x, "PValue"] <- as.character(bgChart[[setName]][x, "PValue"])
     }
   }
@@ -835,10 +909,13 @@ bargraph <- function(res, req, transactionId, inputSet){
 #* @param mode Chart or cluster
 #* @param input Current input set
 #* @get /generateNetwork
-generateNetwork <- function(res, req, transactionId, cutoff, mode, input, qval){
+generateNetwork <- function(res, req, transactionId="-1", cutoff, mode, input, qval){
   # async
   #future_promise({
   input <- unlist(str_split(input, "#"))
+  
+  print("transactionId")
+  print(transactionId)
   
   baseDirName <- paste0(APP_DIR, "Output/", transactionId, "/")
   chartForNetFile <- NULL
@@ -848,25 +925,6 @@ generateNetwork <- function(res, req, transactionId, cutoff, mode, input, qval){
   } else { # cluster
     chartForNetFile <- read.delim(paste0(baseDirName, "/gct/Cluster_Top", cutoff, "_ALL__P_0.05_P__ValueMatrix.ForNet"), sep="\t", comment.char="", quote="", stringsAsFactors=FALSE, header=TRUE, fill=TRUE)
   }
-  
-  # Isolate Terms and UID columns
-  chartNetworkTerms <- unlist(mclapply(1:nrow(chartForNetFile), mc.cores=4, function(x){
-    include <- lapply(input, function(y) {
-      i <- gsub("\\s+", ".", y)
-      if(!is.na(chartForNetFile[x, i])) {
-        return(TRUE)
-      }
-      return(NULL)
-    })
-    include <- include[!sapply(include, is.null)]
-    
-    if(length(include) > 0) {
-      return(chartForNetFile[x,"Terms"])  
-    } else {
-      return(NULL)
-    }
-  }))
-  chartNetworkTerms <- chartNetworkTerms[!sapply(chartNetworkTerms, is.null)]
   
   chartNetworkUIDs <- unlist(mclapply(1:nrow(chartForNetFile), mc.cores=4, function(x){
     include <- lapply(input, function(y) {
@@ -878,31 +936,16 @@ generateNetwork <- function(res, req, transactionId, cutoff, mode, input, qval){
     })
     include <- include[!sapply(include, is.null)]
     if(length(include) > 0) {
-      #return(chartForNetFile[x,"UID"])
       # If significant to multiple input sets
-      print("chartForNetFile[x,'UID']")
-      print(chartForNetFile[x,"UID"])
       return(paste0(chartForNetFile[x,"UID"], collapse=","))
     }
     return(NULL)
   }))
   chartNetworkUIDs <- chartNetworkUIDs[!sapply(chartNetworkUIDs, is.null)]
-  
-  #print("chartForNetFile")
-  #print(chartForNetFile)
-  
-  #print("chartNetworkTerms")
-  #print(chartNetworkTerms)
-  
-  print("chartNetworkUIDs")
-  print(chartNetworkUIDs)
-  
+
   # Create placeholder string for querying database
   termsStringPlaceholder <- paste0(chartNetworkUIDs, collapse=",")
 
-  print("termsStringPlaceholder")
-  print(termsStringPlaceholder)
-  
   # Connect to db
   poolNetwork <- dbPool(
     drv = dbDriver("PostgreSQL", max.con = 100),
@@ -1040,7 +1083,7 @@ submit <- function(mode="", input="", annotations="MESH,PHARMACTIONLIST,ACTIVITY
   # TODO: Check if arguments are bad
   # Check if mode is missing
   if(is.null(mode) | mode == ""){
-    return("Error: No mode specified. (casrn, substructure, similarity, or annotation)")
+    return("Error: No mode specified. ('casrn', 'substructure', 'similarity', or 'annotation')")
   }
   # Check if input is missing
   if(is.null(input) | input == ""){

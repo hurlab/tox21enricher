@@ -27,6 +27,13 @@ shinyServer(function(input, output, session) {
       theme$textcolor = "#000000"
       updateCheckboxInput(session, inputId="changeThemeToggle", value=FALSE)
     }
+    output[["themeStatus"]] <- renderUI({
+      tags$style(HTML(paste0('
+        .dataTables_length label, .dataTables_filter label, .dataTables_info {
+          color: ',theme$textcolor,'!important;
+        }
+      ')))
+    })
   
     # API connectivity details
     # Change host address and port in config.yml
@@ -559,6 +566,15 @@ shinyServer(function(input, output, session) {
         theme$textcolor <- "#000000"
         unlink(paste0(tmpDir, "theme-dark"))
       }
+      
+      output[["themeStatus"]] <- renderUI({
+        tags$style(HTML(paste0('
+          .dataTables_length label, .dataTables_filter label, .dataTables_info {
+            color: ',theme$textcolor,'!important;
+          }
+        ')))
+      })
+      
     }, ignoreInit=TRUE, ignoreNULL=TRUE)
     
     # Clear cache when button is pressed
@@ -1126,19 +1142,20 @@ shinyServer(function(input, output, session) {
     observeEvent(input$refreshWaitingPageButton, {
       transactionId <- reactiveTransactionId$id
       queuePos <- -1
-      resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="getQueuePos", query=list(transactionId=transactionId))
+      waitingData <- inputSetList$inputSet
+      enrichmentDisplayType <- waitingData[1,"Mode"]
+      splitAnnotationsString <- waitingData[1,"Selected.Annotations"]
+      cutoff <- waitingData[1,"Node.Cutoff"]
+      casrnBox <- waitingData[1,"Input"]
+      resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="getQueuePos", query=list(transactionId=transactionId, mode=enrichmentDisplayType))
       if(resp$status_code != 200) {
         output$results_error_box <- renderUI({
           paste0("<div class=\"text-danger\">Error: Could not fetch queue position for this request.</div>")
         })
       } else {
         queuePos <- content(resp)  
+        queuePos <- str_replace_all(queuePos, "\n", "<br><br>")
       }
-      waitingData <- inputSetList$inputSet
-      enrichmentDisplayType <- waitingData[1,"Mode"]
-      splitAnnotationsString <- waitingData[1,"Selected.Annotations"]
-      cutoff <- waitingData[1,"Node.Cutoff"]
-      casrnBox <- waitingData[1,"Input"]
       
       # Check reenrichment or not
       reenrichFlag <- reenrichFlagReactive$reenrichFlagReactive
@@ -1168,7 +1185,7 @@ shinyServer(function(input, output, session) {
       waitingData <- data.frame("Position"=c(queuePos), "Mode"=c(enrichmentDisplayType), "UUID"=c(transactionId), "Selected Annotations"=c(splitAnnotationsString), "Node Cutoff"=c(cutoff), "Input"=c(casrnBox), stringsAsFactors=FALSE)
       
       # Clean up column name formatting
-      colnames(waitingData) <- list("Queue Position", "Request Mode", "Request UUID", "Selected Annotations", "Node Cutoff", "User Input")
+      colnames(waitingData) <- list("Status", "Request Mode", "Request UUID", "Selected Annotations", "Node Cutoff", "User Input")
 
       
       output[["waitingTable"]] <- renderUI(
@@ -1178,7 +1195,10 @@ shinyServer(function(input, output, session) {
                              rownames = FALSE,
                              class = "row-border stripe compact",
                              style = "bootstrap",
-                             select = "none"
+                             select = "none",
+                             options = list(
+                               autoWidth = TRUE
+                             )
                )
         )
       )
@@ -1208,6 +1228,9 @@ shinyServer(function(input, output, session) {
         shinyjs::reset(id = "select_all_annotations")
         shinyjs::reset(id = "enrich_from")
         shinyjs::reset(id = "submitted_chemicals")
+        
+        # Reset enrichmentType$enrichType back to casrn
+        enrichmentType$enrichType <- "casrn"
         
         # Clear the chemical submission text area
         updateTextAreaInput(session, "submitted_chemicals", value="")
@@ -1898,7 +1921,7 @@ shinyServer(function(input, output, session) {
         }
 
         # Query API to put request in queue
-        resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="queue", query=list(mode=enrichmentType$enrichType, enrichmentUUID=transactionId, annoSelectStr=annoSelectStr, nodeCutoff=cutoff))
+        resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="queue", query=list(mode=enrichmentType$enrichType, enrichmentUUID=transactionId, annoSelectStr=annoSelectStr, nodeCutoff=cutoff, setNames=paste0(names(enrichmentSets), collapse="\n")))
         
         # if enrichment runs into an error on the API side, cancel and show error on main UI
         if (resp$status_code != 200){
@@ -1933,7 +1956,8 @@ shinyServer(function(input, output, session) {
             paste0("<div class=\"text-danger\">Error: Could not fetch queue position for this request.</div>")
           })
         } else {
-          initQueuePos <- content(resp)  
+          initQueuePos <- content(resp)
+          initQueuePos <- str_replace_all(initQueuePos, "\n", "<br><br>")
         }
         
         waitingData <- data.frame("Position"=c(initQueuePos), "Mode"=c(enrichmentType$enrichType), "UUID"=c(transactionId), "Selected Annotations"=c(splitAnnotationsString), "Node Cutoff"=c(cutoff), "Input"=c(casrnBox), stringsAsFactors=FALSE)
@@ -1943,7 +1967,7 @@ shinyServer(function(input, output, session) {
         waitingData <- data.frame("Position"=c(initQueuePos), "Mode"=c(enrichmentDisplayType), "UUID"=c(transactionId), "Selected Annotations"=c(splitAnnotationsString), "Node Cutoff"=c(cutoff), "Input"=c(casrnBox), stringsAsFactors=FALSE)
         
         # Clean up column name formatting
-        colnames(waitingData) <- list("Queue Position", "Request Mode", "Request UUID", "Selected Annotations", "Node Cutoff", "User Input")
+        colnames(waitingData) <- list("Status", "Request Mode", "Request UUID", "Selected Annotations", "Node Cutoff", "User Input")
         output[["waitingTable"]] <- renderUI(
           column(12,
                  DT::datatable({waitingData}, 
@@ -1951,7 +1975,10 @@ shinyServer(function(input, output, session) {
                                rownames = FALSE,
                                class = "row-border stripe compact",
                                style = "bootstrap",
-                               select = "none"
+                               select = "none",
+                               options = list(
+                                 autoWidth = TRUE
+                               )
                  )
           )
         )
@@ -2131,6 +2158,9 @@ shinyServer(function(input, output, session) {
     enrichmentResults <- function(mode, transactionId, annoSelectStr, cutoff, enrichmentSets, originalNames, reenrichResults, originalEnrichMode, colorsList){
         # Reset checkboxList$checkboxes
         checkboxList$checkboxes <- NULL
+        
+        # Set reactive transactionId value 
+        reactiveTransactionId$id <- transactionId
 
         # Update cache file for completed enrichment
         # Create local file so we can reference later
@@ -2668,11 +2698,11 @@ shinyServer(function(input, output, session) {
                                       },
                                       # ChartSimple.txt
                                       if(paste0(unlist(str_split(resultFile, outDirWeb))[2]) == paste0(i, "__ChartSimple.txt")){
-                                        tipify( div(actionLink(inputId=paste0(i, "__ChartSimple.txt__link"), label=paste0(unlist(str_split(resultFile, outDirWeb))[2]))), "A list of the top 10 most significant annotations for each annotation class (.txt format).", placement="bottom")
+                                        tipify( div(actionLink(inputId=paste0(i, "__ChartSimple.txt__link"), label=paste0(unlist(str_split(resultFile, outDirWeb))[2]))), "A list of the top N most significant annotations for each annotation class, where N is the specified cutoff value (.txt format).", placement="bottom")
                                       },
                                       # ChartSimple.xlsx
                                       if(paste0(unlist(str_split(resultFile, outDirWeb))[2]) == paste0(i, "__ChartSimple.xlsx")){
-                                        tipify( div(actionLink(inputId=paste0(i, "__ChartSimple.xlsx__link"), label=paste0(unlist(str_split(resultFile, outDirWeb))[2]))), "A list of the top 10 most significant annotations for each annotation class (.xlsx format).", placement="bottom")
+                                        tipify( div(actionLink(inputId=paste0(i, "__ChartSimple.xlsx__link"), label=paste0(unlist(str_split(resultFile, outDirWeb))[2]))), "A list of the top N most significant annotations for each annotation class, where N is the specified cutoff value (.xlsx format).", placement="bottom")
                                       },
                                       # Cluster.txt
                                       if(paste0(unlist(str_split(resultFile, outDirWeb))[2]) == paste0(i, "__Cluster.txt")){
@@ -3306,9 +3336,17 @@ shinyServer(function(input, output, session) {
           gctFileChartMatrix <- t(gctFileChartMatrix)
           gctFileClusterMatrix <- t(gctFileClusterMatrix)
           
+          # Get relevant annotation class names
+          chartClasses <- unique(unlist(lapply(colnames(gctFileChartMatrix), function(x){
+            return(unlist(str_split(x, " \\| "))[1])
+          })))
+          clusterClasses <- unique(unlist(lapply(colnames(gctFileClusterMatrix), function(x){
+            return(unlist(str_split(x, " \\| "))[1])
+          })))
+          
           # Generate networks for chart & cluster
-          chartFullNetwork <- generateNetwork(transactionId=transactionId, cutoff=cutoff, networkMode="chart", inputNetwork=names(enrichmentSets), qval=0.05)
-          clusterFullNetwork <- generateNetwork(transactionId=transactionId, cutoff=cutoff, networkMode="cluster", inputNetwork=names(enrichmentSets), qval=0.05)
+          chartFullNetwork <- generateNetwork(transactionId=transactionId, cutoff=cutoff, networkMode="chart", inputNetwork=names(enrichmentSets), qval=0.05, physicsEnabled=FALSE, smoothCurve=TRUE, keep=chartClasses)
+          clusterFullNetwork <- generateNetwork(transactionId=transactionId, cutoff=cutoff, networkMode="cluster", inputNetwork=names(enrichmentSets), qval=0.05, physicsEnabled=FALSE, smoothCurve=TRUE, keep=clusterClasses)
 
           output[["chartHeatmap"]] <- renderUI(
               fluidRow(
@@ -3329,6 +3367,7 @@ shinyServer(function(input, output, session) {
                           h4("Edge Selection Criteria"),
                           numericInput(inputId="chartqval", label="Q-value", value=0.05, step=0.01, max=1.00, min=0.00),
                           checkboxGroupInput( label="Selected Input Sets", inputId="chartNetworkChoices", choices=names(enrichmentSets), selected=names(enrichmentSets) ),
+                          checkboxGroupInput( label="Selected Annotation Classes", inputId="chartNetworkClasses", choices=chartClasses, selected=chartClasses ),
                           HTML("<h5><b>Other Options</b></h5>"),
                           checkboxInput(inputId="physicsEnabledChart", label="Enable physics?", value=FALSE),
                           checkboxInput(inputId="smoothCurveChart", label="Smooth curve for edges?", value=TRUE),
@@ -3385,6 +3424,7 @@ shinyServer(function(input, output, session) {
                           h4("Edge Selection Criteria"),
                           numericInput(inputId="clusterqval", label="Q-value", value=0.05, step=0.01, max=1.00, min=0.00),
                           checkboxGroupInput( label="Selected Input Sets", inputId="clusterNetworkChoices", choices=names(enrichmentSets), selected=names(enrichmentSets) ),
+                          checkboxGroupInput( label="Selected Annotation Classes", inputId="clusterNetworkClasses", choices=clusterClasses, selected=clusterClasses ),
                           HTML("<h5><b>Other Options</b></h5>"),
                           checkboxInput(inputId="physicsEnabledCluster", label="Enable physics?", value=FALSE),
                           checkboxInput(inputId="smoothCurveCluster", label="Smooth curve for edges?", value=TRUE),
@@ -3714,9 +3754,8 @@ shinyServer(function(input, output, session) {
     })
     
     # Shared code to create networks
-    generateNetwork <- function(transactionId, cutoff, networkMode, inputNetwork, qval, physicsEnabled=FALSE, smoothCurve=TRUE){
+    generateNetwork <- function(transactionId, cutoff, networkMode, inputNetwork, qval, physicsEnabled=FALSE, smoothCurve=TRUE, keep=list()){
       inputNetwork <- paste0(inputNetwork, collapse="#")
-      
       # Error handling
       resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="generateNetwork", query=list(transactionId=transactionId, cutoff=cutoff, mode=networkMode, input=inputNetwork, qval=qval))
       #TODO: error check
@@ -3750,51 +3789,65 @@ shinyServer(function(input, output, session) {
       }))
       outpNetwork <- as.data.frame(outpNetwork)
       rownames(outpNetwork) <- 1:nrow(outpNetwork)
-      
-      # define class colors
+
+      # Define class colors
       classColors <- generateAnnoClassColors()
       
       # Create rows and classes
       # 1
-      rowsSet1 <- lapply(1:nrow(outpNetwork), function(x) paste0(outpNetwork[[x, "name1"]], "@", outpNetwork[[x, "class1"]], "@", outpNetwork[[x, "url1"]], "@", classToColor(outpNetwork[[x, "class1"]], classColors)))
-      #rowsSet1 <- mclapply(1:nrow(outpNetwork), mc.cores=4, function(x) paste0(outpNetwork[[x, "name1"]], "@", outpNetwork[[x, "class1"]], "@", outpNetwork[[x, "url1"]], "@", classToColor(outpNetwork[[x, "class1"]], classColors)))
+      rowsSet1 <- lapply(1:nrow(outpNetwork), function(x) paste0(outpNetwork[[x, "name1"]], "_@_", outpNetwork[[x, "class1"]], "_@_", outpNetwork[[x, "url1"]], "_@_", classToColor(outpNetwork[[x, "class1"]], classColors)))
       # 2
-      rowsSet2 <- lapply(1:nrow(outpNetwork), function(x) paste0(outpNetwork[[x, "name2"]], "@", outpNetwork[[x, "class2"]], "@", outpNetwork[[x, "url2"]], "@", classToColor(outpNetwork[[x, "class2"]], classColors)))
-      #rowsSet2 <- mclapply(1:nrow(outpNetwork), mc.cores=4, function(x) paste0(outpNetwork[[x, "name2"]], "@", outpNetwork[[x, "class2"]], "@", outpNetwork[[x, "url2"]], "@", classToColor(outpNetwork[[x, "class2"]], classColors)))
+      rowsSet2 <- lapply(1:nrow(outpNetwork), function(x) paste0(outpNetwork[[x, "name2"]], "_@_", outpNetwork[[x, "class2"]], "_@_", outpNetwork[[x, "url2"]], "_@_", classToColor(outpNetwork[[x, "class2"]], classColors)))
       rowsSet <- list(unlist(rowsSet1), unlist(rowsSet2))
       rowsSet <- unique(unlist(rowsSet, recursive = FALSE))
       # 1
       classes1 <- lapply(1:nrow(outpNetwork), function(x) paste0(outpNetwork[[x, "class1"]]))
-      #classes1 <- mclapply(1:nrow(outpNetwork), mc.cores=4, function(x) paste0(outpNetwork[[x, "class1"]]))
       # 2
       classes2 <- lapply(1:nrow(outpNetwork), function(x) paste0(outpNetwork[[x, "class2"]]))
-      #classes2 <- mclapply(1:nrow(outpNetwork), mc.cores=4, function(x) paste0(outpNetwork[[x, "class2"]]))
       classes <- list(unlist(classes1), unlist(classes2))
       classes <- unique(unlist(classes, recursive = FALSE))
-
+      
       # Generate list of nodes for network
       networkFullNodes <- t(sapply(rowsSet, function(s){
-        rowsSetSplit <- unlist(str_split(s, "@"))
+        rowsSetSplit <- unlist(str_split(s, "_@_"))
         # split: 1 = Term, 2 = Class (Category), 3 = URL, 4 = Color 
-        id <- paste0(rowsSetSplit[1], "@", rowsSetSplit[2], "@", networkMode)
+        id <- paste0(rowsSetSplit[1], "_@_", rowsSetSplit[2], "_@_", networkMode)
         url <- paste0(rowsSetSplit[3], rowsSetSplit[1])
         rgbCss <- rowsSetSplit[4]
+        
+        # Put blank row if the class is not in the "keep" list
+        if(!(rowsSetSplit[2] %in% keep)) {
+          return( data.frame( id=NA, label=NA, group=NA, shape=NA, url=NA, color=NA, stringsAsFactors=FALSE) )
+        }
         return(data.frame( id=id, label=rowsSetSplit[1], group=rowsSetSplit[2], shape="ellipse", url=url, color=rgbCss, stringsAsFactors=FALSE ))
       }))
-      networkFullNodes <- as.data.frame(networkFullNodes)
+      networkFullNodes <- data.frame(matrix(unlist(networkFullNodes), nrow=nrow(networkFullNodes)), stringsAsFactors=FALSE)
       rownames(networkFullNodes) <- 1:nrow(networkFullNodes)
-
+      colnames(networkFullNodes) <- list("id", "label", "group", "shape", "url", "color")
+      
+      # Remove nodes if their class is not in the "keep" list
+      networkFullNodes <- networkFullNodes[complete.cases(networkFullNodes), ]
+      
       # Generate list of edges for network
       networkFullEdges <- t(sapply(1:nrow(outpNetwork), function(p){
-        rgbCss = generateJaccardColor(as.numeric(outpNetwork[[p, "jaccardindex"]]))
-        edgeUUID <- paste0(UUIDgenerate(), "__", paste0(outpNetwork[[p, "name1"]], "@", outpNetwork[[p, "class1"]]), "@", networkMode, "__", paste0(outpNetwork[[p, "name2"]], "@", outpNetwork[[p, "class2"]]), "@", networkMode, "__", networkMode)
-        return(data.frame( from=paste0(outpNetwork[[p, "name1"]], "@", outpNetwork[[p, "class1"]], "@", networkMode), to=paste0(outpNetwork[[p, "name2"]], "@", outpNetwork[[p, "class2"]], "@", networkMode), jaccard=outpNetwork[[p, "jaccardindex"]], color=rgbCss, id=edgeUUID, stringsAsFactors=FALSE ))
+        if( (outpNetwork[[p, "class1"]] %in% keep) & (outpNetwork[[p, "class2"]] %in% keep) ){
+          rgbCss = generateJaccardColor(as.numeric(outpNetwork[[p, "jaccardindex"]]))
+          edgeUUID <- paste0(UUIDgenerate(), "__", paste0(outpNetwork[[p, "name1"]], "_@_", outpNetwork[[p, "class1"]]), "_@_", networkMode, "__", paste0(outpNetwork[[p, "name2"]], "_@_", outpNetwork[[p, "class2"]]), "_@_", networkMode, "__", networkMode)
+          return(data.frame( from=paste0(outpNetwork[[p, "name1"]], "_@_", outpNetwork[[p, "class1"]], "_@_", networkMode), to=paste0(outpNetwork[[p, "name2"]], "_@_", outpNetwork[[p, "class2"]], "_@_", networkMode), jaccard=outpNetwork[[p, "jaccardindex"]], color=rgbCss, id=edgeUUID, stringsAsFactors=FALSE ))
+        }
+        # If one node has a class not in the "keep" list, discard it
+        return(data.frame( from=NA, to=NA, jaccard=NA, color=NA, id=NA, stringsAsFactors=FALSE ))
       }))
-      networkFullEdges <- as.data.frame(networkFullEdges)
+
+      networkFullEdges <- data.frame(matrix(unlist(networkFullEdges), nrow=nrow(networkFullEdges)), stringsAsFactors=FALSE)
       rownames(networkFullEdges) <- 1:nrow(networkFullEdges)
+      colnames(networkFullEdges) <- list("from", "to", "jaccard", "color", "id")
+      
+      # Remove edges if either node's class is not in the "keep" list
+      networkFullEdges <- networkFullEdges[complete.cases(networkFullEdges), ]
 
       fullNetwork <- visNetwork(networkFullNodes, networkFullEdges, height="500px", width="100%") %>%
-        visOptions(highlightNearest=TRUE, nodesIdSelection=TRUE, selectedBy="group") %>%
+        visOptions(highlightNearest=TRUE, nodesIdSelection=TRUE, selectedBy=list(variable="group", multiple=TRUE)) %>%
         visLayout(randomSeed=runif(1)) %>%
         visPhysics(solver="forceAtlas2Based", enabled=physicsEnabled, stabilization=list(enabled=FALSE, iterations=1000, updateInterval=25)) %>%
         visEdges(smooth=smoothCurve) %>%
@@ -3827,9 +3880,9 @@ shinyServer(function(input, output, session) {
     
     # Observe network node being clicked
     observeEvent(input$selectNode, {
-      selectedNodeTerm <- unlist(str_split(input$selectNode$nodes[[1]], "@"))[1]
-      selectedNodeClass <- unlist(str_split(input$selectNode$nodes[[1]], "@"))[2]
-      networkMode <- unlist(str_split(input$selectNode$nodes[[1]], "@"))[3]
+      selectedNodeTerm <- unlist(str_split(input$selectNode$nodes[[1]], "_@_"))[1]
+      selectedNodeClass <- unlist(str_split(input$selectNode$nodes[[1]], "_@_"))[2]
+      networkMode <- unlist(str_split(input$selectNode$nodes[[1]], "_@_"))[3]
       
       # Get link for node annotation details
       resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="getNodeDetails", query=list(class=selectedNodeClass))
@@ -3894,8 +3947,8 @@ shinyServer(function(input, output, session) {
       if(length(input$selectEdge$edges) == 1 & length(input$selectEdge$nodes) == 0) { #if selecting edge
         # Get from node (2), to node (3), and chart - chart or cluster (4)
         tmpSplit <- unlist(str_split(input$selectEdge$edges, "__"))
-        tmpFrom <- unlist(str_split(tmpSplit[2], "@"))
-        tmpTo <- unlist(str_split(tmpSplit[3], "@"))
+        tmpFrom <- unlist(str_split(tmpSplit[2], "_@_"))
+        tmpTo <- unlist(str_split(tmpSplit[3], "_@_"))
         networkMode <- tmpSplit[4]
         termFrom <- tmpFrom[1]
         classFrom <- tmpFrom[2]
@@ -4195,7 +4248,7 @@ shinyServer(function(input, output, session) {
       if(length(input$chartNetworkChoices) == 0){
         output$chartNetwork <- renderUI(HTML("<p class=\"text-danger\"><b>Error:</b> No input sets selected.</p>"))
       } else {
-        chartFullNetwork <- generateNetwork(transactionId=reactiveTransactionId$id, cutoff=input$nodeCutoffRe, networkMode="chart", inputNetwork=input$chartNetworkChoices, qval=input$chartqval, physicsEnabled=input$physicsEnabledChart, smoothCurve=input$smoothCurveChart)
+        chartFullNetwork <- generateNetwork(transactionId=reactiveTransactionId$id, cutoff=input$nodeCutoffRe, networkMode="chart", inputNetwork=input$chartNetworkChoices, qval=input$chartqval, physicsEnabled=input$physicsEnabledChart, smoothCurve=input$smoothCurveChart, keep=input$chartNetworkClasses)
         # Render networks
         output$chartNetwork <- renderUI(chartFullNetwork) 
       }
@@ -4209,7 +4262,7 @@ shinyServer(function(input, output, session) {
       if(length(input$clusterNetworkChoices) == 0){
         output$clusterNetwork <- renderUI(HTML("<p class=\"text-danger\"><b>Error:</b> No input sets selected.</p>"))
       } else {
-        clusterFullNetwork <- generateNetwork(transactionId=reactiveTransactionId$id, cutoff=input$nodeCutoffRe, networkMode="cluster", inputNetwork=input$clusterNetworkChoices, qval=input$clusterqval, physicsEnabled=input$physicsEnabledCluster, smoothCurve=input$smoothCurveCluster)
+        clusterFullNetwork <- generateNetwork(transactionId=reactiveTransactionId$id, cutoff=input$nodeCutoffRe, networkMode="cluster", inputNetwork=input$clusterNetworkChoices, qval=input$clusterqval, physicsEnabled=input$physicsEnabledCluster, smoothCurve=input$smoothCurveCluster, keep=input$clusterNetworkClasses)
         # Render networks
         output$clusterNetwork <- renderUI(clusterFullNetwork)
       }
@@ -4221,6 +4274,21 @@ shinyServer(function(input, output, session) {
       for (i in 1:length(enrichmentSetsList$enrichmentSets)){
         updateNetworkBox <- paste0(updateNetworkBox, "#", names(enrichmentSetsList$enrichmentSets)[i], "\n", paste0(enrichmentSetsList$enrichmentSets[[i]], collapse="\n"), "\n")
       }
+      
+      # Reset reenrichResultsList$reenrichResults and enrichmentSetsList$enrichmentSets
+      reenrichResultsList$reenrichResults <- NULL
+      enrichmentSetsList$enrichmentSets <- NULL
+      
+      checkboxList$checkboxes <- NULL
+      firstCaseWarningChems$casrns <- NULL
+      
+      # Reset setFilesObservers$observers
+      for(x in setFilesObservers$observers){
+        x$destroy()
+      }
+      setFilesObservers$observers <- NULL
+      
+      
       performEnrichment(updateNetworkBox, reenrichFlag=TRUE) 
     })
     
@@ -4373,19 +4441,23 @@ shinyServer(function(input, output, session) {
             # If set is irrelevant (i.e., we are ordering by 'Set1' but only 'Set2' has results), just order by first item in set
             tmpBgNames <- factor(tmpBgNames, levels=tmpBgNames[order(tmpBgCleaned[[1]], decreasing=FALSE)]) #decreasing=FALSE because we invert the p-value
           }
-
+          
+          dataTableBgValues <- t(as.data.frame(do.call(rbind, tmpBgCleaned)))
+          
           bgDisplay <- plot_ly(
             x = tmpBgCleaned[[1]], # p-values
             y = tmpBgNames, # term names
             name = names(tmpBgCleaned)[1],
             type = "bar",
-            marker = list(color = colorsList[names(tmpBgCleaned[1])])
+            marker = list(color = colorsList[names(tmpBgCleaned[1])]),
+            height = 1000
           ) %>% layout(
             title = catName,
             margin = list(l = 300, r = 200, b = 160), 
-            xaxis=list(title="<b>-log<sub>10</sub> (P-value)</b>", tickfont=list(size=12)), # TODO: need to invert p-value
-            yaxis=list(title="<b>Annotation Terms</b>", type="category"),
+            xaxis=list(title="<b>-log<sub>10</sub> (P-value)</b>", tickfont=list(size=12), automargin=TRUE),
+            yaxis=list(title="<b>Annotation Terms</b>", tickfont=list(size=10), type="category", automargin=TRUE),
             barmode="group",
+            autosize = FALSE,
             plot_bgcolor="transparent",
             paper_bgcolor="transparent",
             font=list(color=theme$textcolor)
@@ -4400,7 +4472,31 @@ shinyServer(function(input, output, session) {
               bgDisplay <- bgDisplay %>% add_trace(x = tmpBgCleaned[[i]], name = names(tmpBgCleaned)[i], marker = list(color = colorsList[names(tmpBgCleaned[i])])  )
             }
           }
-          return(tabPanel(title=catName, bgDisplay))
+          
+          return(tabPanel(title=catName, 
+            div(
+              fluidRow(
+                bgDisplay  
+              ),
+              fluidRow(
+                DT::datatable({dataTableBgValues},
+                              escape = FALSE,
+                              rownames = TRUE,
+                              class = "row-border stripe compact",
+                              style = "bootstrap",
+                              select = "none",
+                              options = list( 
+                                paging=TRUE,
+                                dom="Bfrtip",
+                                pageLength=10,
+                                buttons=list("copy", "csv", "excel", "pdf", "print")  
+                              ),
+                              extensions="Buttons"
+                )
+              )
+            )
+          ))
+          
         })))
       )
     }
@@ -4483,6 +4579,12 @@ shinyServer(function(input, output, session) {
       checkboxList$checkboxes <- NULL
       firstCaseWarningChems$casrns <- NULL
       
+      # Reset setFilesObservers$observers
+      for(x in setFilesObservers$observers){
+        x$destroy()
+      }
+      setFilesObservers$observers <- NULL
+      
       # Perform enrichment again
       performEnrichment(reenrichCASRNBox, reenrichFlag=TRUE, originalNamesToReturn=originalNamesToReturn)
     })
@@ -4493,6 +4595,8 @@ shinyServer(function(input, output, session) {
       if(!is.null(input$initDarkTheme)){
         if(input$initDarkTheme == TRUE){
           updateCheckboxInput(session, "changeThemeToggle", value=TRUE)
+        } else {
+          updateCheckboxInput(session, "changeThemeToggle", value=FALSE)
         }
       }
     }, ignoreInit = FALSE, ignoreNULL = TRUE)

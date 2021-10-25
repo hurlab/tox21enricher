@@ -118,6 +118,11 @@ js_theme <-  "
               head.appendChild(extraDarkThemeElement);
               head.appendChild(darkTheme);
               Shiny.onInputChange('initDarkTheme', 'TRUE');
+            } else {
+              removeLink(themes.dark);
+              head.removeChild(extraDarkThemeElement);
+              head.appendChild(lightTheme);
+              Shiny.onInputChange('initDarkTheme', 'FALSE');
             }
           }
         }
@@ -170,6 +175,7 @@ shinyUI(function(){
             actionButton(inputId="searchButton", label="View previous enrichment", icon=icon("search")),
             # Theme toggle
             checkboxInput(inputId="changeThemeToggle", label=HTML(paste0(icon("moon"), " Dark theme"))),
+            uiOutput("themeStatus"),
             # Enrichment type selection
             selectInput("enrich_from", h4("Select Input Type"),
                         choices = list("User-provided CASRN list" = "user-provided CASRN list",

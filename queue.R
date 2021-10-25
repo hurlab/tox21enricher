@@ -264,6 +264,16 @@ performEnrichment <- function(enrichmentUUID="-1", annoSelectStr="MESH=checked,P
   })
   names(inputIDListHash) <- outfileBaseNames
   
+  # Update status file
+  queueDir <- paste0(APP_DIR, "Queue/")
+  statusFilePath <- paste0(queueDir, "__status__", enrichmentUUID)
+  statusFiles <- Sys.glob(paste0(statusFilePath, "__*"))
+  for(x in statusFiles){
+    statusFile <- file(x)
+    writeLines(paste0("waiting\tstep1\tstep2"), statusFile)
+    close(statusFile)    
+  }
+
   # multi-core
   enrichmentStatusComplete <- mclapply(outfileBaseNames, mc.cores=4, mc.silent=FALSE, function(i){
   #enrichmentStatusComplete <- lapply(outfileBaseNames, function(i){
@@ -290,7 +300,7 @@ performEnrichment <- function(enrichmentUUID="-1", annoSelectStr="MESH=checked,P
     
     # Perform enrichment analysis
     print(paste0("Performing enrichment on ", outfileBase, "..."))
-    enrichmentStatus <- perform_CASRN_enrichment_analysis(CASRNS, paste0(APP_DIR, "Output/", enrichmentUUID, "/"), outfileBase, mappedCASRNs, funCat2Selected, CASRN2funCatTerm, funCatTerm2CASRN, funCat2CASRNCount, funCat2termCount, funCatTerm2CASRNCount, pvalueThresholdToDisplay, similarityThreshold, initialGroupMembership, multipleLinkageThreshold, EASEThreshold)
+    enrichmentStatus <- perform_CASRN_enrichment_analysis(CASRNS, paste0(APP_DIR, "Output/", enrichmentUUID, "/"), outfileBase, mappedCASRNs, funCat2Selected, CASRN2funCatTerm, funCatTerm2CASRN, funCat2CASRNCount, funCat2termCount, funCatTerm2CASRNCount, pvalueThresholdToDisplay, similarityThreshold, initialGroupMembership, multipleLinkageThreshold, EASEThreshold, nodeCutoff, enrichmentUUID)
   })
   
   ########################################################################################
@@ -298,6 +308,16 @@ performEnrichment <- function(enrichmentUUID="-1", annoSelectStr="MESH=checked,P
   #
   #
   ########################################################################################
+  
+  # Update status file
+  queueDir <- paste0(APP_DIR, "Queue/")
+  statusFilePath <- paste0(queueDir, "__status__", enrichmentUUID)
+  statusFiles <- Sys.glob(paste0(statusFilePath, "__*"))
+  for(x in statusFiles){
+    statusFile <- file(x)
+    writeLines(paste0("waiting\tstep1\tstep2\tstep3\tstep4\tstep5\tstep6\tstep7"), statusFile)
+    close(statusFile) 
+  }
   
   ARGV_0 <- inDir
   ARGV_1 <- outDir 
@@ -387,6 +407,13 @@ performEnrichment <- function(enrichmentUUID="-1", annoSelectStr="MESH=checked,P
   # update database with ending timestamp for enrichment
   query <- sqlInterpolate(ANSI(), paste0("UPDATE enrichment_list SET timestamp_finish='", Sys.time(), "' WHERE id='", enrichmentUUID, "';"), id="addToDb")
   outp <- dbGetQuery(poolUpdate, query)
+  
+  # Update status file(s)
+  for(x in statusFiles){
+    statusFile <- file(x)
+    writeLines(paste0("waiting\tstep1\tstep2\tstep3\tstep4\tstep5\tstep6\tstep7\tstep8"), statusFile)
+    close(statusFile)
+  }
   
   # success
   return(200)
@@ -1571,7 +1598,8 @@ sort_by_file_number <- function(originalArray) {
 
 
 ###### Perform enrichment analysis ######
-perform_CASRN_enrichment_analysis <- function(CASRNRef, outputBaseDir, outfileBase, mappedCASRNsFromProcess, funCat2Selected, CASRN2funCatTerm, funCatTerm2CASRN, funCat2CASRNCount, funCat2termCount, funCatTerm2CASRNCount, pvalueThresholdToDisplay, similarityThreshold=0.50, initialGroupMembership, multipleLinkageThreshold, EASEThreshold){
+perform_CASRN_enrichment_analysis <- function(CASRNRef, outputBaseDir, outfileBase, mappedCASRNsFromProcess, funCat2Selected, CASRN2funCatTerm, funCatTerm2CASRN, funCat2CASRNCount, funCat2termCount, funCatTerm2CASRNCount, pvalueThresholdToDisplay, similarityThreshold=0.50, initialGroupMembership, multipleLinkageThreshold, EASEThreshold, nodeCutoff, enrichmentUUID){
+  
   # Define output file names
   outfileChart    <- paste0(outputBaseDir, outfileBase, "__Chart.txt")
   outfileSimple		<- paste0(outputBaseDir, outfileBase, "__ChartSimple.txt")
@@ -1677,17 +1705,6 @@ perform_CASRN_enrichment_analysis <- function(CASRNRef, outputBaseDir, outfileBa
           })
           targetCASRNs <- targetCASRNs[!sapply(targetCASRNs, is.null)]
           CASRNCount   <- length(targetCASRNs)
-          
-          #sigTermResults <- lapply(names(mappedCASRNs), function(CASRN) {
-          #  #TODO: I think problem here?
-          #  if (is.null(funCatTerm2CASRN[[funCat]][[term]][[CASRN]]) == FALSE){
-          #    # Populate sigTerm2CASRNMatrix
-          #    if(length(sigTerm2CASRNMatrix[[paste0(funCat, "|", term)]]) < 1) {
-          #      sigTerm2CASRNMatrix[[paste0(funCat, "|", term)]] <<- list()
-          #    }
-          #    sigTerm2CASRNMatrix[[paste0(funCat, "|", term)]][CASRN] <<- 1
-          #  }
-          #})
           targetCASRNsRef   <- targetCASRNs
           targetCASRNCount  <- CASRNCount
           
@@ -1899,7 +1916,8 @@ perform_CASRN_enrichment_analysis <- function(CASRNRef, outputBaseDir, outfileBa
           simpleFunCatTermCount[[localFunCat]] <<- 1
           toSimple <- 1
         } 
-        else if(simpleFunCatTermCount[[localFunCat]] < 10){
+        # Changed from "simpleFunCatTermCount[[localFunCat]] < 10" to "simpleFunCatTermCount[[localFunCat]] < N"
+        else if(simpleFunCatTermCount[[localFunCat]] < nodeCutoff){
           simpleFunCatTermCount[[localFunCat]] <<- simpleFunCatTermCount[[localFunCat]] + 1
           toSimple <- 1
         }
@@ -1942,8 +1960,8 @@ perform_CASRN_enrichment_analysis <- function(CASRNRef, outputBaseDir, outfileBa
   #	Perform functional term clustering
   # ----------------------------------------------------------------------
   # Calculate enrichment score
-  df<-read.delim(outfileChart, sep="\t", comment.char="", quote="", stringsAsFactors = FALSE)
-  res<-kappa_cluster(x=df, outputBaseDir=outputBaseDir, outfileBase=outfileBase, sortedFunCatTerms=sortedFunCatTerms, sigTerm2CASRNMatrix=sigTerm2CASRNMatrix, sortedFunCatTermsCount=sortedFunCatTermsCount, inputCASRNsCount=inputCASRNsCount, similarityThreshold=similarityThreshold, initialGroupMembership=initialGroupMembership, multipleLinkageThreshold=multipleLinkageThreshold, EASEThreshold=EASEThreshold, term2Pvalue=term2Pvalue, term2Contents=term2Contents)
+  df <- read.delim(outfileChart, sep="\t", comment.char="", quote="", stringsAsFactors = FALSE)
+  res <- kappa_cluster(x=df, outputBaseDir=outputBaseDir, outfileBase=outfileBase, sortedFunCatTerms=sortedFunCatTerms, sigTerm2CASRNMatrix=sigTerm2CASRNMatrix, sortedFunCatTermsCount=sortedFunCatTermsCount, inputCASRNsCount=inputCASRNsCount, similarityThreshold=similarityThreshold, initialGroupMembership=initialGroupMembership, multipleLinkageThreshold=multipleLinkageThreshold, EASEThreshold=EASEThreshold, term2Pvalue=term2Pvalue, term2Contents=term2Contents, enrichmentUUID=enrichmentUUID)
 }
 
 calculate_funcat_mapped_total_CASRN_count <- function(mappedCASRNsRef, funCat, CASRN2funCatTerm){
@@ -2002,9 +2020,17 @@ get_funCat_from_funCatTerm <- function(funCatTerm){
   return(tmpSplit[1])
 }
 
-kappa_cluster <- function(x, deg=NULL, useTerm=FALSE, cutoff=0.5, overlap=0.5, minSize=5, escore=3, outputBaseDir, outfileBase, sortedFunCatTerms, sigTerm2CASRNMatrix, sortedFunCatTermsCount, inputCASRNsCount=0, similarityThreshold=0.50, initialGroupMembership, multipleLinkageThreshold=0.5, EASEThreshold=1.0, term2Pvalue, term2Contents) {
+kappa_cluster <- function(x, deg=NULL, useTerm=FALSE, cutoff=0.5, overlap=0.5, minSize=5, escore=3, outputBaseDir, outfileBase, sortedFunCatTerms, sigTerm2CASRNMatrix, sortedFunCatTermsCount, inputCASRNsCount=0, similarityThreshold=0.50, initialGroupMembership, multipleLinkageThreshold=0.5, EASEThreshold=1.0, term2Pvalue, term2Contents, enrichmentUUID) {
   # ----------------------------------------------------------------------
   #	Perform functional term clustering
+  # ----------------------------------------------------------------------
+  # Update status file
+  queueDir <- paste0(APP_DIR, "Queue/")
+  statusFilePath <- paste0(queueDir, "__status__", enrichmentUUID, "__", outfileBase)
+  statusFile <- file(statusFilePath)
+  writeLines(paste0("waiting\tstep1\tstep2\tstep3"), statusFile)
+  close(statusFile)
+  
   # ----------------------------------------------------------------------
   # 	Step#1: Calculate kappa score
   # ----------------------------------------------------------------------
@@ -2105,6 +2131,12 @@ kappa_cluster <- function(x, deg=NULL, useTerm=FALSE, cutoff=0.5, overlap=0.5, m
   #	Each term could form a initial seeding group (initial seeds) 
   #   as long as it has close relationships (kappa > 0.35 or any designated number) 
   #   with more than > 2 or any designated number of other members. 
+  
+  # Update status file
+  statusFile <- file(statusFilePath)
+  writeLines(paste0("waiting\tstep1\tstep2\tstep3\tstep4"), statusFile)
+  close(statusFile)
+  
   term2sToPass <- NULL
   if(length(termpair2kappaOverThreshold) > 0){
     termpair2kappaOverThreshold <- termpair2kappaOverThreshold[order(names(termpair2kappaOverThreshold), decreasing = TRUE)]
@@ -2136,10 +2168,16 @@ kappa_cluster <- function(x, deg=NULL, useTerm=FALSE, cutoff=0.5, overlap=0.5, m
   # remove empty nested lists
   qualifiedSeeds <- lapply(qualifiedSeeds, function(innerList) innerList[sapply(innerList, length) > 0])
   qualifiedSeeds <- qualifiedSeeds[!sapply(qualifiedSeeds, is.null)]
-  
+
   # ----------------------------------------------------------------------
   # 	Step#3: Iteratively merge qualifying seeds
   # ----------------------------------------------------------------------
+  
+  # Update status file
+  statusFile <- file(statusFilePath)
+  writeLines(paste0("waiting\tstep1\tstep2\tstep3\tstep4\tstep5"), statusFile)
+  close(statusFile)
+  
   remainingSeeds	<- qualifiedSeeds
   finalGroups <- vector("list", length(remainingSeeds))
   finalGroupsIndex <- 1
@@ -2176,6 +2214,11 @@ kappa_cluster <- function(x, deg=NULL, useTerm=FALSE, cutoff=0.5, overlap=0.5, m
   # ----------------------------------------------------------------------
   # 	Step#4: Calculate enrichment score and print out the results
   # ----------------------------------------------------------------------
+  
+  # Update status file
+  statusFile <- file(statusFilePath)
+  writeLines(paste0("waiting\tstep1\tstep2\tstep3\tstep4\tstep5\tstep6"), statusFile)
+  close(statusFile)
   
   outfileCluster	<- paste0(outputBaseDir, outfileBase, "__Cluster.txt")
   CLUSTER         <- file(outfileCluster)
@@ -2272,7 +2315,6 @@ get_the_best_seed <- function(currentSeedRef, remainingSeedsRef, newSeedRef, mul
   currentSeedTermCount	<- length(currentSeedTerms)
   
   if(length(remainingSeedsRef) > 1){
-    #for (i in 1:(length(remainingSeedsRef))) {
     for (i in 1:(length(remainingSeedsRef)-1)) {
       # calculate the overlapping
       secondSeedTerms	<- remainingSeedsRef[[i]]
@@ -2346,6 +2388,13 @@ getAnnotations <- function(enrichmentUUID="-1", annoSelectStr="MESH=checked,PHAR
     # Get just the CASRNs
     inputCASRNs <- input[, 1]
     
+    # Read status file and update step
+    queueDir <- paste0(APP_DIR, "Queue/")
+    statusFilePath <- paste0(queueDir, "__status__", enrichmentUUID, "__", setName)
+    statusFile <- file(statusFilePath)
+    writeLines(paste0("waiting\tstep1\tstep2"), statusFile)
+    close(statusFile)  
+    
     # Get the corresponding annotations for each input CASRN
     annotations <- lapply(inputCASRNs, function(CASRN){
       
@@ -2367,6 +2416,11 @@ getAnnotations <- function(enrichmentUUID="-1", annoSelectStr="MESH=checked,PHAR
     })
     # Set list names to CASRNs
     names(annotations) <- inputCASRNs
+    
+    # Read status file and update step
+    statusFile <- file(statusFilePath)
+    writeLines(paste0("waiting\tstep1\tstep2\tstep3"), statusFile)
+    close(statusFile)  
     
     # Create output files for each CASRN in the Set
     individualMatrix <- lapply(inputCASRNs, function(CASRN){
@@ -2405,6 +2459,11 @@ getAnnotations <- function(enrichmentUUID="-1", annoSelectStr="MESH=checked,PHAR
     # Set list names to CASRNs
     names(individualMatrix) <- inputCASRNs
     combinedMatrix <- unlist(unname(individualMatrix), recursive = FALSE)
+    
+    # Read status file and update step
+    statusFile <- file(statusFilePath)
+    writeLines(paste0("waiting\tstep1\tstep2\tstep3\tstep4"), statusFile)
+    close(statusFile)  
     
     # Create matrix file for all CASRNs in set
     file.create(paste0(outDir, "/", setName, "__FullMatrix.txt"))
@@ -2460,42 +2519,60 @@ queue <- function(){
     inputSets <- inputSets[!sapply(inputSets, is.null)]
     # Sort inputSets
     sort(inputSets)
-    if(length(inputSets < 6)){
-      # TODO: multithread
-      mclapply(inputSets, mc.cores=4, mc.silent=FALSE, function(input){
-      #lapply(inputSets, function(input){
-        # Get data from queue file
-        queueFile <- read.table(input, stringsAsFactors=FALSE)
-        mode <- queueFile[1,1]
-        enrichmentUUID <- queueFile[1,2]
-        annoSelectStr <- queueFile[1,3]
-        nodeCutoff <- queueFile[1,4]
-        # Query Plumber API
-        resp <- NULL
-        status_code <- 500
-        # If fetching annotations
-        if(mode == "annotation") {
-          status_code <- getAnnotations(enrichmentUUID=enrichmentUUID, annoSelectStr=annoSelectStr)
-        } else { # else query R API server 
-          status_code <- performEnrichment(enrichmentUUID=enrichmentUUID, annoSelectStr=annoSelectStr, nodeCutoff=nodeCutoff)
-        } 
-
-        # Upon success
-        if (status_code == 200){
-          # Delete queue file
-          unlink(input)
-        } else { # Else, generate error file for reference
-          print(paste0("Error performing enrichment: ", status_code, " : "))
-          file.create(paste0(queueDir, "error__", enrichmentUUID))
-          errorFile <- file(paste0(queueDir, "error__", enrichmentUUID))
-          writeLines(paste0(status_code), errorFile)
-          close(errorFile)
-          unlink(input)
-        }
-      })
-    } else {
-      Sys.sleep(2)
+    
+    # Only process first five requests in queue at a time
+    upperBound <- length(inputSets)
+    if(length(inputSets) > 5){
+      upperBound <- 5
     }
+    mclapply(inputSets[1:upperBound], mc.cores=4, mc.silent=FALSE, function(input){
+      # Get data from queue file
+      queueFile <- read.table(input, stringsAsFactors=FALSE)
+      mode <- queueFile[1,1]
+      enrichmentUUID <- queueFile[1,2]
+      annoSelectStr <- queueFile[1,3]
+      nodeCutoff <- queueFile[1,4]
+      status_code <- 500
+      
+      # Read status file(s) and append marker to signify enrichment has started
+      statusFilePath <- paste0(queueDir, "__status__", enrichmentUUID)
+      statusFiles <- Sys.glob(paste0(statusFilePath, "__*"))
+      for(x in statusFiles){
+        statusFile <- file(x)
+        writeLines(paste0("waiting\tstep1"), statusFile)
+        close(statusFile)  
+      }
+      
+      # Perform enrichment analysis or fetch relevant annotations
+      if(mode == "annotation") {
+        status_code <- getAnnotations(enrichmentUUID=enrichmentUUID, annoSelectStr=annoSelectStr)
+      } else { # else query R API server 
+        status_code <- performEnrichment(enrichmentUUID=enrichmentUUID, annoSelectStr=annoSelectStr, nodeCutoff=nodeCutoff)
+      } 
+
+      # Upon success
+      if (status_code == 200){
+        # Delete queue file
+        unlink(input)
+        # Delete status files
+        for(x in statusFiles){
+          unlink(x) 
+        } 
+      } else { # Else, generate error file for reference
+        print(paste0("Error performing enrichment: ", status_code, " : "))
+        file.create(paste0(queueDir, "error__", enrichmentUUID))
+        errorFile <- file(paste0(queueDir, "error__", enrichmentUUID))
+        writeLines(paste0(status_code), errorFile)
+        close(errorFile)
+        # Delete queue file
+        unlink(input)
+        # Delete status files
+        for(x in statusFiles){
+          unlink(x) 
+        } 
+      }
+    })
+
     # Wait
     Sys.sleep(2)
   }
