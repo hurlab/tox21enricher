@@ -349,6 +349,14 @@ cancelEnrichment <- function(res, req, transactionId){
     }
   }
   
+  # Delete status file(s)
+  statusFiles <- Sys.glob(paste0(queueDir, "__status__", transactionId, "__*"), dirmark=FALSE)
+  if(length(statusFiles) > 0){
+    for(i in statusFiles){
+      unlink(i)
+    }
+  }
+  
   # Connect to db
   poolCancel <- dbPool(
     drv = dbDriver("PostgreSQL", max.con = 100),

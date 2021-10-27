@@ -133,7 +133,9 @@ shinyServer(function(input, output, session) {
     
     searchStatus <- reactiveValues(option = character())
     searchStatus$option <- "search"
-    searchCheckboxes<- reactiveValues(checkboxes = NULL)
+    searchCheckboxes <- reactiveValues(checkboxes = NULL)
+    
+    enrichmentListDisplayReactive <- reactiveValues(enrichmentListDisplay = NULL)
     
     # Open search enrichment menu
     observeEvent(input$searchButton, {
@@ -275,7 +277,7 @@ shinyServer(function(input, output, session) {
             # Clean up annoSelectStr
             annoSelectStr <- unlist(str_split(annoSelectStr, ","))
             annoSelectStr <- paste0(annoSelectStr, collapse=", ")
-            annoSelectStr <- gsub("=checked", "", annoSelectStr)
+            annoSelectStr <- gsub("=checked", "", annoSelectStr, fixed=TRUE)
             
             searchCheckbox <- paste0(checkboxInput(inputId = paste0("cb_search__", transactionId), label=NULL, width="4px"))
             
@@ -291,6 +293,7 @@ shinyServer(function(input, output, session) {
           }))
           
           enrichmentListDisplay <- bind_rows(enrichmentListDisplay)
+          enrichmentListDisplayReactive$enrichmentListDisplay <- enrichmentListDisplay
           searchCheckboxes$checkboxes <- searchCheckboxNames
           
           output[["enrichmentTable"]] <- renderUI(
@@ -302,7 +305,7 @@ shinyServer(function(input, output, session) {
                              style = "bootstrap",
                              select = "none",
                              options = list( 
-                               paging = TRUE,
+                               paging = FALSE,
                                #autoWidth = FALSE,
                                #columnDefs = list(list(width="200px", targets="_all")),
                                preDrawCallback = JS('function() { Shiny.unbindAll(this.api().table().node()); }'), 
@@ -509,6 +512,11 @@ shinyServer(function(input, output, session) {
         shinyjs::hide(id = "searchButtonsMenu")
         shinyjs::disable(id = "searchButtonsMenu")
         
+        # Set enrichmentSetsList$enrichmentSets - necessary for being able to regenerate network
+        enrichmentSetsList$enrichmentSets <- enrichmentSets
+        # Set setColors$color - necessary for preserving color for bargraph generation
+        setColors$color <- colorsList
+        
         future({
           enrichmentResults(mode, transactionId, annoSelectStr, nodeCutoff, enrichmentSets, originalNames, reenrichResults, originalMode, colorsList)
         }, seed=TRUE)
@@ -627,8 +635,25 @@ shinyServer(function(input, output, session) {
       removeModal()
     })
     
+    # Select all enrichment requests on page
+    selectAllPrevOnPageValue <- reactiveValues(select=TRUE)
+    observeEvent(input$selectAllPrevOnPage, {
+      if(selectAllPrevOnPageValue$select == FALSE){
+        lapply(enrichmentListDisplayReactive$enrichmentListDisplay[, "UUID"], function(x){
+          updateCheckboxInput(session, inputId=paste0("cb_search__", x), value=FALSE)
+        })  
+        updateActionButton(session, inputId="selectAllPrevOnPage", label="Select all displayed requests")
+        selectAllPrevOnPageValue$select <- TRUE
+      } else {
+        lapply(enrichmentListDisplayReactive$enrichmentListDisplay[, "UUID"], function(x){
+          updateCheckboxInput(session, inputId=paste0("cb_search__", x), value=TRUE)
+        })  
+        updateActionButton(session, inputId="selectAllPrevOnPage", label="Deselect all displayed requests")
+        selectAllPrevOnPageValue$select <- FALSE
+      }
+    })
     
-    # Clear previous enrichments when button is pressed
+    # Clear previous enrichment requests when button is pressed
     observeEvent(input$searchDeleteAll, {
       showModal(
         modalDialog(
@@ -738,6 +763,70 @@ shinyServer(function(input, output, session) {
     observeEvent(input$searchDeleteSelectedCancel, {
       # Clear previous message (if applicable)
       output$searchDeleteSelectedConfirmation <- renderUI({
+        paste0()
+      })
+      
+      # Refresh page
+      searchStatus$option <- "search"
+      loadEnrichList()
+      
+      # Close modal
+      removeModal()
+    })
+    
+    # Clear previous incomplete enrichment requests when button is pressed
+    observeEvent(input$searchDeleteAllIncomplete, {
+      prevTable <- enrichmentListDisplayReactive$enrichmentListDisplay
+      incompleteSets <- prevTable %>% filter(Time.Completed == "incomplete")
+
+      if(length(incompleteSets[, "Time.Completed"]) < 1){
+        shinyjs::show(id="warningSearchColumn")
+        output$searchWarning <- renderUI({
+          HTML(paste0("<div class=\"text-danger\">Error: No incomplete requests.</div>"))
+        })
+      } else {
+        showModal(
+          modalDialog(
+            title="Warning",
+            footer=NULL,
+            size="l",
+            fluidRow(
+              column(12, 
+                     HTML(paste0("<p>You are about to delete the records of the following incomplete requests:<br><div class=\"text-danger\">", paste0(incompleteSets[, "UUID"], collapse="<br>"), "</div><br>This action cannot be undone. Continue?</p>")),
+                     column(6, actionButton(inputId="searchDeleteIncompleteConfirm", label="Yes, delete the selected records.") ),
+                     column(6, actionButton(inputId="searchDeleteIncompleteCancel", label="Close") )
+              )
+            ),
+            fluidRow(
+              column(12,
+                     uiOutput("searchDeleteIncompleteConfirmation")
+              )
+            )
+          )
+        )
+      }
+    })
+    
+    # Clear local cache on confirmation of above ^^
+    observeEvent(input$searchDeleteIncompleteConfirm, {
+      cacheDir <- paste0(getwd(), "/www/tmp/")
+      prevTable <- enrichmentListDisplayReactive$enrichmentListDisplay
+      incompleteSets <- prevTable %>% filter(Time.Completed == "incomplete")
+      # Clear transaction dir
+      for (x in incompleteSets[, "UUID"]){
+        unlink(paste0(cacheDir, "transaction/", x), recursive=TRUE)  
+      }
+      
+      # Render confirmation text
+      output$searchDeleteIncompleteConfirmation <- renderUI({
+        HTML(paste0("<div class=\"text-danger\">Incomplete records deleted.</div>"))
+      })
+    })
+    
+    # Close modal on cancellation of above ^^
+    observeEvent(input$searchDeleteIncompleteCancel, {
+      # Clear previous message (if applicable)
+      output$searchDeleteIncompleteConfirmation <- renderUI({
         paste0()
       })
       
@@ -1253,6 +1342,9 @@ shinyServer(function(input, output, session) {
         # Reset enrichmentSetsList$enrichmentSets
         enrichmentSetsList$enrichmentSets <- NULL
         
+        # Reset setColors$color
+        setColors$color <- NULL
+        
         # Reset setFilesObservers$observers
         for(x in setFilesObservers$observers){
           x$destroy()
@@ -1294,7 +1386,7 @@ shinyServer(function(input, output, session) {
       # Validate Input
       
       # 1) strip horizontal whitespace and condense multiple newlines
-      casrnValidatedInput <- gsub(" ", "", input$submitted_chemicals)
+      casrnValidatedInput <- gsub(" ", "", input$submitted_chemicals, fixed=TRUE)
       casrnValidatedInput <- gsub("\\t", "", casrnValidatedInput)
       casrnValidatedInput <- gsub("\\n+", "\n", casrnValidatedInput)
 
@@ -1718,10 +1810,20 @@ shinyServer(function(input, output, session) {
         setColors$color <- colorsAllSets
         reenrichResultsList$reenrichResults <- reenrichResults
         enrichmentSetsList$enrichmentSets <- enrichmentSets
-        
+ 
         # Get list of original input names for InChIs/SMILES and set names to display later
         if(reenrichFlag == FALSE){
-          originalNames <- unlist(lapply(1:length(casrnBoxSplit), function(i) paste0(casrnBoxSplit[i], "__Set", i)))
+          if (enrichmentType$enrichType == "similarity" | enrichmentType$enrichType == "substructure") {
+            originalNames <- unlist(lapply(1:length(casrnBoxSplit), function(i) paste0(casrnBoxSplit[i], "__Set", i)))
+          } else {
+            originalNames <- unlist(lapply(casrnBoxSplit, function(x) {
+              if(grepl("^#", x)){
+                return(gsub("#", "", x, fixed=TRUE))
+              }
+              return(NULL)
+            }))
+            originalNames <- originalNames[!sapply(originalNames, is.null)]
+          }
           originalNamesList$originalNames <- originalNames
         }
 
@@ -1855,7 +1957,6 @@ shinyServer(function(input, output, session) {
         })
         colorsToPrint <- paste0(colorsToPrint, collapse="|")
 
-        
         # Write local info file so we can reference this request later
         file.create(paste0(tmpDir, transactionId))
         tmpLocalFile <- file(paste0(tmpDir, transactionId), open="wb")
@@ -2025,7 +2126,7 @@ shinyServer(function(input, output, session) {
       
       mode <- inputSetList$inputSet[1, "Mode"]
       transactionId <- inputSetList$inputSet[1, "UUID"]
-      annoSelectStr <- gsub(", ", "=checked,", inputSetList$inputSet[1, "Selected.Annotations"])
+      annoSelectStr <- gsub(", ", "=checked,", inputSetList$inputSet[1, "Selected.Annotations"], fixed=TRUE)
       nodeCutoff <- inputSetList$inputSet[1, "Node.Cutoff"]
       
       # Query the API to see if we ran into an error
@@ -2156,6 +2257,7 @@ shinyServer(function(input, output, session) {
     
     
     enrichmentResults <- function(mode, transactionId, annoSelectStr, cutoff, enrichmentSets, originalNames, reenrichResults, originalEnrichMode, colorsList){
+      
         # Reset checkboxList$checkboxes
         checkboxList$checkboxes <- NULL
         
@@ -2230,6 +2332,7 @@ shinyServer(function(input, output, session) {
         }
         
         validatedSets <- unlist(content(resp))
+        
         enrichmentSets <- unlist(lapply(names(enrichmentSets), function(x){
           if(x %in% validatedSets){
             return(enrichmentSets[x])
@@ -2345,8 +2448,9 @@ shinyServer(function(input, output, session) {
                         column(id=paste0(setFilesSplit[setFile]), 3, 
                           if(unlist(str_split(setFilesSplit[setFile], "__"))[2] == "FullMatrix.txt"){
                             tipify( div(actionLink(inputId=paste0(i, "__FullMatrix.txt__link"), label=setFilesSplit[setFile])), "A matrix displaying all of the annotations and their corresponding chemicals for this set (.txt format).", placement="bottom")
-                          }
-                          else { # CASRN file
+                          } else if (unlist(str_split(setFilesSplit[setFile], "__"))[2] == "ErrorCASRNs.txt") { 
+                            tipify( div(actionLink(inputId=paste0(setFilesSplit[setFile], "__link"), label=setFilesSplit[setFile])), "A list of submitted CASRNs that were not found in the Tox21 Enricher database (.txt format).", placement="bottom")
+                          } else { # CASRN file
                             tipify( div(actionLink(inputId=paste0(setFilesSplit[setFile], "__link"), label=setFilesSplit[setFile])), "A list of annotations in the Tox21 Enricher database for this chemical with respect to the given annotation classes (.txt format).", placement="bottom")
                           }
                         )
@@ -2393,6 +2497,7 @@ shinyServer(function(input, output, session) {
           radioNames <- lapply(names(enrichmentSets), function(setName){
             return( HTML(paste0("<div style='width:100%;height:20px;background-color:", colorsList[setName], "'>",  setName, "</div>")) )
           })
+          
           output$resultsTabset <- renderUI({
               fluidRow(
                   fluidRow(
@@ -2451,8 +2556,9 @@ shinyServer(function(input, output, session) {
                   
               )
           })
-
+          
           lapply(names(enrichmentSets), function(i) {
+            
                   # Fetch setFiles from server via API
                   resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="readGct", query=list(transactionId=transactionId, cutoff=cutoff, mode="set", set=i))
                   #TODO: error check
@@ -2528,14 +2634,17 @@ shinyServer(function(input, output, session) {
                     # Add input file from input directory
                     getAllResultFiles <- append(getAllResultFiles, paste0(inDirWeb, i, ".txt"))
                     
+                    # Get original input chemical if similarity or substructure
                     originalInputToDisplay <- ""
-                    lapply(originalNames, function(j){
-                      originalSetName <- unlist(str_split(j, "__"))
-                      if(originalSetName[2] == i){
-                        originalInputToDisplay <<- paste0("Input chemical: ", originalSetName[1])
-                      }
-                    })
-                    
+                    if(mode == "substructure" | mode == "similarity"){
+                      lapply(originalNames, function(j){
+                        originalSetName <- unlist(str_split(j, "__"))
+                        if(originalSetName[2] == i){
+                          originalInputToDisplay <<- paste0("Input chemical: ", originalSetName[1])
+                        }
+                      }) 
+                    }
+
                     # Dynamically create observers for result file links
                     # Input
                     if(is.null(setFilesObservers$observers[[paste0("inputObserver__", i)]])){
@@ -4287,7 +4396,6 @@ shinyServer(function(input, output, session) {
         x$destroy()
       }
       setFilesObservers$observers <- NULL
-      
       
       performEnrichment(updateNetworkBox, reenrichFlag=TRUE) 
     })

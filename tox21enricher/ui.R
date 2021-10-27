@@ -187,6 +187,7 @@ shinyUI(function(){
               fluidRow(id = "searchButtonsMenu",
                 column(12, actionButton("searchPrevButton", label="View results", icon=icon("search"))),
                 column(12, actionButton("searchDeleteSelected", label="Delete selected", icon=icon("trash"))),
+                #column(12, actionButton("searchDeleteAllIncomplete", label="Delete all incomplete", icon=icon("trash"))),
                 column(12, actionButton("searchDeleteAll", label="Delete all", icon=icon("dumpster")))
               )
             ),
@@ -202,6 +203,7 @@ shinyUI(function(){
                 h1("View Results from Previous Request"),
                 fluidRow(
                   h3("Select Request to View Results for"),
+                  actionButton(inputId="selectAllPrevOnPage", label="Select all displayed requests"),
                   hidden(
                     column(id="warningSearchColumn", 12,
                            uiOutput("searchWarning")

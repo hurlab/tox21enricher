@@ -389,9 +389,13 @@ performEnrichment <- function(enrichmentUUID="-1", annoSelectStr="MESH=checked,P
   })
   
   # zip result files
-  zipDir <- dir(baseDirName, recursive=TRUE, include.dirs=TRUE)
-  filesToZip <- unlist(lapply(zipDir, function(x) paste0(baseDirName, "/", x)))
-  system(paste0("cd ", baseDirName, "/ ; zip -r9X ./tox21enricher_", enrichmentUUID, ".zip ./*"))
+  if(dir.exists(baseDirName)){
+    zipDir <- dir(baseDirName, recursive=TRUE, include.dirs=TRUE)
+    filesToZip <- unlist(lapply(zipDir, function(x) paste0(baseDirName, "/", x)))
+    system(paste0("cd ", baseDirName, "/ ; zip -r9X ./tox21enricher_", enrichmentUUID, ".zip ./*"))
+  } else { # Return with error if did not complete. Do not update in database
+    return(-1) 
+  }
   
   # Connect to db
   poolUpdate <- dbPool(
@@ -2352,14 +2356,8 @@ get_the_best_seed <- function(currentSeedRef, remainingSeedsRef, newSeedRef, mul
 getAnnotations <- function(enrichmentUUID="-1", annoSelectStr="MESH=checked,PHARMACTIONLIST=checked,ACTIVITY_CLASS=checked,ADVERSE_EFFECT=checked,INDICATION=checked,KNOWN_TOXICITY=checked,MECH_LEVEL_1=checked,MECH_LEVEL_2=checked,MECH_LEVEL_3=checked,MECHANISM=checked,MODE_CLASS=checked,PRODUCT_CLASS=checked,STRUCTURE_ACTIVITY=checked,TA_LEVEL_1=checked,TA_LEVEL_2=checked,TA_LEVEL_3=checked,THERAPEUTIC_CLASS=checked,TISSUE_TOXICITY=checked,DRUGBANK_ATC=checked,DRUGBANK_ATC_CODE=checked,DRUGBANK_CARRIERS=checked,DRUGBANK_ENZYMES=checked,DRUGBANK_TARGETS=checked,DRUGBANK_TRANSPORTERS=checked,CTD_CHEM2DISEASE=checked,CTD_CHEM2GENE_25=checked,CTD_CHEMICALS_DISEASES=checked,CTD_CHEMICALS_GENES=checked,CTD_CHEMICALS_GOENRICH_CELLCOMP=checked,CTD_CHEMICALS_GOENRICH_MOLFUNCT=checked,CTD_CHEMICALS_PATHWAYS=checked,CTD_GOSLIM_BIOPROCESS=checked,CTD_PATHWAY=checked,HTS_ACTIVE=checked,LEADSCOPE_TOXICITY=checked,MULTICASE_TOX_PREDICTION=checked,TOXCAST_ACTIVE=checked,TOXINS_TARGETS=checked,TOXPRINT_STRUCTURE=checked,TOXREFDB=checked,") {
   # async
   #future_promise({
-  # Get list of selected annotations
-  annoSelect <- unlist(strsplit(annoSelectStr,"=checked,", fixed=TRUE), recursive=FALSE)
-  # Get input sets
-  inDir <- paste0(APP_DIR, "Input/", enrichmentUUID)    # Directory for input files for enrichment set
-  outDir <- paste0(APP_DIR, "Output/", enrichmentUUID)  # Directory for output files for enrichment set
-  inputSets <- Sys.glob(paste0(inDir,"/*"))
   # Connect to db
-  poolMatrix <- dbPool(
+  poolInput <- dbPool(
     drv = dbDriver("PostgreSQL", max.con = 100),
     dbname = tox21db$database,
     host = tox21db$host,
@@ -2368,11 +2366,33 @@ getAnnotations <- function(enrichmentUUID="-1", annoSelectStr="MESH=checked,PHAR
     port = tox21db$port,
     idleTimeout = 3600000
   )
-  #TODO: make multithreaded
-  annotationMatrix <- lapply(inputSets, function(infile){
+  # Add request to database
+  query <- sqlInterpolate(ANSI(), paste0("INSERT INTO enrichment_list(id, chemlist, type, node_cutoff, anno_select_str, timestamp_start, ip) VALUES('", enrichmentUUID, "','", "placeholder", "','", "placeholder", "','", 10, "','", annoSelectStr, "','", Sys.time(), "','", "placeholder", "');"), id="addToDb")
+  outp <- dbGetQuery(poolInput, query)
+  poolClose(poolInput)
+  
+  # Get list of selected annotations
+  annoSelect <- unlist(strsplit(annoSelectStr,"=checked,", fixed=TRUE), recursive=FALSE)
+  # Get input sets
+  inDir <- paste0(APP_DIR, "Input/", enrichmentUUID)    # Directory for input files for enrichment set
+  outDir <- paste0(APP_DIR, "Output/", enrichmentUUID)  # Directory for output files for enrichment set
+  inputSets <- Sys.glob(paste0(inDir,"/*"))
+
+  annotationMatrix <- mclapply(inputSets, mc.cores=4, mc.silent=FALSE, function(infile){
+    # Connect to db
+    poolMatrix <- dbPool(
+      drv = dbDriver("PostgreSQL", max.con = 100),
+      dbname = tox21db$database,
+      host = tox21db$host,
+      user = tox21db$uid,
+      password = tox21db$pwd,
+      port = tox21db$port,
+      idleTimeout = 3600000
+    )
+    
     # Get set name
-    setNameSplit <- str_split(infile, "/")[[1]]
-    setNameSplit2 <- str_split(setNameSplit[length(setNameSplit)], "\\.")[[1]]
+    setNameSplit <- unlist(str_split(infile, "/"))
+    setNameSplit2 <- unlist(str_split(setNameSplit[length(setNameSplit)], "\\."))
     setName <- setNameSplit2[1]
     
     # Read input files
@@ -2397,18 +2417,18 @@ getAnnotations <- function(enrichmentUUID="-1", annoSelectStr="MESH=checked,PHAR
     
     # Get the corresponding annotations for each input CASRN
     annotations <- lapply(inputCASRNs, function(CASRN){
-      
       # Grab matrix
       queryMatrix <- sqlInterpolate(ANSI(), paste0("SELECT annotation FROM annotation_matrix WHERE casrn = '", CASRN, "';"))
       outpMatrix <- tryCatch({
         dbGetQuery(poolMatrix, queryMatrix)
       }, error=function(e){
+        print(e)
         return(NULL)
       })
       fetchedCASRNs <- outpMatrix[, 1]
       
       # Split up list of annotation IDs
-      fetchedCASRNsList <- str_split(fetchedCASRNs, "\\|")[[1]]
+      fetchedCASRNsList <- unlist(str_split(fetchedCASRNs, "\\|"))
       fetchedCASRNsList <- fetchedCASRNsList[lapply(fetchedCASRNsList, length) > 0]
       fetchedCASRNsList <- fetchedCASRNsList[-length(fetchedCASRNsList)]
       return(fetchedCASRNsList)
@@ -2485,24 +2505,44 @@ getAnnotations <- function(enrichmentUUID="-1", annoSelectStr="MESH=checked,PHAR
     })
     # Write to matrix file
     write(paste0(matrixOutput, paste0(matrixOutputFull, collapse="\n")), MATRIX, append=TRUE)
+    
+    # Close pool connection to db when done accessing
+    poolClose(poolMatrix)
+    
     return(TRUE)
   })
   annotationMatrix <- annotationMatrix[!sapply(annotationMatrix, is.null)]
-  
   if(length(annotationMatrix) < 1){
     # Return error message
     return("No lines available in any input file. Cannot fetch annotations.")
   }
-  # zip result files
-  zipDir <- dir(outDir, recursive=TRUE, include.dirs=TRUE)
-  filesToZip <- unlist(lapply(zipDir, function(x) paste0(outDir, "/", x)))
-  system(paste0("cd ", outDir, "/ ; zip -r9X ./tox21enricher_", enrichmentUUID, ".zip ./*"))
   
-  # Close pool connection to db when done accessing
-  poolClose(poolMatrix)
+  # zip result files
+  if(dir.exists(outDir)){
+    zipDir <- dir(outDir, recursive=TRUE, include.dirs=TRUE)
+    filesToZip <- unlist(lapply(zipDir, function(x) paste0(outDir, "/", x)))
+    system(paste0("cd ", outDir, "/ ; zip -r9X ./tox21enricher_", enrichmentUUID, ".zip ./*")) 
+  } else { # Return with error if did not complete. Do not update in database
+    return(-1) 
+  }
+  
+  # Connect to db
+  poolUpdate <- dbPool(
+    drv = dbDriver("PostgreSQL", max.con = 100),
+    dbname = tox21db$database,
+    host = tox21db$host,
+    user = tox21db$uid,
+    password = tox21db$pwd,
+    port = tox21db$port,
+    idleTimeout = 3600000
+  )
+  # update database with ending timestamp for enrichment
+  query <- sqlInterpolate(ANSI(), paste0("UPDATE enrichment_list SET timestamp_finish='", Sys.time(), "' WHERE id='", enrichmentUUID, "';"), id="addToDb")
+  outp <- dbGetQuery(poolUpdate, query)
+  poolClose(poolUpdate)
+  
   return(200)
 } 
-
 
 queue <- function(){
   while(TRUE){
@@ -2552,6 +2592,14 @@ queue <- function(){
 
       # Upon success
       if (status_code == 200){
+        # Delete queue file
+        unlink(input)
+        # Delete status files
+        for(x in statusFiles){
+          unlink(x) 
+        } 
+      } else if (status_code == -1) {
+        print(paste0("Request cancelled for ", enrichmentUUID, ". Deleting..."))
         # Delete queue file
         unlink(input)
         # Delete status files
