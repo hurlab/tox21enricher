@@ -156,6 +156,11 @@ shinyServer(function(input, output, session) {
         shinyjs::hide(id = "enrich_from")
         shinyjs::show(id = "searchButtonsMenu")
         
+        # Delete any warnings on main page
+        output[["error_box"]] <- renderUI(
+          paste0()
+        )
+        
         updateActionButton(session, "searchButton", label = "Perform enrichment", icon=icon("undo"))  
         searchStatus$option <- "enrich"
         
@@ -1276,7 +1281,12 @@ shinyServer(function(input, output, session) {
       # Clean up column name formatting
       colnames(waitingData) <- list("Status", "Request Mode", "Request UUID", "Selected Annotations", "Node Cutoff", "User Input")
 
+      # Suppress any previous warnings
+      output[["results_error_box"]] <- renderUI(
+        paste0()
+      )
       
+      # Update table      
       output[["waitingTable"]] <- renderUI(
         column(12,
                DT::datatable({waitingData}, 
@@ -1520,7 +1530,7 @@ shinyServer(function(input, output, session) {
         # Initialize list to hold result chemicals for reenrichment (Substructure & Similarity only)
         reenrichResults <- list()
         casrnBoxSplit <- unlist(str_split(casrnBox, "\n"))
-
+        
         # Split CASRNBox to get each line and organize into sets
         if (enrichmentType$enrichType == "casrn" | enrichmentType$enrichType == "annotation") {
             enrichmentSets <- list()
@@ -2087,7 +2097,7 @@ shinyServer(function(input, output, session) {
         #TODO: I don't think we need this chunk vvv
         # Query the API to see if we ran into an error
         resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="hasError", query=list(transactionId=transactionId))
-        
+
         # if enrichment runs into an error while performing the enrichment in the queue, cancel and show error on main UI
         if(unlist(content(resp)) != FALSE | resp$status_code != 200){
           

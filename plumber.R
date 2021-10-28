@@ -152,39 +152,32 @@ print("! Ready to accept connections.")
 #* @param nodeCutoff
 #* @get /queue
 queue <- function(mode="", enrichmentUUID="-1", annoSelectStr="MESH=checked,PHARMACTIONLIST=checked,ACTIVITY_CLASS=checked,ADVERSE_EFFECT=checked,INDICATION=checked,KNOWN_TOXICITY=checked,MECH_LEVEL_1=checked,MECH_LEVEL_2=checked,MECH_LEVEL_3=checked,MECHANISM=checked,MODE_CLASS=checked,PRODUCT_CLASS=checked,STRUCTURE_ACTIVITY=checked,TA_LEVEL_1=checked,TA_LEVEL_2=checked,TA_LEVEL_3=checked,THERAPEUTIC_CLASS=checked,TISSUE_TOXICITY=checked,DRUGBANK_ATC=checked,DRUGBANK_ATC_CODE=checked,DRUGBANK_CARRIERS=checked,DRUGBANK_ENZYMES=checked,DRUGBANK_TARGETS=checked,DRUGBANK_TRANSPORTERS=checked,CTD_CHEM2DISEASE=checked,CTD_CHEM2GENE_25=checked,CTD_CHEMICALS_DISEASES=checked,CTD_CHEMICALS_GENES=checked,CTD_CHEMICALS_GOENRICH_CELLCOMP=checked,CTD_CHEMICALS_GOENRICH_MOLFUNCT=checked,CTD_CHEMICALS_PATHWAYS=checked,CTD_GOSLIM_BIOPROCESS=checked,CTD_PATHWAY=checked,HTS_ACTIVE=checked,LEADSCOPE_TOXICITY=checked,MULTICASE_TOX_PREDICTION=checked,TOXCAST_ACTIVE=checked,TOXINS_TARGETS=checked,TOXPRINT_STRUCTURE=checked,TOXREFDB=checked,", nodeCutoff=10, setNames){
-  # async
-  #future_promise({
-  queueDir <- paste0(APP_DIR, "Queue/")
-  queueDirContents <- Sys.glob(paste0(APP_DIR, "Queue/*__queue__*"))
-
-  # Regenerate 0__queue__default file if missing
-  if(("0__queue__default" %in% queueDirContents) == FALSE) {
-    file.create(paste0(queueDir, "0__queue__default"))
-    queueDirContents <- Sys.glob(paste0(APP_DIR, "Queue/*__queue__*"))
-  }
+#  # async
+#  #future_promise({
   
-  queueDirNumbers <- lapply(queueDirContents, function(queueFile){
-    #strip path
-    noPathFile <- unlist(str_split(queueFile, paste0(APP_DIR, "Queue/")))[2]
-    return(as.integer(unlist(str_split(noPathFile, "__queue__"))[1]))
-  })
+  # Connect to db
+  poolQueue <- dbPool(
+    drv = dbDriver("PostgreSQL", max.con = 100),
+    dbname = tox21config$database,
+    host = tox21config$host,
+    user = tox21config$uid,
+    password = tox21config$pwd,
+    idleTimeout = 3600000
+  )
   
-  QUEUE_ORDER <- max(sapply(queueDirNumbers, max)) + 1
-  # Create queue file in Queue dir
-  file.create(paste0(queueDir, QUEUE_ORDER, "__queue__", enrichmentUUID))
-  queueFile <- file(paste0(queueDir, QUEUE_ORDER, "__queue__", enrichmentUUID))
-  writeLines(paste0(mode, "\t", enrichmentUUID, "\t", annoSelectStr, "\t", nodeCutoff), queueFile)
-  close(queueFile)
+  # Update database with "queue" entry
+  query <- sqlInterpolate(ANSI(), paste0("INSERT INTO queue(mode, uuid, annoselectstr, cutoff) VALUES('",mode,"', '",enrichmentUUID,"', '",annoSelectStr,"', ",nodeCutoff,") ;"), id="createQueueEntry")
+  outp <- dbGetQuery(poolQueue, query)
   
-  # Create status file(s) in Queue dir
+  # Update database with corresponding status entries
   setNamesSplit <- unlist(str_split(setNames, "\n"))
   for(x in setNamesSplit){
-    file.create(paste0(queueDir, "__status__", enrichmentUUID, "__", x))
-    statusFile <- file(paste0(queueDir, "__status__", enrichmentUUID, "__", x))
-    writeLines(paste0("waiting"), statusFile)
-    close(statusFile)
+    query <- sqlInterpolate(ANSI(), paste0("INSERT INTO status(step, uuid, setname) VALUES(0, '",enrichmentUUID,"', '",x,"') ;"), id="createStatusEntry")
+    outp <- dbGetQuery(poolQueue, query) 
   }
-  
+
+  # Close pool
+  poolClose(poolQueue)
   
   #})
 }
@@ -193,120 +186,127 @@ queue <- function(mode="", enrichmentUUID="-1", annoSelectStr="MESH=checked,PHAR
 #* @param transactionId
 #* @get /getQueuePos
 getQueuePos <- function(transactionId="-1", mode="none"){
-  queueDir <- paste0(APP_DIR, "Queue/")
-  queueDirContents <- Sys.glob(paste0(APP_DIR, "Queue/*__queue__*"))
+  # Connect to db
+  poolUpdate <- dbPool(
+    drv = dbDriver("PostgreSQL", max.con = 100),
+    dbname = tox21config$database,
+    host = tox21config$host,
+    user = tox21config$uid,
+    password = tox21config$pwd,
+    port = tox21config$port,
+    idleTimeout = 3600000
+  )
   
-  # Sort
-  queueDirContents <- sort(queueDirContents)
+  # Get status entries for request
+  query <- sqlInterpolate(ANSI(), paste0("SELECT * FROM status WHERE uuid='", transactionId, "';"), id="fetchStatusStep")
+  outp <- dbGetQuery(poolUpdate, query)
+  statusFiles <- outp[,"step"]
+  names(statusFiles) <- outp[,"setname"]
   
-  queueDirIDs <- lapply(queueDirContents, function(queueFile){
-    #strip path
-    noPathFile <- unlist(str_split(queueFile, paste0(APP_DIR, "Queue/")))[2]
-    if(unlist(str_split(noPathFile, "__queue__"))[2] != "default"){
-      return(unlist(str_split(noPathFile, "__queue__"))[2])
-    } else {
-      return(NULL)
-    }
-  })
-  queueDirIDs <- unlist(queueDirIDs[!sapply(queueDirIDs, is.null)])
+  # Get queue position of request
+  query <- sqlInterpolate(ANSI(), paste0("SELECT * FROM queue WHERE finished=0;"), id="fetchQueuePosition")
+  outp <- dbGetQuery(poolUpdate, query)
   
-  # Determine status
-  statusFilePath <- paste0(APP_DIR, "Queue/__status__", transactionId)
-  statusFilesGlob <- Sys.glob(paste0(statusFilePath, "__*"))
+  # Close pool
+  poolClose(poolUpdate)
   
-  statusFiles <- lapply(statusFilesGlob, function(x){
-    statusFile <- read.table(x, sep="\t", stringsAsFactors=FALSE) 
-    statusFileUpdate <- length(statusFile[1,])
-    
-  })
+  if(nrow(outp) > 0){
   
-  names(statusFiles) <- lapply(statusFilesGlob, function(x){
-    tmp <- unlist(str_split(x, paste0(transactionId, "__")))[2]
-    return(tmp)
-  })
-  
-  # Determine step for each set:
-  statusList <- NULL
-  if(mode != "annotation"){ # if enrichment mode
-    statusList <- lapply(statusFiles, function(statusFileUpdate){
-      # waiting in queue
-      if(statusFileUpdate == 1){
-        index <- 1
-        for(i in queueDirIDs) {
-          if(i == transactionId) {
-            return(paste0("Waiting in queue position: ", index, "."))
-          } else {
-            index <- index + 1
-          }
-        }
-      } else if(statusFileUpdate == 2){
-        return("(Step 1/4): Processing input file(s).")
-      } else if(statusFileUpdate == 3){
-        return("(Step 2/4): Creating chart and matrix files.")
-      } else if(statusFileUpdate == 4){
-        return("(Step 3/4): Clustering (Step 1/4) - calculating kappa score.")
-      } else if(statusFileUpdate == 5){
-        return("(Step 3/4): Clustering (Step 2/4) - creating qualified initial seeding groups.")
-      } else if(statusFileUpdate == 6){
-        return("(Step 3/4): Clustering (Step 3/4) - merging qualiied seeds.")
-      } else if(statusFileUpdate == 7){
-        return("(Step 3/4): Clustering (Step 4/4) - calculating enrichment score.")
-      } else if(statusFileUpdate == 8){
-        return("(Step 4/4): Creating .gct files.")
-      } 
-      return("Complete!")
-    })
-    names(statusList) <- names(statusFiles)
-  } else { # if fetch annotations mode
-    statusList <- lapply(statusFiles, function(statusFileUpdate){
-      # waiting in queue
-      if(statusFileUpdate == 1){
-        index <- 1
-        for(i in queueDirIDs) {
-          if(i == transactionId) {
-            return(paste0("Waiting in queue position: ", index, "."))
-          } else {
-            index <- index + 1
-          }
-        }
-      } else if(statusFileUpdate == 2){
-        return("(Step 1/4): Processing input file(s).")
-      } else if(statusFileUpdate == 3){
-        return("(Step 2/4): Fetching annotations.")
-      } else if(statusFileUpdate == 4){
-        return("(Step 3/4): Creating annotations list file.")
-      } else if(statusFileUpdate == 5){
-        return("(Step 4/4): Creating annotation matrix file.")
+    # Sort by index number
+    outp <- outp[order(outp$index),]
+
+    queuePos <- 1
+    for (i in 1:nrow(outp)) {
+      if(outp[i, "uuid"] == transactionId){
+        break
       }
+      queuePos <- queuePos + 1
+    }
+
+    # Determine step for each set:
+    statusList <- NULL
+    if(mode != "annotation"){ # if enrichment mode
+      statusList <- lapply(statusFiles, function(statusFileUpdate){
+        # waiting in queue
+        if(statusFileUpdate < 1){
+          return(paste0("Waiting in queue position: ", queuePos, "."))
+        } else if(statusFileUpdate == 2){
+          return("(Step 1/4): Processing input file(s).")
+        } else if(statusFileUpdate == 3){
+          return("(Step 2/4): Creating chart and matrix files.")
+        } else if(statusFileUpdate == 4){
+          return("(Step 3/4): Clustering (Step 1/4) - calculating kappa score.")
+        } else if(statusFileUpdate == 5){
+          return("(Step 3/4): Clustering (Step 2/4) - creating qualified initial seeding groups.")
+        } else if(statusFileUpdate == 6){
+          return("(Step 3/4): Clustering (Step 3/4) - merging qualiied seeds.")
+        } else if(statusFileUpdate == 7){
+          return("(Step 3/4): Clustering (Step 4/4) - calculating enrichment score.")
+        } else if(statusFileUpdate == 8){
+          return("(Step 4/4): Creating .gct files.")
+        } 
+        return("Complete!")
+      })
+      names(statusList) <- names(statusFiles)
+    } else { # if fetch annotations mode
+      statusList <- lapply(statusFiles, function(statusFileUpdate){
+        # waiting in queue
+        if(statusFileUpdate < 1){
+          return(paste0("Waiting in queue position: ", queuePos, "."))
+        } else if(statusFileUpdate == 2){
+          return("(Step 1/4): Processing input file(s).")
+        } else if(statusFileUpdate == 3){
+          return("(Step 2/4): Fetching annotations.")
+        } else if(statusFileUpdate == 4){
+          return("(Step 3/4): Creating annotations list file.")
+        } else if(statusFileUpdate == 5){
+          return("(Step 4/4): Creating annotation matrix file.")
+        }
+        return("Complete!")
+      })
+    }
+    if(length(statusList) > 0){
+      statusListToReturn <- lapply(1:length(statusList), function(i){
+        return(paste0(names(statusList)[i], ": \t", statusList[i]))
+      })
+      statusListToReturn <- paste0(statusListToReturn, collapse="\n")
+      return(statusListToReturn) 
+    } else {
       return("Complete!")
-    })
+    }
   }
-  
-  if(length(statusList) > 0){
-    statusListToReturn <- lapply(1:length(statusList), function(i){
-      return(paste0(names(statusList)[i], ": \t", statusList[i]))
-    })
-    statusListToReturn <- paste0(statusListToReturn, collapse="\n")
-    return(statusListToReturn) 
-  } else {
-    return("Complete!")
-  }
+  return("Complete!")
 }
 
 #* Check if enrichment process has terminated for given request
 #* @param transactionId UUID of the request
 #* @get /finishedRequest
 finishedRequest <- function(res, req, transactionId){
-  # async
-  #future_promise({
-  queueDir <- paste0(APP_DIR, "Queue/")
-  checkIfQueueFile <- Sys.glob(paste0(queueDir, "[0-9]*__queue__", transactionId))
-  if(length(checkIfQueueFile) > 0){
-    return(FALSE)
-  } else {
+  # Connect to db
+  poolQueue <- dbPool(
+    drv = dbDriver("PostgreSQL", max.con = 100),
+    dbname = tox21config$database,
+    host = tox21config$host,
+    user = tox21config$uid,
+    password = tox21config$pwd,
+    port = tox21config$port,
+    idleTimeout = 3600000
+  )
+  
+  # Get status entries for request
+  query <- sqlInterpolate(ANSI(), paste0("SELECT * FROM queue WHERE uuid='", transactionId, "';"), id="fetchStatusStep")
+  outp <- dbGetQuery(poolQueue, query)
+  
+  # Close pool
+  poolClose(poolQueue)
+  
+  finished <- outp[1, "finished"]
+  
+  if(finished == 1){
     return(TRUE)
   }
-  #})
+  return(FALSE)
+
 }
 
 #* Check if error file exists for given request
@@ -315,16 +315,29 @@ finishedRequest <- function(res, req, transactionId){
 hasError <- function(res, req, transactionId){
   # async
   #future_promise({
-  queueDir <- paste0(APP_DIR, "Queue/")
-  if (file.exists(paste0(queueDir, "error__", transactionId))){
-    # Get error message from file
-    errorFile <- unlist(readLines(paste0(queueDir, "error__", transactionId)))
-    # Delete error file
-    unlink(paste0(queueDir, "error__", transactionId))
-    return(errorFile)
+  
+  # Connect to db
+  poolQueue <- dbPool(
+    drv = dbDriver("PostgreSQL", max.con = 100),
+    dbname = tox21config$database,
+    host = tox21config$host,
+    user = tox21config$uid,
+    password = tox21config$pwd,
+    port = tox21config$port,
+    idleTimeout = 3600000
+  )
+  
+  # Get status entries for request
+  query <- sqlInterpolate(ANSI(), paste0("SELECT * FROM queue WHERE uuid='", transactionId, "' AND error IS NOT NULL;"), id="fetchError")
+  outp <- dbGetQuery(poolQueue, query)
+  
+  # Close pool
+  poolClose(poolQueue)
+  
+  if(nrow(outp) > 0){
+    return(outp[1, "error"])
   }
   return(FALSE)
-  #})
 }
 
 #* Cancel enrichment process for given UUID
@@ -333,30 +346,6 @@ hasError <- function(res, req, transactionId){
 cancelEnrichment <- function(res, req, transactionId){
   # async
   #future_promise({
-  inDir <- paste0(APP_DIR, "Input/")
-  outDir <- paste0(APP_DIR, "Output/")
-  queueDir <- paste0(APP_DIR, "Queue/")
-  requestToCancel <- Sys.glob(paste0(queueDir, "[0-9]*__queue__", transactionId), dirmark=FALSE)
-  requestToCancelError <- Sys.glob(paste0(queueDir, "[0-9]*__error__", transactionId), dirmark=FALSE)
-
-  # If queue file exists, delete it
-  if(length(requestToCancel) > 0){
-    msg <- unlink(requestToCancel[1])
-  } else {
-    # Check if error file exists if queue file is gone and delete that too
-    if(length(requestToCancelError) > 0){
-      unlink(requestToCancelError[1])
-    }
-  }
-  
-  # Delete status file(s)
-  statusFiles <- Sys.glob(paste0(queueDir, "__status__", transactionId, "__*"), dirmark=FALSE)
-  if(length(statusFiles) > 0){
-    for(i in statusFiles){
-      unlink(i)
-    }
-  }
-  
   # Connect to db
   poolCancel <- dbPool(
     drv = dbDriver("PostgreSQL", max.con = 100),
@@ -371,12 +360,11 @@ cancelEnrichment <- function(res, req, transactionId){
   query <- sqlInterpolate(ANSI(), paste0("UPDATE enrichment_list SET timestamp_finish='cancelled' WHERE id='", transactionId, "';"), id="cancelEnrichment")
   outp <- dbGetQuery(poolCancel, query)
   
+  query <- sqlInterpolate(ANSI(), paste0("UPDATE queue SET cancel=1 WHERE uuid='", transactionId, "';"), id="cancelEnrichment")
+  outp <- dbGetQuery(poolCancel, query)
+  
   # Close pool
   poolClose(poolCancel)
-  
-  # Delete Input/Output files on filesystem
-  unlink(paste0(inDir, transactionId), recursive=TRUE)
-  unlink(paste0(outDir, transactionId), recursive=TRUE)
   
   return(TRUE)
   #})

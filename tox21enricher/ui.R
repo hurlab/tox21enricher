@@ -187,7 +187,7 @@ shinyUI(function(){
               fluidRow(id = "searchButtonsMenu",
                 column(12, actionButton("searchPrevButton", label="View results", icon=icon("search"))),
                 column(12, actionButton("searchDeleteSelected", label="Delete selected", icon=icon("trash"))),
-                #column(12, actionButton("searchDeleteAllIncomplete", label="Delete all incomplete", icon=icon("trash"))),
+                column(12, actionButton("searchDeleteAllIncomplete", label="Delete all incomplete", icon=icon("trash"))),
                 column(12, actionButton("searchDeleteAll", label="Delete all", icon=icon("dumpster")))
               )
             ),

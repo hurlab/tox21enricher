@@ -264,15 +264,26 @@ performEnrichment <- function(enrichmentUUID="-1", annoSelectStr="MESH=checked,P
   })
   names(inputIDListHash) <- outfileBaseNames
   
-  # Update status file
-  queueDir <- paste0(APP_DIR, "Queue/")
-  statusFilePath <- paste0(queueDir, "__status__", enrichmentUUID)
-  statusFiles <- Sys.glob(paste0(statusFilePath, "__*"))
+  # Connect to DB to get status info
+  poolStatus <- dbPool(
+    drv = dbDriver("PostgreSQL", max.con = 100),
+    dbname = tox21db$database,
+    host = tox21db$host,
+    user = tox21db$uid,
+    password = tox21db$pwd,
+    idleTimeout = 3600000
+  )
+  # Get set names from database
+  query <- sqlInterpolate(ANSI(), paste0("SELECT setname FROM status WHERE uuid='",enrichmentUUID,"';"), id="fetchStatus")
+  outp <- dbGetQuery(poolStatus, query)
+  statusFiles <- outp[,"setname"]
+  # Set step flag for each set name
   for(x in statusFiles){
-    statusFile <- file(x)
-    writeLines(paste0("waiting\tstep1\tstep2"), statusFile)
-    close(statusFile)    
+    query <- sqlInterpolate(ANSI(), paste0("UPDATE status SET step=2 WHERE uuid='",enrichmentUUID,"' AND setname='",x,"';"), id="fetchStatus")
+    outp <- dbGetQuery(poolStatus, query)
   }
+  # Close pool
+  poolClose(poolStatus)
 
   # multi-core
   enrichmentStatusComplete <- mclapply(outfileBaseNames, mc.cores=4, mc.silent=FALSE, function(i){
@@ -310,14 +321,26 @@ performEnrichment <- function(enrichmentUUID="-1", annoSelectStr="MESH=checked,P
   ########################################################################################
   
   # Update status file
-  queueDir <- paste0(APP_DIR, "Queue/")
-  statusFilePath <- paste0(queueDir, "__status__", enrichmentUUID)
-  statusFiles <- Sys.glob(paste0(statusFilePath, "__*"))
+  # Connect to DB to get status info
+  poolStatus <- dbPool(
+    drv = dbDriver("PostgreSQL", max.con = 100),
+    dbname = tox21db$database,
+    host = tox21db$host,
+    user = tox21db$uid,
+    password = tox21db$pwd,
+    idleTimeout = 3600000
+  )
+  # Get set names from database
+  query <- sqlInterpolate(ANSI(), paste0("SELECT setname FROM status WHERE uuid='",enrichmentUUID,"';"), id="fetchStatus")
+  outp <- dbGetQuery(poolStatus, query)
+  statusFiles <- outp[,"setname"]
+  # Set step flag for each set name
   for(x in statusFiles){
-    statusFile <- file(x)
-    writeLines(paste0("waiting\tstep1\tstep2\tstep3\tstep4\tstep5\tstep6\tstep7"), statusFile)
-    close(statusFile) 
+    query <- sqlInterpolate(ANSI(), paste0("UPDATE status SET step=7 WHERE uuid='",enrichmentUUID,"' AND setname='",x,"';"), id="fetchStatus")
+    outp <- dbGetQuery(poolStatus, query)
   }
+  # Close pool
+  poolClose(poolStatus)
   
   ARGV_0 <- inDir
   ARGV_1 <- outDir 
@@ -413,11 +436,26 @@ performEnrichment <- function(enrichmentUUID="-1", annoSelectStr="MESH=checked,P
   outp <- dbGetQuery(poolUpdate, query)
   
   # Update status file(s)
+  # Connect to DB to get status info
+  poolStatus <- dbPool(
+    drv = dbDriver("PostgreSQL", max.con = 100),
+    dbname = tox21db$database,
+    host = tox21db$host,
+    user = tox21db$uid,
+    password = tox21db$pwd,
+    idleTimeout = 3600000
+  )
+  # Get set names from database
+  query <- sqlInterpolate(ANSI(), paste0("SELECT setname FROM status WHERE uuid='",enrichmentUUID,"';"), id="fetchStatus")
+  outp <- dbGetQuery(poolStatus, query)
+  statusFiles <- outp[,"setname"]
+  # Set step flag for each set name
   for(x in statusFiles){
-    statusFile <- file(x)
-    writeLines(paste0("waiting\tstep1\tstep2\tstep3\tstep4\tstep5\tstep6\tstep7\tstep8"), statusFile)
-    close(statusFile)
+    query <- sqlInterpolate(ANSI(), paste0("UPDATE status SET step=8 WHERE uuid='",enrichmentUUID,"' AND setname='",x,"';"), id="fetchStatus")
+    outp <- dbGetQuery(poolStatus, query)
   }
+  # Close pool
+  poolClose(poolStatus)
   
   # success
   return(200)
@@ -2029,11 +2067,20 @@ kappa_cluster <- function(x, deg=NULL, useTerm=FALSE, cutoff=0.5, overlap=0.5, m
   #	Perform functional term clustering
   # ----------------------------------------------------------------------
   # Update status file
-  queueDir <- paste0(APP_DIR, "Queue/")
-  statusFilePath <- paste0(queueDir, "__status__", enrichmentUUID, "__", outfileBase)
-  statusFile <- file(statusFilePath)
-  writeLines(paste0("waiting\tstep1\tstep2\tstep3"), statusFile)
-  close(statusFile)
+  # Connect to DB to get status info
+  poolStatus <- dbPool(
+    drv = dbDriver("PostgreSQL", max.con = 100),
+    dbname = tox21db$database,
+    host = tox21db$host,
+    user = tox21db$uid,
+    password = tox21db$pwd,
+    idleTimeout = 3600000
+  )
+  # Set step flag for each set name
+  query <- sqlInterpolate(ANSI(), paste0("UPDATE status SET step=3 WHERE uuid='",enrichmentUUID,"' AND setname='",outfileBase,"';"), id="fetchStatus")
+  outp <- dbGetQuery(poolStatus, query)
+  # Close pool
+  poolClose(poolStatus)
   
   # ----------------------------------------------------------------------
   # 	Step#1: Calculate kappa score
@@ -2137,9 +2184,20 @@ kappa_cluster <- function(x, deg=NULL, useTerm=FALSE, cutoff=0.5, overlap=0.5, m
   #   with more than > 2 or any designated number of other members. 
   
   # Update status file
-  statusFile <- file(statusFilePath)
-  writeLines(paste0("waiting\tstep1\tstep2\tstep3\tstep4"), statusFile)
-  close(statusFile)
+  # Connect to DB to get status info
+  poolStatus <- dbPool(
+    drv = dbDriver("PostgreSQL", max.con = 100),
+    dbname = tox21db$database,
+    host = tox21db$host,
+    user = tox21db$uid,
+    password = tox21db$pwd,
+    idleTimeout = 3600000
+  )
+  # Set step flag for each set name
+  query <- sqlInterpolate(ANSI(), paste0("UPDATE status SET step=4 WHERE uuid='",enrichmentUUID,"' AND setname='",outfileBase,"';"), id="fetchStatus")
+  outp <- dbGetQuery(poolStatus, query)
+  # Close pool
+  poolClose(poolStatus)
   
   term2sToPass <- NULL
   if(length(termpair2kappaOverThreshold) > 0){
@@ -2156,7 +2214,6 @@ kappa_cluster <- function(x, deg=NULL, useTerm=FALSE, cutoff=0.5, overlap=0.5, m
   #qualifiedSeeds <- lapply((1:sortedFunCatTermsCount), function(i){
   qualifiedSeeds <- mclapply((1:sortedFunCatTermsCount), mc.cores=4, mc.silent=FALSE, function(i){
     # Seed condition #1: initial group membership
-    #if (length(termpair2kappaOverThreshold[[sortedFunCatTerms[i]]]) > 0 & length(termpair2kappaOverThreshold[[sortedFunCatTerms[i]]]) >= (initialGroupMembership-1)) {
     if (!is.null(termpair2kappaOverThreshold[[sortedFunCatTerms[i]]]) & length(termpair2kappaOverThreshold[[sortedFunCatTerms[i]]]) >= (initialGroupMembership-1)) {
       # Seed condition #2: majority of the members 
       results_calculate_percentage_of_membership_over_threshold <- calculate_percentage_of_membership_over_threshold (termpair2kappaOverThreshold, term2sToPass[[sortedFunCatTerms[i]]])
@@ -2178,9 +2235,20 @@ kappa_cluster <- function(x, deg=NULL, useTerm=FALSE, cutoff=0.5, overlap=0.5, m
   # ----------------------------------------------------------------------
   
   # Update status file
-  statusFile <- file(statusFilePath)
-  writeLines(paste0("waiting\tstep1\tstep2\tstep3\tstep4\tstep5"), statusFile)
-  close(statusFile)
+  # Connect to DB to get status info
+  poolStatus <- dbPool(
+    drv = dbDriver("PostgreSQL", max.con = 100),
+    dbname = tox21db$database,
+    host = tox21db$host,
+    user = tox21db$uid,
+    password = tox21db$pwd,
+    idleTimeout = 3600000
+  )
+  # Set step flag for each set name
+  query <- sqlInterpolate(ANSI(), paste0("UPDATE status SET step=5 WHERE uuid='",enrichmentUUID,"' AND setname='",outfileBase,"';"), id="fetchStatus")
+  outp <- dbGetQuery(poolStatus, query)
+  # Close pool
+  poolClose(poolStatus)
   
   remainingSeeds	<- qualifiedSeeds
   finalGroups <- vector("list", length(remainingSeeds))
@@ -2220,9 +2288,20 @@ kappa_cluster <- function(x, deg=NULL, useTerm=FALSE, cutoff=0.5, overlap=0.5, m
   # ----------------------------------------------------------------------
   
   # Update status file
-  statusFile <- file(statusFilePath)
-  writeLines(paste0("waiting\tstep1\tstep2\tstep3\tstep4\tstep5\tstep6"), statusFile)
-  close(statusFile)
+  # Connect to DB to get status info
+  poolStatus <- dbPool(
+    drv = dbDriver("PostgreSQL", max.con = 100),
+    dbname = tox21db$database,
+    host = tox21db$host,
+    user = tox21db$uid,
+    password = tox21db$pwd,
+    idleTimeout = 3600000
+  )
+  # Set step flag for each set name
+  query <- sqlInterpolate(ANSI(), paste0("UPDATE status SET step=6 WHERE uuid='",enrichmentUUID,"' AND setname='",outfileBase,"';"), id="fetchStatus")
+  outp <- dbGetQuery(poolStatus, query)
+  # Close pool
+  poolClose(poolStatus)
   
   outfileCluster	<- paste0(outputBaseDir, outfileBase, "__Cluster.txt")
   CLUSTER         <- file(outfileCluster)
@@ -2353,7 +2432,7 @@ get_the_best_seed <- function(currentSeedRef, remainingSeedsRef, newSeedRef, mul
 # Fetch all annotations in the Tox21 Enricher database for given CASRNs.
 # enrichmentUUID UUID for Input/Output directory on local machine, generated by Tox21 Enricher application.
 # annoSelectStr String, comma-delimited, containing all enabled annotations for this enrichment process. Passed from Tox21 Enricher application.
-getAnnotations <- function(enrichmentUUID="-1", annoSelectStr="MESH=checked,PHARMACTIONLIST=checked,ACTIVITY_CLASS=checked,ADVERSE_EFFECT=checked,INDICATION=checked,KNOWN_TOXICITY=checked,MECH_LEVEL_1=checked,MECH_LEVEL_2=checked,MECH_LEVEL_3=checked,MECHANISM=checked,MODE_CLASS=checked,PRODUCT_CLASS=checked,STRUCTURE_ACTIVITY=checked,TA_LEVEL_1=checked,TA_LEVEL_2=checked,TA_LEVEL_3=checked,THERAPEUTIC_CLASS=checked,TISSUE_TOXICITY=checked,DRUGBANK_ATC=checked,DRUGBANK_ATC_CODE=checked,DRUGBANK_CARRIERS=checked,DRUGBANK_ENZYMES=checked,DRUGBANK_TARGETS=checked,DRUGBANK_TRANSPORTERS=checked,CTD_CHEM2DISEASE=checked,CTD_CHEM2GENE_25=checked,CTD_CHEMICALS_DISEASES=checked,CTD_CHEMICALS_GENES=checked,CTD_CHEMICALS_GOENRICH_CELLCOMP=checked,CTD_CHEMICALS_GOENRICH_MOLFUNCT=checked,CTD_CHEMICALS_PATHWAYS=checked,CTD_GOSLIM_BIOPROCESS=checked,CTD_PATHWAY=checked,HTS_ACTIVE=checked,LEADSCOPE_TOXICITY=checked,MULTICASE_TOX_PREDICTION=checked,TOXCAST_ACTIVE=checked,TOXINS_TARGETS=checked,TOXPRINT_STRUCTURE=checked,TOXREFDB=checked,") {
+getAnnotations <- function(enrichmentUUID="-1", annoSelectStr="MESH=checked,PHARMACTIONLIST=checked,ACTIVITY_CLASS=checked,ADVERSE_EFFECT=checked,INDICATION=checked,KNOWN_TOXICITY=checked,MECH_LEVEL_1=checked,MECH_LEVEL_2=checked,MECH_LEVEL_3=checked,MECHANISM=checked,MODE_CLASS=checked,PRODUCT_CLASS=checked,STRUCTURE_ACTIVITY=checked,TA_LEVEL_1=checked,TA_LEVEL_2=checked,TA_LEVEL_3=checked,THERAPEUTIC_CLASS=checked,TISSUE_TOXICITY=checked,DRUGBANK_ATC=checked,DRUGBANK_ATC_CODE=checked,DRUGBANK_CARRIERS=checked,DRUGBANK_ENZYMES=checked,DRUGBANK_TARGETS=checked,DRUGBANK_TRANSPORTERS=checked,CTD_CHEM2DISEASE=checked,CTD_CHEM2GENE_25=checked,CTD_CHEMICALS_DISEASES=checked,CTD_CHEMICALS_GENES=checked,CTD_CHEMICALS_GOENRICH_CELLCOMP=checked,CTD_CHEMICALS_GOENRICH_MOLFUNCT=checked,CTD_CHEMICALS_PATHWAYS=checked,CTD_GOSLIM_BIOPROCESS=checked,CTD_PATHWAY=checked,HTS_ACTIVE=checked,LEADSCOPE_TOXICITY=checked,MULTICASE_TOX_PREDICTION=checked,TOXCAST_ACTIVE=checked,TOXINS_TARGETS=checked,TOXPRINT_STRUCTURE=checked,TOXREFDB=checked,", nodeCutoff=10) {
   # async
   #future_promise({
   # Connect to db
@@ -2367,7 +2446,7 @@ getAnnotations <- function(enrichmentUUID="-1", annoSelectStr="MESH=checked,PHAR
     idleTimeout = 3600000
   )
   # Add request to database
-  query <- sqlInterpolate(ANSI(), paste0("INSERT INTO enrichment_list(id, chemlist, type, node_cutoff, anno_select_str, timestamp_start, ip) VALUES('", enrichmentUUID, "','", "placeholder", "','", "placeholder", "','", 10, "','", annoSelectStr, "','", Sys.time(), "','", "placeholder", "');"), id="addToDb")
+  query <- sqlInterpolate(ANSI(), paste0("INSERT INTO enrichment_list(id, chemlist, type, node_cutoff, anno_select_str, timestamp_start, ip) VALUES('", enrichmentUUID, "','", "placeholder", "','", "placeholder", "','", nodeCutoff, "','", annoSelectStr, "','", Sys.time(), "','", "placeholder", "');"), id="addToDb")
   outp <- dbGetQuery(poolInput, query)
   poolClose(poolInput)
   
@@ -2409,11 +2488,20 @@ getAnnotations <- function(enrichmentUUID="-1", annoSelectStr="MESH=checked,PHAR
     inputCASRNs <- input[, 1]
     
     # Read status file and update step
-    queueDir <- paste0(APP_DIR, "Queue/")
-    statusFilePath <- paste0(queueDir, "__status__", enrichmentUUID, "__", setName)
-    statusFile <- file(statusFilePath)
-    writeLines(paste0("waiting\tstep1\tstep2"), statusFile)
-    close(statusFile)  
+    # Connect to DB to get status info
+    poolStatus <- dbPool(
+      drv = dbDriver("PostgreSQL", max.con = 100),
+      dbname = tox21db$database,
+      host = tox21db$host,
+      user = tox21db$uid,
+      password = tox21db$pwd,
+      idleTimeout = 3600000
+    )
+    # Set step flag for each set name
+    query <- sqlInterpolate(ANSI(), paste0("UPDATE status SET step=2 WHERE uuid='",enrichmentUUID,"' AND setname='",setName,"';"), id="fetchStatus")
+    outp <- dbGetQuery(poolStatus, query)
+    # Close pool
+    poolClose(poolStatus)
     
     # Get the corresponding annotations for each input CASRN
     annotations <- lapply(inputCASRNs, function(CASRN){
@@ -2438,9 +2526,20 @@ getAnnotations <- function(enrichmentUUID="-1", annoSelectStr="MESH=checked,PHAR
     names(annotations) <- inputCASRNs
     
     # Read status file and update step
-    statusFile <- file(statusFilePath)
-    writeLines(paste0("waiting\tstep1\tstep2\tstep3"), statusFile)
-    close(statusFile)  
+    # Connect to DB to get status info
+    poolStatus <- dbPool(
+      drv = dbDriver("PostgreSQL", max.con = 100),
+      dbname = tox21db$database,
+      host = tox21db$host,
+      user = tox21db$uid,
+      password = tox21db$pwd,
+      idleTimeout = 3600000
+    )
+    # Set step flag for each set name
+    query <- sqlInterpolate(ANSI(), paste0("UPDATE status SET step=3 WHERE uuid='",enrichmentUUID,"' AND setname='",setName,"';"), id="fetchStatus")
+    outp <- dbGetQuery(poolStatus, query)
+    # Close pool
+    poolClose(poolStatus)
     
     # Create output files for each CASRN in the Set
     individualMatrix <- lapply(inputCASRNs, function(CASRN){
@@ -2481,9 +2580,20 @@ getAnnotations <- function(enrichmentUUID="-1", annoSelectStr="MESH=checked,PHAR
     combinedMatrix <- unlist(unname(individualMatrix), recursive = FALSE)
     
     # Read status file and update step
-    statusFile <- file(statusFilePath)
-    writeLines(paste0("waiting\tstep1\tstep2\tstep3\tstep4"), statusFile)
-    close(statusFile)  
+    # Connect to DB to get status info
+    poolStatus <- dbPool(
+      drv = dbDriver("PostgreSQL", max.con = 100),
+      dbname = tox21db$database,
+      host = tox21db$host,
+      user = tox21db$uid,
+      password = tox21db$pwd,
+      idleTimeout = 3600000
+    )
+    # Set step flag for each set name
+    query <- sqlInterpolate(ANSI(), paste0("UPDATE status SET step=4 WHERE uuid='",enrichmentUUID,"' AND setname='",setName,"';"), id="fetchStatus")
+    outp <- dbGetQuery(poolStatus, query)
+    # Close pool
+    poolClose(poolStatus)
     
     # Create matrix file for all CASRNs in set
     file.create(paste0(outDir, "/", setName, "__FullMatrix.txt"))
@@ -2544,83 +2654,129 @@ getAnnotations <- function(enrichmentUUID="-1", annoSelectStr="MESH=checked,PHAR
   return(200)
 } 
 
+# Keeps looping and looks for unfinished requests
 queue <- function(){
   while(TRUE){
-    # Get Queue directory
-    queueDir <- paste0(APP_DIR, "Queue/")
-    inputSets <- Sys.glob(paste0(queueDir, "[0-9]*__queue__*"), dirmark=FALSE)
-    # ignore placeholder queue file
-    inputSets <- unlist(lapply(inputSets, function(x){
-      if(x == paste0(queueDir, "0__queue__default")) {
-        return(NULL)
-      }
-      return(x)
-    }))
-    inputSets <- inputSets[!sapply(inputSets, is.null)]
-    # Sort inputSets
-    sort(inputSets)
+    # Connect to db
+    poolQueue <- dbPool(
+      drv = dbDriver("PostgreSQL", max.con = 100),
+      dbname = tox21db$database,
+      host = tox21db$host,
+      user = tox21db$uid,
+      password = tox21db$pwd,
+      idleTimeout = 3600000
+    )
     
-    # Only process first five requests in queue at a time
-    upperBound <- length(inputSets)
-    if(length(inputSets) > 5){
-      upperBound <- 5
+    # Get only unfinished requests ("finished" flag is set to 0)
+    query <- sqlInterpolate(ANSI(), paste0("SELECT * FROM queue WHERE finished=0;"), id="createQueueEntry")
+    outp <- dbGetQuery(poolQueue, query)
+    
+    # Close pool
+    poolClose(poolQueue)
+    
+    if(nrow(outp) > 0){
+    
+      # Sort requests from database by index value
+      inputSets <- outp[order(outp$index),] 
+  
+      # Only process first five requests in queue at a time
+      upperBound <- nrow(inputSets)
+      if(nrow(inputSets) > 5){
+        upperBound <- 5
+      }
+      
+      future({
+
+      mclapply(1:upperBound, mc.cores=4, mc.silent=FALSE, function(input){
+        # Get data from queue table entry
+        queueFile <- inputSets[input,]
+        mode <- queueFile[1,1]
+        enrichmentUUID <- queueFile[1,2]
+        annoSelectStr <- queueFile[1,3]
+        nodeCutoff <- queueFile[1,4]
+        status_code <- 500
+        
+        # Connect to DB to get status info
+        poolStatus <- dbPool(
+          drv = dbDriver("PostgreSQL", max.con = 100),
+          dbname = tox21db$database,
+          host = tox21db$host,
+          user = tox21db$uid,
+          password = tox21db$pwd,
+          idleTimeout = 3600000
+        )
+        
+        # Get status entry for corresponding queue entry
+        query <- sqlInterpolate(ANSI(), paste0("SELECT * FROM status WHERE uuid='",enrichmentUUID,"';"), id="fetchStatus")
+        outp <- dbGetQuery(poolStatus, query)
+        statusFiles <- outp
+  
+        # Read status entry(ies) and change flag to signify enrichment has started
+        for(i in 1:nrow(statusFiles)){
+          tmpSetName <- statusFiles[i, "setname"]
+          print("tmpSetName")
+          print(tmpSetName)
+          query <- sqlInterpolate(ANSI(), paste0("UPDATE status SET step=1 WHERE uuid='",enrichmentUUID,"' AND setname='",tmpSetName,"';"), id="fetchStatus")
+          outp <- dbGetQuery(poolStatus, query)
+        }
+          
+        # Close pool
+        poolClose(poolStatus)
+        
+        # Perform enrichment analysis or fetch relevant annotations
+        if(mode == "annotation") {
+          status_code <- getAnnotations(enrichmentUUID=enrichmentUUID, annoSelectStr=annoSelectStr, nodeCutoff=nodeCutoff)
+        } else { # else query R API server 
+          status_code <- performEnrichment(enrichmentUUID=enrichmentUUID, annoSelectStr=annoSelectStr, nodeCutoff=nodeCutoff)
+        } 
+        
+        # Connect to DB to set appropriate finishing flags
+        poolFinished <- dbPool(
+          drv = dbDriver("PostgreSQL", max.con = 100),
+          dbname = tox21db$database,
+          host = tox21db$host,
+          user = tox21db$uid,
+          password = tox21db$pwd,
+          idleTimeout = 3600000
+        )
+        
+        # Check if request was cancelled
+        query <- sqlInterpolate(ANSI(), paste0("SELECT cancel FROM queue WHERE uuid='",enrichmentUUID,"';"), id="checkCancel")
+        outp <- dbGetQuery(poolFinished, query)
+        
+        cancelValue <- outp[1, "cancel"]
+        if(cancelValue == 1){
+          status_code <- -1
+        }
+        
+        # Upon success
+        if (status_code == 200){
+          # Set flag for queue
+          query <- sqlInterpolate(ANSI(), paste0("UPDATE queue SET finished=1 WHERE uuid='",enrichmentUUID,"';"), id="deleteEntries")
+          outp <- dbGetQuery(poolFinished, query)
+        } else if (status_code == -1) {
+          print(paste0("Request cancelled for ", enrichmentUUID, ". Deleting..."))
+          # Set flag for queue
+          query <- sqlInterpolate(ANSI(), paste0("UPDATE queue SET finished=1 WHERE uuid='",enrichmentUUID,"';"), id="deleteEntries")
+          outp <- dbGetQuery(poolFinished, query)
+          # Delete from enrichment_list
+          query <- sqlInterpolate(ANSI(), paste0("DELETE FROM enrichment_list WHERE id='",enrichmentUUID,"';"), id="deleteEntries")
+          outp <- dbGetQuery(poolFinished, query)
+        } else { # Else, generate error file for reference
+          print(paste0("Error performing enrichment: ", status_code, " : "))
+          # Set error message in queue table
+          query <- sqlInterpolate(ANSI(), paste0("UPDATE queue SET error='Error performing enrichment. Please try again.' WHERE uuid='",enrichmentUUID,"';"), id="addErrorMsg")
+          outp <- dbGetQuery(poolFinished, query)
+          # Set flag for queue
+          query <- sqlInterpolate(ANSI(), paste0("UPDATE queue SET finished=1 WHERE uuid='",enrichmentUUID,"';"), id="deleteEntries")
+          outp <- dbGetQuery(poolFinished, query)
+        }
+        # Close pool
+        poolClose(poolFinished)
+      })
+      }, seed=TRUE)
+      
     }
-    mclapply(inputSets[1:upperBound], mc.cores=4, mc.silent=FALSE, function(input){
-      # Get data from queue file
-      queueFile <- read.table(input, stringsAsFactors=FALSE)
-      mode <- queueFile[1,1]
-      enrichmentUUID <- queueFile[1,2]
-      annoSelectStr <- queueFile[1,3]
-      nodeCutoff <- queueFile[1,4]
-      status_code <- 500
-      
-      # Read status file(s) and append marker to signify enrichment has started
-      statusFilePath <- paste0(queueDir, "__status__", enrichmentUUID)
-      statusFiles <- Sys.glob(paste0(statusFilePath, "__*"))
-      for(x in statusFiles){
-        statusFile <- file(x)
-        writeLines(paste0("waiting\tstep1"), statusFile)
-        close(statusFile)  
-      }
-      
-      # Perform enrichment analysis or fetch relevant annotations
-      if(mode == "annotation") {
-        status_code <- getAnnotations(enrichmentUUID=enrichmentUUID, annoSelectStr=annoSelectStr)
-      } else { # else query R API server 
-        status_code <- performEnrichment(enrichmentUUID=enrichmentUUID, annoSelectStr=annoSelectStr, nodeCutoff=nodeCutoff)
-      } 
-
-      # Upon success
-      if (status_code == 200){
-        # Delete queue file
-        unlink(input)
-        # Delete status files
-        for(x in statusFiles){
-          unlink(x) 
-        } 
-      } else if (status_code == -1) {
-        print(paste0("Request cancelled for ", enrichmentUUID, ". Deleting..."))
-        # Delete queue file
-        unlink(input)
-        # Delete status files
-        for(x in statusFiles){
-          unlink(x) 
-        } 
-      } else { # Else, generate error file for reference
-        print(paste0("Error performing enrichment: ", status_code, " : "))
-        file.create(paste0(queueDir, "error__", enrichmentUUID))
-        errorFile <- file(paste0(queueDir, "error__", enrichmentUUID))
-        writeLines(paste0(status_code), errorFile)
-        close(errorFile)
-        # Delete queue file
-        unlink(input)
-        # Delete status files
-        for(x in statusFiles){
-          unlink(x) 
-        } 
-      }
-    })
-
     # Wait
     Sys.sleep(2)
   }
