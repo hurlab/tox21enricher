@@ -1318,7 +1318,7 @@ submit <- function(mode="", input="", annotations="MESH,PHARMACTIONLIST,ACTIVITY
   
   # Create input file in queue
   createInput(transactionId=transactionId, enrichmentSets=casrnValidatedInput, setNames=setNames, mode=mode, nodeCutoff=cutoff, annoSelectStr=annotations)
-  queue(mode=mode, enrichmentUUID=transactionId, annoSelectStr=annotations, nodeCutoff=cutoff)
+  queue(mode=mode, enrichmentUUID=transactionId, annoSelectStr=annotations, nodeCutoff=cutoff, setNames=setNames)
   
   return(transactionId)
 }
@@ -1347,10 +1347,11 @@ function(id="-1", res) {
   # async
   future_promise({
     fName <- paste0(APP_DIR, "Output/", id, "/tox21enricher_", id, ".zip")
+    # Returns 1 if completed, 0 if not.
     if(file.exists(fName)){
-      return(TRUE)  
+      return(1)  
     } else {
-      return(FALSE)
+      return(0)
     }
     
   })
