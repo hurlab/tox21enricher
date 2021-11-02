@@ -172,7 +172,7 @@ shinyUI(function(){
             # Settings button
             actionButton(inputId="settingsButton", label="Settings", icon=icon("cog")),
             # Search enrichments button
-            actionButton(inputId="searchButton", label="View previous enrichment", icon=icon("search")),
+            actionButton(inputId="searchButton", label="View previous results", icon=icon("search")),
             # Theme toggle
             checkboxInput(inputId="changeThemeToggle", label=HTML(paste0(icon("moon"), " Dark theme"))),
             uiOutput("themeStatus"),
