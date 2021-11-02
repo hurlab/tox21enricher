@@ -1779,6 +1779,12 @@ shinyServer(function(input, output, session) {
             # Show error message on main page
             shinyjs::show(id="errorBox")
             
+            # Hide waiting page
+            shinyjs::hide(id="waitingPage")
+            
+            # Re-enable view previous button
+            shinyjs::enable(id="searchButton")
+            
             if(badConnectionFlag == TRUE){
               output$error_box <- renderUI({
                 HTML(paste0("<div class=\"text-danger\">Error: Cannot connect to the Tox21 Enricher server.</div>"))
@@ -1861,6 +1867,10 @@ shinyServer(function(input, output, session) {
           shinyjs::hide(id="resultsContainer")
           # Show error message on main page
           shinyjs::show(id="errorBox")
+          # Hide waiting page
+          shinyjs::hide(id="waitingPage")
+          # Re-enable view previous button
+          shinyjs::enable(id="searchButton")
           output$error_box <- renderUI({
             HTML(paste0("<div class=\"text-danger\">Error: Cannot connect to Tox21 Enricher server.</div>"))
           })
@@ -1877,6 +1887,10 @@ shinyServer(function(input, output, session) {
           shinyjs::enable(id="refresh")
           # Hide loading spinner
           shinyjs::hide(id="resultsContainer")
+          # Hide waiting page
+          shinyjs::hide(id="waitingPage")
+          # Re-enable view previous button
+          shinyjs::enable(id="searchButton")
           # Show error message on main page
           shinyjs::show(id="errorBox")
           output$error_box <- renderUI({
@@ -1995,6 +2009,12 @@ shinyServer(function(input, output, session) {
           # Show error message on main page
           shinyjs::show(id="errorBox")
           
+          # Hide waiting page
+          shinyjs::hide(id="waitingPage")
+          
+          # Re-enable view previous button
+          shinyjs::enable(id="searchButton")
+          
           output$error_box <- renderUI({
             HTML(paste0("<div class=\"text-danger\">Error: Problem creating input files for enrichment.</div>"))
           })
@@ -2051,6 +2071,12 @@ shinyServer(function(input, output, session) {
           
           # Show error message on main page
           shinyjs::show(id="errorBox")
+          
+          # Hide waiting page
+          shinyjs::hide(id="waitingPage")
+          
+          # Re-enable view previous button
+          shinyjs::enable(id="searchButton")
           
           output$error_box <- renderUI({
             HTML(paste0("<div class=\"text-danger\">Error: ", content(resp, as="text"), "</div>"))
@@ -2116,6 +2142,12 @@ shinyServer(function(input, output, session) {
           
           # Show error message on main page
           shinyjs::show(id="errorBox")
+          
+          # Hide waiting page
+          shinyjs::hide(id="waitingPage")
+          
+          # Re-enable view previous button
+          shinyjs::enable(id="searchButton")
           
           output$error_box <- renderUI({
             HTML(paste0("<div class=\"text-danger\">Error: ", errorFile, "</div>"))
@@ -2251,9 +2283,6 @@ shinyServer(function(input, output, session) {
       
       # Show error message on main page
       shinyjs::show(id="errorBox")
-
-      # Reset results page
-      #shinyjs::reset(id="resultsContainer")
       
       output$error_box <- renderUI({
         HTML(paste0("<div class=\"text-danger\">Request cancelled.</div>"))
