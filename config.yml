@@ -16,15 +16,14 @@ default:
     appdir: "/home/username/tox21enricher/"
     # Location of your Python installation
     python: "/home/username/anaconda3/envs/my-rdkit-env/bin/python3.6"
+    # Number of cores for multithreading
+    cores: 4
   tox21enricher-queue:
     ### Database information for connecting to Postgres database ###
     driver: 'Postgres'
-    server: '127.0.0.1:5432/tox21enricher'
+    server: '127.0.0.1:5432/tox21queue'
     host: 'localhost'
-    uid: 'username'
-    pwd: "password"
+    uid: 'username_queue'
+    pwd: "password_queue"
     port: 5432
-    database: 'tox21enricher'
-    ### Directories/pathing ###
-    # The application's home directory
-    appdir: "/home/username/tox21enricher/"
+    database: 'tox21queue'

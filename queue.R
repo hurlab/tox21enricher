@@ -2,7 +2,6 @@
 library(config)
 library(future)
 library(ggplot2)
-library(httr)
 library(parallel)
 library(plyr)
 library(pool)
@@ -15,17 +14,21 @@ library(tidyverse)
 library(uuid)
 library(xlsx)
 
+# Load params from config file
+tox21config <- config::get("tox21enricher")
+tox21queue <- config::get("tox21enricher-queue")
+CORES <- tox21config$cores
+APP_DIR <- tox21config$appdir
+
 # Define info for connecting to PostgreSQL Tox21 Enricher database on server startup
-tox21db <- config::get("tox21enricher-queue")
-APP_DIR <- tox21db$appdir
 pool <- dbPool(
-  drv = dbDriver("PostgreSQL",max.con = 100),
-  dbname = tox21db$database,
-  host = tox21db$host,
-  user = tox21db$uid,
-  password = tox21db$pwd,
-  port = tox21db$port,
-  idleTimeout = 3600000
+    drv=dbDriver("PostgreSQL", max.con=100),
+    dbname=tox21config$database,
+    host=tox21config$host,
+    user=tox21config$uid,
+    password=tox21config$pwd,
+    port=tox21config$port,
+    idleTimeout=3600000
 )
 
 # Grab annotation list from Tox21 Enricher database on server startup
@@ -48,33 +51,32 @@ outpChemDetail <- dbGetQuery(pool, queryChemDetail)
 poolClose(pool)
 
 # Base annotations
-DSSTox2name           <- list()
-DSSTox2CASRN          <- list()
-CASRN2DSSTox          <- list()
-tmp_DSSTox2name       <- list()
-tmp_DSSTox2CASRN      <- list()
-tmp_CASRN2DSSTox      <- list()
+DSSTox2name <- list()
+DSSTox2CASRN <- list()
+CASRN2DSSTox <- list()
+tmp_DSSTox2name <- list()
+tmp_DSSTox2CASRN <- list()
+tmp_CASRN2DSSTox <- list()
 
 # DrugMatrix annotations
-CASRN2funCatTerm      <- list()
-funCatTerm2CASRN      <- list()
-funCat2CASRN          <- list()
-term2funCat           <- list()
+CASRN2funCatTerm <- list()
+funCatTerm2CASRN <- list()
+funCat2CASRN <- list()
+term2funCat <- list()
 
 #TODO: speed this up vvv
 # Load base Annotations
 baseAnnotations <- apply(outpChemDetail, 1, function(i){
-  if (i["testsubstance_chemname"] == "") {
-    DSSTox2name[[i["dtxrid"]]]  <<- i["testsubstance_chemname"]
-  }
-  else {
-    DSSTox2name[[i["dtxrid"]]]  <<- "";
-  }
-  if (i["casrn"] != "") {
-    DSSTox2CASRN[[i["dtxrid"]]] <<- i["casrn"]
-    CASRN2DSSTox[[i["casrn"]]] <<- list() # instantiate with list()
-    CASRN2DSSTox[[i["casrn"]]][i["dtxrid"]] <<- 1 # populate with 1
-  }
+    if (i["testsubstance_chemname"] == "") {
+        DSSTox2name[[i["dtxrid"]]] <<- i["testsubstance_chemname"]
+    } else {
+        DSSTox2name[[i["dtxrid"]]] <<- "";
+    }
+    if (i["casrn"] != "") {
+        DSSTox2CASRN[[i["dtxrid"]]] <<- i["casrn"]
+        CASRN2DSSTox[[i["casrn"]]] <<- list() # instantiate with list()
+        CASRN2DSSTox[[i["casrn"]]][i["dtxrid"]] <<- 1 # populate with 1
+    }
 })
 
 print("! Finished loading base annotations.")
@@ -82,36 +84,36 @@ print("! Finished loading base annotations.")
 # Load DrugMatrix Annotations
 # CASRN2funCatTerm
 CASRN2funCatTerm_lv1 <- lapply(split(outpAnnotations, outpAnnotations$casrn), function(x){
-  return(split(x, x$annoclassname)) 
+    return(split(x, x$annoclassname)) 
 })
 CASRN2funCatTerm <- lapply(CASRN2funCatTerm_lv1, function(x){
-  return(lapply(x, function(y){
-    inner_CASRN2funCatTerm <- lapply(y$annoterm, function(z) 1)
-    names(inner_CASRN2funCatTerm) <- y$annoterm
-    return(inner_CASRN2funCatTerm)
-  }))
+    return(lapply(x, function(y){
+        inner_CASRN2funCatTerm <- lapply(y$annoterm, function(z) 1)
+        names(inner_CASRN2funCatTerm) <- y$annoterm
+        return(inner_CASRN2funCatTerm)
+    }))
 })
 
 # funCatTerm2CASRN
 funCatTerm2CASRN_lv1 <- lapply(split(outpAnnotations, outpAnnotations$annoclassname), function(x){
-  return(split(x, x$annoterm))
+        return(split(x, x$annoterm))
 })
 funCatTerm2CASRN <- lapply(funCatTerm2CASRN_lv1, function(x){
-  return(lapply(x, function(y) {
-    inner_funCatTerm2CASRN <- lapply(y$casrn, function(z) 1) 
-    names(inner_funCatTerm2CASRN) <- (y$casrn)
-    return(inner_funCatTerm2CASRN)
-  }))
+    return(lapply(x, function(y) {
+        inner_funCatTerm2CASRN <- lapply(y$casrn, function(z) 1) 
+        names(inner_funCatTerm2CASRN) <- (y$casrn)
+        return(inner_funCatTerm2CASRN)
+    }))
 })
 
 # funCat2CASRN
 funCat2CASRN <- lapply(split(outpAnnotations, outpAnnotations$annoclassname), function(x) {
-  return(split(x, x$casrn))
+    return(split(x, x$casrn))
 })
 
 # term2funCat
 term2funCat <- lapply(split(outpAnnotations, outpAnnotations$annoterm), function(x) {
-  return(split(x, x$annoclassname))
+    return(split(x, x$annoclassname))
 })
 
 print("! Finished loading DrugMatrix annotations.")
@@ -124,2662 +126,2458 @@ print("! Ready to accept connections.")
 # annoSelectStr String, comma-delimited, containing all enabled annotations for this enrichment process. Passed from Tox21 Enricher application.
 # nodeCutoff numerical value between 1-100 for the max number to use in clustering.
 performEnrichment <- function(enrichmentUUID="-1", annoSelectStr="MESH=checked,PHARMACTIONLIST=checked,ACTIVITY_CLASS=checked,ADVERSE_EFFECT=checked,INDICATION=checked,KNOWN_TOXICITY=checked,MECH_LEVEL_1=checked,MECH_LEVEL_2=checked,MECH_LEVEL_3=checked,MECHANISM=checked,MODE_CLASS=checked,PRODUCT_CLASS=checked,STRUCTURE_ACTIVITY=checked,TA_LEVEL_1=checked,TA_LEVEL_2=checked,TA_LEVEL_3=checked,THERAPEUTIC_CLASS=checked,TISSUE_TOXICITY=checked,DRUGBANK_ATC=checked,DRUGBANK_ATC_CODE=checked,DRUGBANK_CARRIERS=checked,DRUGBANK_ENZYMES=checked,DRUGBANK_TARGETS=checked,DRUGBANK_TRANSPORTERS=checked,CTD_CHEM2DISEASE=checked,CTD_CHEM2GENE_25=checked,CTD_CHEMICALS_DISEASES=checked,CTD_CHEMICALS_GENES=checked,CTD_CHEMICALS_GOENRICH_CELLCOMP=checked,CTD_CHEMICALS_GOENRICH_MOLFUNCT=checked,CTD_CHEMICALS_PATHWAYS=checked,CTD_GOSLIM_BIOPROCESS=checked,CTD_PATHWAY=checked,HTS_ACTIVE=checked,LEADSCOPE_TOXICITY=checked,MULTICASE_TOX_PREDICTION=checked,TOXCAST_ACTIVE=checked,TOXINS_TARGETS=checked,TOXPRINT_STRUCTURE=checked,TOXREFDB=checked,", nodeCutoff=10) {
-  
-  # async
-  #future_promise({
-  
-  ###### Variables ######
-  
-  # Connect to db
-  poolInput <- dbPool(
-    drv = dbDriver("PostgreSQL", max.con = 100),
-    dbname = tox21db$database,
-    host = tox21db$host,
-    user = tox21db$uid,
-    password = tox21db$pwd,
-    port = tox21db$port,
-    idleTimeout = 3600000
-  )
-  # Add request to database
-  query <- sqlInterpolate(ANSI(), paste0("INSERT INTO enrichment_list(id, chemlist, type, node_cutoff, anno_select_str, timestamp_start, ip) VALUES('", enrichmentUUID, "','", "placeholder", "','", "placeholder", "','", nodeCutoff, "','", annoSelectStr, "','", Sys.time(), "','", "placeholder", "');"), id="addToDb")
-  outp <- dbGetQuery(poolInput, query)
-  
-  poolClose(poolInput)
-  
-  # Enrichment parameters
-  annoSelectStrSplit <- strsplit(annoSelectStr,"=checked,",fixed=TRUE)
-  
-  annoSelectStrPrepared <- paste0(paste(unlist(annoSelectStrSplit), collapse="=checked "), "=checked")  # annotation selection string
-  funCat2Selected <- list()
-  annoIndex <- 1
-  for(i in annoSelectStrSplit[[1]]) {
-    funCat2Selected[[i]] <- 1
-  }
-  inDir <- paste0(APP_DIR, "Input/", enrichmentUUID)    # Directory for input files for enrichment set
-  outDir <- paste0(APP_DIR, "Output/", enrichmentUUID)  # Directory for output files for enrichment set
-  
-  # CASRN count
-  funCatTerm2CASRNCount <- list() 
-  funCat2CASRNCount     <- list()
-  funCat2termCount      <- list()
-  
-  # DSSTox Chart
-  pvalueThresholdToDisplay	  <- 0.2		# p-value < 0.1 to be printed
-  
-  # DSSTox Clustering
-  similarityTermOverlap		    <- 3
-  similarityThreshold		      <- 0.50
-  initialGroupMembership		  <- 3
-  finalGroupMembership		    <- 3
-  multipleLinkageThreshold	  <- 0.50
-  EASEThreshold				        <- 1.0
-  
-  ###### Process ######
-  
-  
-  # Calculate total CASRN count 
-  tmp_funCat2CASRNCount <- list()
-  tmp_funCat2termCount <- list()
-  tmp_funCatTerm2CASRNCount <- list()
-  tmp_innerFunCatTerm2CASRNCount <- list()
-  
-  funCat2CASRNCount <- lapply(names(funCat2Selected), function(funCat){
-    tmpArray <- names(funCat2CASRN[[funCat]])
-    tmp_funCat2CASRNCount[[funCat]] <- length(tmpArray)
-    return(tmp_funCat2CASRNCount)
-  })
-  funCat2CASRNCount <- unlist(funCat2CASRNCount)
-  
-  funCat2termCount <- lapply(names(funCat2Selected), function(funCat){
-    terms <- names(funCatTerm2CASRN[[funCat]])
-    tmp_funCat2termCount[[funCat]] <- length(terms)
-    return(tmp_funCat2termCount)
-  })
-  funCat2termCount <- unlist(funCat2termCount)
-  
-  funCatTerm2CASRNCount_lv1 <- lapply(names(funCat2Selected), function(funCat){
-    tmpList <- vector("list", 1)
-    tmpList[1] <- funCat
-  })
-  names(funCatTerm2CASRNCount_lv1) <- names(funCat2Selected)
-  funCatTerm2CASRNCount <- lapply(funCatTerm2CASRNCount_lv1, function(funCat){
-    tmp_funCatNames <- names(funCatTerm2CASRN[[funCat]])
+    # Connect to db
+    poolInput <- dbPool(
+        drv=dbDriver("PostgreSQL", max.con=100),
+        dbname=tox21queue$database,
+        host=tox21queue$host,
+        user=tox21queue$uid,
+        password=tox21queue$pwd,
+        port=tox21queue$port,
+        idleTimeout=3600000
+    )
     
-    tmp_funCatTerm2CASRNCount <- lapply(tmp_funCatNames, function(term){
-      return(length(names(funCatTerm2CASRN[[funCat]][[term]])))
-    })
-    names(tmp_funCatTerm2CASRNCount) <- names(funCatTerm2CASRN[[funCat]])
-    return(tmp_funCatTerm2CASRNCount)
-  })
-  
-  # Load input DSSTox ID or CASRN ID sets
-  inputFiles <- list.files(path=paste0(APP_DIR, "Input/", enrichmentUUID), pattern="*.txt", full.names=TRUE)
-  
-  # Throw error if no input sets
-  if(length(inputFiles) < 1){
-    return("No valid input sets. Cannot perform enrichment analysis.")
-  }
-  
-  ldf <- lapply(inputFiles, function(i){
-    openInput <- tryCatch({
-      read.delim(file=i, header=FALSE, sep="\t", comment.char="", fill=TRUE)
-    }, error=function(e){
-      return(NULL)
-    })
-  })
-  
-  # Check which input sets are good
-  ldf <- lapply(1:length(ldf), function(x){
-    return(ldf[[x]])
-  })
-  
-  # Assign names to ldf
-  inputFilesNames <- unlist(lapply(inputFiles, function(x){
-    x_lv1 <- gsub(paste0(APP_DIR, "Input/", enrichmentUUID, "/"), "", x)
-    x_lv2 <- gsub(".txt", "", x_lv1)
-  }))
-  names(ldf) <- inputFilesNames
-  ldf <- ldf[!sapply(ldf, is.null)]
+    # Add request to database
+    query <- sqlInterpolate(ANSI(), paste0("INSERT INTO enrichment_list(id, chemlist, type, node_cutoff, anno_select_str, timestamp_start, ip) VALUES('", enrichmentUUID, "','", "placeholder", "','", "placeholder", "','", nodeCutoff, "','", annoSelectStr, "','", Sys.time(), "','", "placeholder", "');"), id="addToDb")
+    outp <- dbGetQuery(poolInput, query)
+    # Close pool
+    poolClose(poolInput)
 
-  # If there are no good input sets, crash gracefully. If we have at least one, 
-  if(length(ldf) < 1){
-    return("No lines available in any input file. Cannot perform enrichment analysis.")
-  }
-  
-  tmp_inputIDListHash <- list()
-  inputIDListHash <- lapply(ldf, function(i){
-    res <- apply(i, 1, function(j){
-      tmp_inputIDListHash[[j[1]]] <- 1
-      return(tmp_inputIDListHash)
+    # Enrichment parameters
+    annoSelectStrSplit <- unlist(str_split(annoSelectStr, "=checked,"))
+    # Remove blanks
+    annoSelectStrSplit <- annoSelectStrSplit[nchar(annoSelectStrSplit) > 0]
+    
+    # Create funCat2Selected
+    funCat2Selected <- lapply(annoSelectStrSplit, function(i) {
+        return(1)
     })
-  })
-  print(paste0("Processing ", length(inputIDListHash), " set(s)."))
-  
-  # Perform EASE calculation
-  setNameCounter <- 1
-  
-  outfileBaseNames <- lapply(1:length(ldf), function(setNameCtr){
-    setNameItem <- str_remove(inputFiles[[setNameCtr]], paste0(APP_DIR, "Input/", enrichmentUUID, "/")) # Remove path
-    setNameItem <- str_remove(setNameItem, ".txt") # Remove filename extension
-  })
+    names(funCat2Selected) <- annoSelectStrSplit
+
+    inDir <- paste0(APP_DIR, "Input/", enrichmentUUID) # Directory for input files for enrichment set
+    outDir <- paste0(APP_DIR, "Output/", enrichmentUUID) # Directory for output files for enrichment set
+
+    # CASRN count
+    funCatTerm2CASRNCount <- list() 
+    funCat2CASRNCount <- list()
+    funCat2termCount <- list()
+
+    # DSSTox Chart
+    pvalueThresholdToDisplay <- 0.2 # p-value < 0.1 to be printed
+
+    # DSSTox Clustering
+    similarityTermOverlap <- 3
+    similarityThreshold <- 0.50
+    initialGroupMembership <- 3
+    finalGroupMembership <- 3
+    multipleLinkageThreshold <- 0.50
+    EASEThreshold <- 1.0
+
+    # Calculate total CASRN count 
+    tmp_funCat2CASRNCount <- list()
+    tmp_funCat2termCount <- list()
+    tmp_funCatTerm2CASRNCount <- list()
+    tmp_innerFunCatTerm2CASRNCount <- list()
+
+    funCat2CASRNCount <- lapply(names(funCat2Selected), function(funCat){
+        tmpArray <- names(funCat2CASRN[[funCat]])
+        tmp_funCat2CASRNCount[[funCat]] <- length(tmpArray)
+        return(tmp_funCat2CASRNCount)
+    })
+    funCat2CASRNCount <- unlist(funCat2CASRNCount)
+
+    funCat2termCount <- lapply(names(funCat2Selected), function(funCat){
+        terms <- names(funCatTerm2CASRN[[funCat]])
+        tmp_funCat2termCount[[funCat]] <- length(terms)
+        return(tmp_funCat2termCount)
+    })
+    funCat2termCount <- unlist(funCat2termCount)
+
+    funCatTerm2CASRNCount_lv1 <- lapply(names(funCat2Selected), function(funCat){
+        tmpList <- vector("list", 1)
+        tmpList[1] <- funCat
+    })
+    names(funCatTerm2CASRNCount_lv1) <- names(funCat2Selected)
+    funCatTerm2CASRNCount <- lapply(funCatTerm2CASRNCount_lv1, function(funCat){
+        tmp_funCatNames <- names(funCatTerm2CASRN[[funCat]])
+        tmp_funCatTerm2CASRNCount <- lapply(tmp_funCatNames, function(term){
+            return(length(names(funCatTerm2CASRN[[funCat]][[term]])))
+        })
+        names(tmp_funCatTerm2CASRNCount) <- names(funCatTerm2CASRN[[funCat]])
+        return(tmp_funCatTerm2CASRNCount)
+    })
+
+    # Load input DSSTox ID or CASRN ID sets
+    inputFiles <- list.files(path=paste0(APP_DIR, "Input/", enrichmentUUID), pattern="*.txt", full.names=TRUE)
+
+    # Throw error if no input sets
+    if(length(inputFiles) < 1){
+        return("No valid input sets. Cannot perform enrichment analysis.")
+    }
+
+    ldf <- lapply(inputFiles, function(i){
+        openInput <- tryCatch({
+            read.delim(file=i, header=FALSE, sep="\t", comment.char="", fill=TRUE)
+        }, error=function(e){
+            return(NULL)
+        })
+    })
+
+    # Check which input sets are good
+    ldf <- lapply(seq_len(length(ldf)), function(x){
+        return(ldf[[x]])
+    })
+
+    # Assign names to ldf
+    inputFilesNames <- unlist(lapply(inputFiles, function(x){
+        x_lv1 <- gsub(paste0(APP_DIR, "Input/", enrichmentUUID, "/"), "", x)
+        x_lv2 <- gsub(".txt", "", x_lv1)
+    }))
+    names(ldf) <- inputFilesNames
+    ldf <- ldf[!vapply(ldf, is.null, FUN.VALUE=logical(1))]
+    
+    # If there are no good input sets, crash gracefully. If we have at least one, 
+    if(length(ldf) < 1){
+        return("No lines available in any input file. Cannot perform enrichment analysis.")
+    }
+
+    tmp_inputIDListHash <- list()
+    inputIDListHash <- lapply(ldf, function(i){
+        res <- apply(i, 1, function(j){
+            tmp_inputIDListHash[[j[1]]] <- 1
+            return(tmp_inputIDListHash)
+        })
+    })
+    print(paste0("Processing ", length(inputIDListHash), " set(s)."))
+
+    # Perform EASE calculation
+    setNameCounter <- 1
+
+    outfileBaseNames <- lapply(seq_len(length(ldf)), function(setNameCtr){
+        setNameItem <- str_remove(inputFiles[[setNameCtr]], paste0(APP_DIR, "Input/", enrichmentUUID, "/")) # Remove path
+        setNameItem <- str_remove(setNameItem, ".txt") # Remove filename extension
+    })
   names(inputIDListHash) <- outfileBaseNames
-  
-  # Connect to DB to get status info
-  poolStatus <- dbPool(
-    drv = dbDriver("PostgreSQL", max.con = 100),
-    dbname = tox21db$database,
-    host = tox21db$host,
-    user = tox21db$uid,
-    password = tox21db$pwd,
-    idleTimeout = 3600000
-  )
-  # Get set names from database
-  query <- sqlInterpolate(ANSI(), paste0("SELECT setname FROM status WHERE uuid='",enrichmentUUID,"';"), id="fetchStatus")
-  outp <- dbGetQuery(poolStatus, query)
-  statusFiles <- outp[,"setname"]
-  # Set step flag for each set name
-  for(x in statusFiles){
-    query <- sqlInterpolate(ANSI(), paste0("UPDATE status SET step=2 WHERE uuid='",enrichmentUUID,"' AND setname='",x,"';"), id="fetchStatus")
-    outp <- dbGetQuery(poolStatus, query)
-  }
-  # Close pool
-  poolClose(poolStatus)
 
-  # multi-core
-  enrichmentStatusComplete <- mclapply(outfileBaseNames, mc.cores=4, mc.silent=FALSE, function(i){
-  #enrichmentStatusComplete <- lapply(outfileBaseNames, function(i){
-    
-    # Get list of CASRN names
-    CASRNS <- lapply(inputIDListHash[[i]], function(j){
-      return(names(j))
+    # Connect to DB to get status info
+    poolStatus <- dbPool(
+        drv=dbDriver("PostgreSQL", max.con=100),
+        dbname=tox21queue$database,
+        host=tox21queue$host,
+        user=tox21queue$uid,
+        password=tox21queue$pwd,
+        idleTimeout=3600000
+    )
+
+    # Get set names from database
+    query <- sqlInterpolate(ANSI(), paste0("SELECT setname FROM status WHERE uuid='", enrichmentUUID, "';"), id="fetchStatus")
+    outp <- dbGetQuery(poolStatus, query)
+    statusFiles <- outp[, "setname"]
+    # Set step flag for each set name
+    lapply(statusFiles, function(x){
+        query <- sqlInterpolate(ANSI(), paste0("UPDATE status SET step=2 WHERE uuid='", enrichmentUUID, "' AND setname='", x, "';"), id="fetchStatus")
+        outp <- dbGetQuery(poolStatus, query)
     })
+    # Close pool
+    poolClose(poolStatus)
+
+    # multi-core
+    enrichmentStatusComplete <- mclapply(outfileBaseNames, mc.cores=CORES, mc.silent=FALSE, function(i){
+        # Get list of CASRN names
+        CASRNS <- lapply(inputIDListHash[[i]], function(j){
+            return(names(j))
+        })
+
+        # Extract file name from path
+        outfileBase <- i
+
+        # Check mapped CASRNS
+        mappedCASRNs <- vector("list", length(CASRNS))
+        mappedCASRNHash <- list()
+        names(mappedCASRNs) <- CASRNS
+        mappedCASRNs <- lapply(CASRNS, function(CASRN){
+            if(!is.null(CASRN2DSSTox[[CASRN]])){
+                mappedCASRNHash[[CASRN]] <- 1
+            }
+            return(mappedCASRNHash)
+        })
+        mappedCASRNs <- unlist(mappedCASRNs)
     
-    # Extract file name from path
-    outfileBase <- i
-    
-    # Check mapped CASRNS
-    mappedCASRNs <- vector("list", length(CASRNS))
-    mappedCASRNHash <- list()
-    names(mappedCASRNs) <- CASRNS
-    mappedCASRNs <- lapply(CASRNS, function(CASRN){
-      if(is.null(CASRN2DSSTox[[CASRN]]) == FALSE){
-        mappedCASRNHash[[CASRN]] <- 1
-      }
-      return(mappedCASRNHash)
+        # Perform enrichment analysis
+        print(paste0("Performing enrichment on ", outfileBase, "..."))
+        enrichmentStatus <- perform_CASRN_enrichment_analysis(CASRNS, paste0(APP_DIR, "Output/", enrichmentUUID, "/"), outfileBase, mappedCASRNs, funCat2Selected, CASRN2funCatTerm, funCatTerm2CASRN, funCat2CASRNCount, funCat2termCount, funCatTerm2CASRNCount, pvalueThresholdToDisplay, similarityThreshold, initialGroupMembership, multipleLinkageThreshold, EASEThreshold, nodeCutoff, enrichmentUUID)
     })
-    mappedCASRNs <- unlist(mappedCASRNs)
-    
-    # Perform enrichment analysis
-    print(paste0("Performing enrichment on ", outfileBase, "..."))
-    enrichmentStatus <- perform_CASRN_enrichment_analysis(CASRNS, paste0(APP_DIR, "Output/", enrichmentUUID, "/"), outfileBase, mappedCASRNs, funCat2Selected, CASRN2funCatTerm, funCatTerm2CASRN, funCat2CASRNCount, funCat2termCount, funCatTerm2CASRNCount, pvalueThresholdToDisplay, similarityThreshold, initialGroupMembership, multipleLinkageThreshold, EASEThreshold, nodeCutoff, enrichmentUUID)
-  })
-  
-  ########################################################################################
-  # Create individual GCT file
-  #
-  #
-  ########################################################################################
-  
-  # Update status file
-  # Connect to DB to get status info
-  poolStatus <- dbPool(
-    drv = dbDriver("PostgreSQL", max.con = 100),
-    dbname = tox21db$database,
-    host = tox21db$host,
-    user = tox21db$uid,
-    password = tox21db$pwd,
-    idleTimeout = 3600000
-  )
-  # Get set names from database
-  query <- sqlInterpolate(ANSI(), paste0("SELECT setname FROM status WHERE uuid='",enrichmentUUID,"';"), id="fetchStatus")
-  outp <- dbGetQuery(poolStatus, query)
-  statusFiles <- outp[,"setname"]
-  # Set step flag for each set name
-  for(x in statusFiles){
-    query <- sqlInterpolate(ANSI(), paste0("UPDATE status SET step=7 WHERE uuid='",enrichmentUUID,"' AND setname='",x,"';"), id="fetchStatus")
-    outp <- dbGetQuery(poolStatus, query)
-  }
-  # Close pool
-  poolClose(poolStatus)
-  
-  ARGV_0 <- inDir
-  ARGV_1 <- outDir 
-  ARGV_2 <- nodeCutoff
-  ARGV_3 <- "ALL"
-  ARGV_4 <- "P"
-  ARGV_5 <- 0.05
-  ARGV_6 <- "P"
-  
-  
-  # -------------------------------------
-  # Get the corresponding directory names
-  # -------------------------------------
-  baseinputDirName <- inDir
-  baseDirName			 <- outDir
-  baseNameSplit		 <- str_split(baseDirName, "/")
-  baseShortDirName <- ''
-  baseOutputDir	<- paste0(baseDirName,"/gct_per_set/",sep="")
-  baseOutputDirGct <- paste0(baseDirName,"/gct/",sep="")
-  dir.create(baseOutputDir)
 
-  # -------------------------------------
-  # Load CASRN name
-  # -------------------------------------
-  CAS <- outpChemDetail
-  CASRN2Name <- vector("list", length=nrow(CAS))
-  CASRN2Name <- lapply(1:nrow(CAS), function(x){
-    CAS[x,"testsubstance_chemname"]
-  })
-  names(CASRN2Name) <- lapply(1:nrow(CAS), function(x){
-    CAS[x,"casrn"]
-  })
-  
-  # Generate individual gct files
-  process_variable_DAVID_CHART_directories_individual_file (baseinputDirName, baseDirName, baseOutputDir, '', '', ARGV_4, ARGV_5, ARGV_6, CASRN2Name)
-  # Generate clustering images (heatmaps)
-  create_clustering_images (baseOutputDir, "-color=BR")
-  # Create DAVID Chart/Cluster files
-  create_david_chart_cluster (baseDirName, nodeCutoff, "ALL", "P", 0.05, "P")
-  # Generate heatmaps for multiple sets
-  create_clustering_images (baseOutputDirGct, "-color=BR")
-  # Create xlsx spreadsheets
-  setNames <- unlist(lapply(Sys.glob(paste0(baseDirName, "/*.*"), dirmark=FALSE), function(resultFile){
-    tmpSplit <- unlist(str_split(resultFile, paste0(baseDirName, "/"))) # remove path from file
-    tmpSplitName <- unlist(str_split(tmpSplit[2], "__"))[1] # Get set name
-    return(tmpSplitName)
-  }))
-  setNames <- setNames[!sapply(setNames, is.null)]
-  setNames <- unique(setNames) # Get only 1 copy of each set name
+    # Create individual GCT file
 
-  # Create Excel spreadsheets of existing files
-  lapply(setNames, function(i){
-    xlsxChart <- NULL
-    if(file.exists(paste0(baseDirName, "/", i, "__Chart.txt"))){
-      xlsxChart <- read.table(paste0(baseDirName, "/", i, "__Chart.txt"), header=TRUE, sep="\t", comment.char="", fill=FALSE)
-    }
-    xlsxChartSimple <- NULL
-    if(file.exists(paste0(baseDirName, "/", i, "__ChartSimple.txt"))){
-      xlsxChartSimple <- read.table(paste0(baseDirName, "/", i, "__ChartSimple.txt"), header=TRUE, sep="\t", comment.char="", fill=FALSE)
-    }
-    xlsxCluster <- NULL
-    if(file.exists(paste0(baseDirName, "/", i, "__Cluster.txt"))){
-      xlsxCluster <- read.table(paste0(baseDirName, "/", i, "__Cluster.txt"), header=FALSE, sep="\t", comment.char="", 
-                              col.names=seq_len(13), fill=TRUE ) #this needs to be treated differently due to having different # of columns
-    }
-    write.xlsx2(xlsxChart, paste0(baseDirName, "/", i, "__Chart.xlsx"), sheetName=paste0(i), col.names=TRUE, row.names=TRUE, append=FALSE)
-    write.xlsx2(xlsxChartSimple, paste0(baseDirName, "/", i, "__ChartSimple.xlsx"), sheetName=paste0(i), col.names=TRUE, row.names=TRUE, append=FALSE)
-    write.xlsx2(xlsxCluster, paste0(baseDirName, "/", i, "__Cluster.xlsx"), sheetName=paste0(i), col.names=TRUE, row.names=TRUE, append=FALSE)
-  })
-  
-  # zip result files
-  if(dir.exists(baseDirName)){
-    zipDir <- dir(baseDirName, recursive=TRUE, include.dirs=TRUE)
-    filesToZip <- unlist(lapply(zipDir, function(x) paste0(baseDirName, "/", x)))
-    system(paste0("cd ", baseDirName, "/ ; zip -r9X ./tox21enricher_", enrichmentUUID, ".zip ./*"))
-  } else { # Return with error if did not complete. Do not update in database
-    return(-1) 
-  }
-  
-  # Connect to db
-  poolUpdate <- dbPool(
-    drv = dbDriver("PostgreSQL", max.con = 100),
-    dbname = tox21db$database,
-    host = tox21db$host,
-    user = tox21db$uid,
-    password = tox21db$pwd,
-    port = tox21db$port,
-    idleTimeout = 3600000
-  )
-  
-  # update database with ending timestamp for enrichment
-  query <- sqlInterpolate(ANSI(), paste0("UPDATE enrichment_list SET timestamp_finish='", Sys.time(), "' WHERE id='", enrichmentUUID, "';"), id="addToDb")
-  outp <- dbGetQuery(poolUpdate, query)
-  
-  # Update status file(s)
-  # Connect to DB to get status info
-  poolStatus <- dbPool(
-    drv = dbDriver("PostgreSQL", max.con = 100),
-    dbname = tox21db$database,
-    host = tox21db$host,
-    user = tox21db$uid,
-    password = tox21db$pwd,
-    idleTimeout = 3600000
-  )
-  # Get set names from database
-  query <- sqlInterpolate(ANSI(), paste0("SELECT setname FROM status WHERE uuid='",enrichmentUUID,"';"), id="fetchStatus")
-  outp <- dbGetQuery(poolStatus, query)
-  statusFiles <- outp[,"setname"]
-  # Set step flag for each set name
-  for(x in statusFiles){
-    query <- sqlInterpolate(ANSI(), paste0("UPDATE status SET step=8 WHERE uuid='",enrichmentUUID,"' AND setname='",x,"';"), id="fetchStatus")
+    # Update status file
+    # Connect to DB to get status info
+    poolStatus <- dbPool(
+        drv=dbDriver("PostgreSQL", max.con=100),
+        dbname=tox21queue$database,
+        host=tox21queue$host,
+        user=tox21queue$uid,
+        password=tox21queue$pwd,
+        idleTimeout=3600000
+    )
+    # Get set names from database
+    query <- sqlInterpolate(ANSI(), paste0("SELECT setname FROM status WHERE uuid='", enrichmentUUID, "';"), id="fetchStatus")
     outp <- dbGetQuery(poolStatus, query)
-  }
-  # Close pool
-  poolClose(poolStatus)
-  
-  # success
-  return(200)
+    statusFiles <- outp[, "setname"]
+    # Set step flag for each set name
+    lapply(statusFiles, function(x){
+        query <- sqlInterpolate(ANSI(), paste0("UPDATE status SET step=7 WHERE uuid='", enrichmentUUID, "' AND setname='", x, "';"), id="fetchStatus")
+        outp <- dbGetQuery(poolStatus, query)
+    })
+    # Close pool
+    poolClose(poolStatus)
+
+    ARGV_0 <- inDir
+    ARGV_1 <- outDir 
+    ARGV_2 <- nodeCutoff
+    ARGV_3 <- "ALL"
+    ARGV_4 <- "P"
+    ARGV_5 <- 0.05
+    ARGV_6 <- "P"
+
+    # Get the corresponding directory names
+    baseinputDirName <- inDir
+    baseDirName <- outDir
+    baseShortDirName <- ''
+    baseOutputDir <- paste0(baseDirName, "/gct_per_set/")
+    baseOutputDirGct <- paste0(baseDirName, "/gct/")
+    dir.create(baseOutputDir)
+
+    # Load CASRN names
+    CAS <- outpChemDetail
+    CASRN2Name <- vector("list", length=nrow(CAS))
+    CASRN2Name <- lapply(seq_len(nrow(CAS)), function(x){
+        CAS[x, "testsubstance_chemname"]
+    })
+    names(CASRN2Name) <- lapply(seq_len(nrow(CAS)), function(x){
+        CAS[x, "casrn"]
+    })
+
+    # Generate individual gct files
+    process_variable_DAVID_CHART_directories_individual_file (baseinputDirName, baseDirName, baseOutputDir, '', '', ARGV_4, ARGV_5, ARGV_6, CASRN2Name)
+    # Generate clustering images (heatmaps)
+    create_clustering_images (baseOutputDir, "-color=BR")
+    # Create DAVID Chart/Cluster files
+    create_david_chart_cluster (baseDirName, nodeCutoff, "ALL", "P", 0.05, "P")
+    # Generate heatmaps for multiple sets
+    create_clustering_images (baseOutputDirGct, "-color=BR")
+    # Create xlsx spreadsheets
+    setNames <- unlist(lapply(Sys.glob(paste0(baseDirName, "/*.*"), dirmark=FALSE), function(resultFile){
+        tmpSplit <- unlist(str_split(resultFile, paste0(baseDirName, "/"))) # remove path from file
+        tmpSplitName <- unlist(str_split(tmpSplit[2], "__"))[1] # Get set name
+        return(tmpSplitName)
+    }))
+    setNames <- setNames[!vapply(setNames, is.null, FUN.VALUE=logical(1))]
+    setNames <- unique(setNames) # Get only 1 copy of each set name
+
+    # Create Excel spreadsheets of existing files
+    lapply(setNames, function(i){
+        xlsxChart <- NULL
+        if(file.exists(paste0(baseDirName, "/", i, "__Chart.txt"))){
+              xlsxChart <- read.table(paste0(baseDirName, "/", i, "__Chart.txt"), header=TRUE, sep="\t", comment.char="", fill=FALSE)
+        }
+        xlsxChartSimple <- NULL
+        if(file.exists(paste0(baseDirName, "/", i, "__ChartSimple.txt"))){
+              xlsxChartSimple <- read.table(paste0(baseDirName, "/", i, "__ChartSimple.txt"), header=TRUE, sep="\t", comment.char="", fill=FALSE)
+        }
+        xlsxCluster <- NULL
+        if(file.exists(paste0(baseDirName, "/", i, "__Cluster.txt"))){
+              xlsxCluster <- read.table(paste0(baseDirName, "/", i, "__Cluster.txt"), header=FALSE, sep="\t", comment.char="", col.names=seq_len(13), fill=TRUE ) #this needs to be treated differently due to having different # of columns
+        }
+        write.xlsx2(xlsxChart, paste0(baseDirName, "/", i, "__Chart.xlsx"), sheetName=paste0(i), col.names=TRUE, row.names=TRUE, append=FALSE)
+        write.xlsx2(xlsxChartSimple, paste0(baseDirName, "/", i, "__ChartSimple.xlsx"), sheetName=paste0(i), col.names=TRUE, row.names=TRUE, append=FALSE)
+        write.xlsx2(xlsxCluster, paste0(baseDirName, "/", i, "__Cluster.xlsx"), sheetName=paste0(i), col.names=TRUE, row.names=TRUE, append=FALSE)
+    })
+
+    # zip result files
+    if(dir.exists(baseDirName)){
+        zipDir <- dir(baseDirName, recursive=TRUE, include.dirs=TRUE)
+        filesToZip <- unlist(lapply(zipDir, function(x) paste0(baseDirName, "/", x)))
+        system2("cd", paste0(baseDirName, "/ ; zip -r9X ./tox21enricher_", enrichmentUUID, ".zip ./*"))
+    } else { # Return with error if did not complete. Do not update in database
+        return(-1) 
+    }
+
+    # Update status file(s)
+    # Connect to DB to get status info
+    poolStatus <- dbPool(
+        drv=dbDriver("PostgreSQL", max.con=100),
+        dbname=tox21queue$database,
+        host=tox21queue$host,
+        user=tox21queue$uid,
+        password=tox21queue$pwd,
+        idleTimeout=3600000
+    )
+
+    # update database with ending timestamp for enrichment
+    query <- sqlInterpolate(ANSI(), paste0("UPDATE enrichment_list SET timestamp_finish='", Sys.time(), "' WHERE id='", enrichmentUUID, "';"), id="addToDb")
+    outp <- dbGetQuery(poolStatus, query)
+
+    # Get set names from database
+    query <- sqlInterpolate(ANSI(), paste0("SELECT setname FROM status WHERE uuid='", enrichmentUUID, "';"), id="fetchStatus")
+    outp <- dbGetQuery(poolStatus, query)
+    statusFiles <- outp[, "setname"]
+    # Set step flag for each set name
+    lapply(statusFiles, function(x){
+        query <- sqlInterpolate(ANSI(), paste0("UPDATE status SET step=8 WHERE uuid='", enrichmentUUID, "' AND setname='", x, "';"), id="fetchStatus")
+        outp <- dbGetQuery(poolStatus, query)
+    })
+    # Close pool
+    poolClose(poolStatus)
+
+    # success
+    return(200)
 }
 
-#######################################################################################
+## SUBROUTINES
 
-################################## SUBROUTINES ########################################
-
-###### Generate individual GCT files ######
+# Generate individual GCT files
 process_variable_DAVID_CHART_directories_individual_file <- function(inputDirName, dirName, outputDir, extTag, additionalFileName, ARGV_4, ARGV_5, ARGV_6, CASRN2Name) {
-  
-  # Load the input file
-  setInputFiles <- Sys.glob(paste0(inputDirName,"/","*.txt", sep=""), dirmark=FALSE)
-  
-  # TODO -----------------------------------------------------
-  # In case Scott want to include all CASRN in the input list, 
-  # We need to reac the original input files
-  
-  # Check the directory for any file
-  infilesAll <- Sys.glob(paste(dirName,"/","*_Chart.txt", sep=""), dirmark=FALSE)
-  if (length(infilesAll) < 1) return() # Return if no files
-  
-  # Step0. Get only the files that actually have contents
-  infiles <- lapply(infilesAll, function(infile) {
-    return(infile)
-  })
-  infiles <- infiles[!sapply(infiles, is.null)]
-  
-  sigCutOff         <- ARGV_5
-  sigColumnName     <- toupper(ARGV_4)
-  sigColumnIndex	  <- get_column_index(sigColumnName)			# 5=p-value, 12=BH p-value, 13=FDR
-  valueColumnName		<- toupper(ARGV_6)
-  valueColumnIndex	<- get_column_index(valueColumnName)    # 5=p-value, 12=BH p-value, 13=FDR
-  
-  # Step1. Get the list of significant terms
-  #for (infile in infiles){
-  mclapply(infiles, mc.cores=4, mc.silent=FALSE, function(infile){
-    tmp1 <- str_split(infile, "/")
-    tmp1[[1]][length(tmp1[[1]])] <- str_replace(tmp1[[1]][length(tmp1[[1]])], ".txt", "")
-    tmp2 <- tmp1[[1]]
-    DATA <- read.delim(file=infile, header=TRUE, sep="\t", comment.char="", fill=TRUE) 
 
-    if(nrow(DATA) < 1){
-      # if no rows, make blank .gct file
-      OUTFILE           <- file(paste0(outputDir, tmp2[length(tmp2)], ".gct", sep=""))
-      outputContent     <- paste0("#1.2\n", 0, "\t", 0, "\nCASRN\tName", sep="")
-      writeLines(outputContent, OUTFILE) 
-      close(OUTFILE)
-    } else {
-      term2pvalue <- lapply(1:nrow(DATA), function(line){
-        tmpSplit <- vector("list", 13)
-        tmpSplit[1]   <- as.character(DATA[line, "Category"])
-        tmpSplit[2]   <- as.character(DATA[line, "Term"])
-        tmpSplit[3]   <- as.character(DATA[line, "Count"])
-        tmpSplit[4]   <- as.character(DATA[line, "X."])
-        tmpSplit[5]   <- as.character(DATA[line, "PValue"])
-        tmpSplit[6]   <- as.character(DATA[line, "CASRNs"])
-        tmpSplit[7]   <- as.character(DATA[line, "List.Total"])
-        tmpSplit[8]   <- as.character(DATA[line, "Pop.Hits"])
-        tmpSplit[9]   <- as.character(DATA[line, "Pop.Total"])
-        tmpSplit[10]  <- as.character(DATA[line, "Fold.Enrichment"])
-        tmpSplit[11]  <- as.character(DATA[line, "Bonferroni"])
-        tmpSplit[12]  <- as.character(DATA[line, "Benjamini"])
-        tmpSplit[13]  <- as.character(DATA[line, "FDR"])
-        
-        if ( grepl("^\\D", tmpSplit[[sigColumnIndex]]) | as.double(tmpSplit[[sigColumnIndex]]) >= sigCutOff | as.double(tmpSplit[[10]]) < 1) {
-          # skip
+    # Load the input file
+    setInputFiles <- Sys.glob(paste0(inputDirName, "/", "*.txt"), dirmark=FALSE)
+
+    # Check the directory for any file
+    infilesAll <- Sys.glob(paste0(dirName, "/", "*_Chart.txt"), dirmark=FALSE)
+    if (length(infilesAll) < 1) return() # Return if no files
+
+    # Step0. Get only the files that actually have contents
+    infiles <- lapply(infilesAll, function(infile) {
+        return(infile)
+    })
+    infiles <- infiles[!vapply(infiles, is.null, FUN.VALUE=logical(1))]
+
+    sigCutOff <- ARGV_5
+    sigColumnName <- toupper(ARGV_4)
+    sigColumnIndex <- get_column_index(sigColumnName) # 5=p-value, 12=BH p-value, 13=FDR
+    valueColumnName <- toupper(ARGV_6)
+    valueColumnIndex <- get_column_index(valueColumnName) # 5=p-value, 12=BH p-value, 13=FDR
+
+    # Step1. Get the list of significant terms
+    mclapply(infiles, mc.cores=CORES, mc.silent=FALSE, function(infile){
+        tmp1 <- unlist(str_split(infile, "/"))
+        tmp1[length(tmp1[[1]])] <- gsub(".txt", "", tmp1[[1]][length(tmp1[[1]])])
+        tmp2 <- tmp1
+        DATA <- read.delim(file=infile, header=TRUE, sep="\t", comment.char="", fill=TRUE) 
+
+        if(nrow(DATA) < 1){
+            # If no rows, make blank .gct file
+            setFileName <- gsub(".txt", "", tmp2[length(tmp2)])
+            OUTFILE <- file(paste0(outputDir, setFileName, ".gct"))
+            outputContent <- paste0("#1.2\n", 0, "\t", 0, "\nCASRN\tName")
+            writeLines(outputContent, OUTFILE) 
+            close(OUTFILE)
         } else {
-          return(tmpSplit[[sigColumnIndex]])
+            term2pvalue <- lapply(seq_len(nrow(DATA)), function(line){
+                tmpSplit <- vector("list", 13)
+                tmpSplit[1] <- as.character(DATA[line, "Category"])
+                tmpSplit[2] <- as.character(DATA[line, "Term"])
+                tmpSplit[3] <- as.character(DATA[line, "Count"])
+                tmpSplit[4] <- as.character(DATA[line, "X."])
+                tmpSplit[5] <- as.character(DATA[line, "PValue"])
+                tmpSplit[6] <- as.character(DATA[line, "CASRNs"])
+                tmpSplit[7] <- as.character(DATA[line, "List.Total"])
+                tmpSplit[8] <- as.character(DATA[line, "Pop.Hits"])
+                tmpSplit[9] <- as.character(DATA[line, "Pop.Total"])
+                tmpSplit[10] <- as.character(DATA[line, "Fold.Enrichment"])
+                tmpSplit[11] <- as.character(DATA[line, "Bonferroni"])
+                tmpSplit[12] <- as.character(DATA[line, "Benjamini"])
+                tmpSplit[13] <- as.character(DATA[line, "FDR"])
+
+                if ( grepl("^\\D", tmpSplit[[sigColumnIndex]]) | as.double(tmpSplit[[sigColumnIndex]]) >= sigCutOff | as.double(tmpSplit[[10]]) < 1) {
+                    # skip
+                } else {
+                    return(tmpSplit[[sigColumnIndex]])
+                }
+            })
+
+            # Remove null elements
+            term2pvalue <- lapply(term2pvalue, function(innerList) innerList[vapply(innerList, length, FUN.VALUE=numeric(1)) > 0])
+            term2pvalue <- term2pvalue[!vapply(term2pvalue, is.null, FUN.VALUE=logical(1))]
+    
+            nameListTerm2pvalue <- lapply(seq_len(nrow(DATA)), function(line){
+                tmpSplit <- vector("list", 13)
+                tmpSplit[1] <- as.character(DATA[line, "Category"])
+                tmpSplit[2] <- as.character(DATA[line, "Term"])
+                tmpSplit[3] <- as.character(DATA[line, "Count"])
+                tmpSplit[4] <- as.character(DATA[line, "X."])
+                tmpSplit[5] <- as.character(DATA[line, "PValue"])
+                tmpSplit[6] <- as.character(DATA[line, "CASRNs"])
+                tmpSplit[7] <- as.character(DATA[line, "List.Total"])
+                tmpSplit[8] <- as.character(DATA[line, "Pop.Hits"])
+                tmpSplit[9] <- as.character(DATA[line, "Pop.Total"])
+                tmpSplit[10] <- as.character(DATA[line, "Fold.Enrichment"])
+                tmpSplit[11] <- as.character(DATA[line, "Bonferroni"])
+                tmpSplit[12] <- as.character(DATA[line, "Benjamini"])
+                tmpSplit[13] <- as.character(DATA[line, "FDR"])
+    
+                if ( grepl("^\\D", tmpSplit[[sigColumnIndex]]) | as.double(tmpSplit[[sigColumnIndex]]) >= sigCutOff | as.double(tmpSplit[[10]]) < 1) {
+                    # skip
+                } else {
+                    tmpTermKey <- paste0(tmpSplit[[2]], " | ", tmpSplit[[1]])
+                    return(tmpTermKey)
+                }
+            })
+            
+            # Remove null elements
+            nameListTerm2pvalue <- lapply(nameListTerm2pvalue, function(innerList) innerList[vapply(innerList, length, FUN.VALUE=numeric(1)) > 0])
+            nameListTerm2pvalue <- nameListTerm2pvalue[!vapply(nameListTerm2pvalue, is.null, FUN.VALUE=logical(1))]
+    
+            # Set names of term2pvalue
+            names(term2pvalue) <- nameListTerm2pvalue
+    
+            CASRN2TermMatrix_lv1 <- lapply(seq_len(nrow(DATA)), function(line){
+                tmpSplit <- vector("list", 13)
+                tmpSplit[1] <- as.character(DATA[line, "Category"])
+                tmpSplit[2] <- as.character(DATA[line, "Term"])
+                tmpSplit[3] <- as.character(DATA[line, "Count"])
+                tmpSplit[4] <- as.character(DATA[line, "X."])
+                tmpSplit[5] <- as.character(DATA[line, "PValue"])
+                tmpSplit[6] <- as.character(DATA[line, "CASRNs"])
+                tmpSplit[7] <- as.character(DATA[line, "List.Total"])
+                tmpSplit[8] <- as.character(DATA[line, "Pop.Hits"])
+                tmpSplit[9] <- as.character(DATA[line, "Pop.Total"])
+                tmpSplit[10] <- as.character(DATA[line, "Fold.Enrichment"])
+                tmpSplit[11] <- as.character(DATA[line, "Bonferroni"])
+                tmpSplit[12] <- as.character(DATA[line, "Benjamini"])
+                tmpSplit[13] <- as.character(DATA[line, "FDR"])
+                
+                if ( grepl("^\\D", tmpSplit[[sigColumnIndex]]) | as.double(tmpSplit[[sigColumnIndex]]) >= sigCutOff | as.double(tmpSplit[[10]]) < 1) {
+                    # skip
+                } else {
+                    tmpTermKey <- paste0(tmpSplit[[2]], " | ", tmpSplit[[1]])
+                    CASRNs <- unlist(str_split(tmpSplit[[6]], ", "))
+                    tmpTermKeyList <- vector("list", length(CASRNs))
+                    CASRN2TermMatrix_lv1_tmp <- lapply(tmpTermKeyList, function(x) tmpTermKey)
+                    names(CASRN2TermMatrix_lv1_tmp) <- CASRNs
+                    return(CASRN2TermMatrix_lv1_tmp)
+                }
+            })
+    
+            #Get not null elements
+            CASRN2TermMatrix_lv2 <- CASRN2TermMatrix_lv1[!vapply(CASRN2TermMatrix_lv1, is.null, FUN.VALUE=logical(1))]
+            CASRN2TermMatrix_lv2 <- unlist(CASRN2TermMatrix_lv2, recursive=FALSE)
+    
+            # Merge same names
+            CASRN2TermMatrix <- lapply(unique(names(CASRN2TermMatrix_lv2)), function(x) {
+                unlist(unname(CASRN2TermMatrix_lv2[names(CASRN2TermMatrix_lv2) %in% x]))
+            })
+            names(CASRN2TermMatrix) <- unique(names(CASRN2TermMatrix_lv2))
+    
+            # Now create new output files
+            setFileName <- gsub(".txt", "", tmp2[length(tmp2)])
+            OUTFILE <- file(paste0(outputDir, setFileName, ".gct"))
+    
+            if(typeof(CASRN2TermMatrix) == "list"){
+                CASRNs <- names(CASRN2TermMatrix)
+            }
+            else {
+                CASRNs <- colnames(CASRN2TermMatrix)
+            }
+    
+            tmpTermKeys <- names(term2pvalue)
+            CASRNCount <- length(CASRNs)
+            tmpTermKeyCount <- length(tmpTermKeys)
+            outputContentHeader <- paste0("#1.2\n", CASRNCount, "\t", tmpTermKeyCount, "\nCASRN\tName")
+            termKeys <- lapply(tmpTermKeys, function(tmpTermKey){
+                return(paste0(tmpTermKey, " | ", term2pvalue[tmpTermKey]))
+            })
+    
+            termKeys <- paste0(paste0(termKeys, collapse="\t"))
+            outputContentMatrix <- lapply(CASRNs, function(CASRN){
+                if (!is.null(CASRN2Name[[CASRN]])){ 
+                    termNameOut <- CASRN2Name[[CASRN]]
+                    if(nchar(termNameOut) > 30){ # If the term name is longer than 30 characters (arbitrary, can change later), truncate for readability on the heatmap images
+                        termNameOut <- paste0(substring(termNameOut, 1, 30), "...")
+                    }
+                }
+                casrnAndTerm <- paste0(CASRN, "\t", termNameOut)
+                termKeysInner <- lapply(tmpTermKeys, function(tmpTermKey){
+                    if (tmpTermKey %in% CASRN2TermMatrix[[CASRN]]){
+                        return("1")
+                    } else {
+                        return("0")
+                    }
+                })
+                return(paste0(casrnAndTerm, "\t", paste0(termKeysInner, collapse="\t")))
+            })
+            outputContent <- paste0(outputContentHeader, "\t", termKeys, "\n", paste0(outputContentMatrix, collapse="\n"))
+    
+            writeLines(outputContent, OUTFILE) 
+            close(OUTFILE)
         }
-      })
-      # Remove null elements
-      term2pvalue <- lapply(term2pvalue, function(innerList) innerList[sapply(innerList, length) > 0])
-      term2pvalue <- term2pvalue[!sapply(term2pvalue, is.null)]
-      
-      nameListTerm2pvalue <- lapply(1:nrow(DATA), function(line){
-        tmpSplit <- vector("list", 13)
-        tmpSplit[1]   <- as.character(DATA[line, "Category"])
-        tmpSplit[2]   <- as.character(DATA[line, "Term"])
-        tmpSplit[3]   <- as.character(DATA[line, "Count"])
-        tmpSplit[4]   <- as.character(DATA[line, "X."])
-        tmpSplit[5]   <- as.character(DATA[line, "PValue"])
-        tmpSplit[6]   <- as.character(DATA[line, "CASRNs"])
-        tmpSplit[7]   <- as.character(DATA[line, "List.Total"])
-        tmpSplit[8]   <- as.character(DATA[line, "Pop.Hits"])
-        tmpSplit[9]   <- as.character(DATA[line, "Pop.Total"])
-        tmpSplit[10]  <- as.character(DATA[line, "Fold.Enrichment"])
-        tmpSplit[11]  <- as.character(DATA[line, "Bonferroni"])
-        tmpSplit[12]  <- as.character(DATA[line, "Benjamini"])
-        tmpSplit[13]  <- as.character(DATA[line, "FDR"])
-        
-        if ( grepl("^\\D", tmpSplit[[sigColumnIndex]]) | as.double(tmpSplit[[sigColumnIndex]]) >= sigCutOff | as.double(tmpSplit[[10]]) < 1) {
-          # skip
-        } else {
-          tmpTermKey <- paste0(tmpSplit[[2]], " | ", tmpSplit[[1]], sep="")
-          return(tmpTermKey)
-        }
-      })
-      # Remove null elements
-      nameListTerm2pvalue <- lapply(nameListTerm2pvalue, function(innerList) innerList[sapply(innerList, length) > 0])
-      nameListTerm2pvalue <- nameListTerm2pvalue[!sapply(nameListTerm2pvalue, is.null)]
-      
-      # Set names of term2pvalue
-      names(term2pvalue) <- nameListTerm2pvalue
-      
-      CASRN2TermMatrix_lv1 <- lapply(1:nrow(DATA), function(line){
-        tmpSplit <- vector("list", 13)
-        tmpSplit[1]   <- as.character(DATA[line, "Category"])
-        tmpSplit[2]   <- as.character(DATA[line, "Term"])
-        tmpSplit[3]   <- as.character(DATA[line, "Count"])
-        tmpSplit[4]   <- as.character(DATA[line, "X."])
-        tmpSplit[5]   <- as.character(DATA[line, "PValue"])
-        tmpSplit[6]   <- as.character(DATA[line, "CASRNs"])
-        tmpSplit[7]   <- as.character(DATA[line, "List.Total"])
-        tmpSplit[8]   <- as.character(DATA[line, "Pop.Hits"])
-        tmpSplit[9]   <- as.character(DATA[line, "Pop.Total"])
-        tmpSplit[10]  <- as.character(DATA[line, "Fold.Enrichment"])
-        tmpSplit[11]  <- as.character(DATA[line, "Bonferroni"])
-        tmpSplit[12]  <- as.character(DATA[line, "Benjamini"])
-        tmpSplit[13]  <- as.character(DATA[line, "FDR"])
-        
-        if ( grepl("^\\D", tmpSplit[[sigColumnIndex]]) | as.double(tmpSplit[[sigColumnIndex]]) >= sigCutOff | as.double(tmpSplit[[10]]) < 1) {
-          # skip
-        } else {
-          tmpTermKey <- paste0(tmpSplit[[2]], " | ", tmpSplit[[1]], sep="")
-          CASRNs <- str_split(tmpSplit[[6]], ", ")
-          tmpTermKeyList <- vector("list", length(unlist(CASRNs)))
-          CASRN2TermMatrix_lv1_tmp <- lapply(tmpTermKeyList, function(x) tmpTermKey)
-          names(CASRN2TermMatrix_lv1_tmp) <- unlist(CASRNs)
-          return(CASRN2TermMatrix_lv1_tmp)
-          
-        }
-      })
-      
-      #Get not null elements
-      CASRN2TermMatrix_lv2 <- CASRN2TermMatrix_lv1[!sapply(CASRN2TermMatrix_lv1, is.null)]
-      CASRN2TermMatrix_lv2 <- unlist(CASRN2TermMatrix_lv2, recursive = FALSE)
-      
-      # Merge same names
-      CASRN2TermMatrix <- lapply(unique(names(CASRN2TermMatrix_lv2)), function(x) {
-        unlist(unname(CASRN2TermMatrix_lv2[names(CASRN2TermMatrix_lv2) %in% x]))
-      })
-      names(CASRN2TermMatrix) <- unique(names(CASRN2TermMatrix_lv2))
-      
-      # Now create new output files
-      OUTFILE           <- file(paste0(outputDir, tmp2[length(tmp2)], ".gct", sep=""))
-      
-      if(typeof(CASRN2TermMatrix) == "list"){
-        CASRNs            <- names(CASRN2TermMatrix)
-      }
-      else {
-        CASRNs            <- colnames(CASRN2TermMatrix)
-      }
-      tmpTermKeys       <- names(term2pvalue)
-      CASRNCount        <- length(CASRNs)
-      tmpTermKeyCount   <- length(tmpTermKeys)
-      outputContentHeader <- paste0("#1.2\n", CASRNCount, "\t", tmpTermKeyCount, "\nCASRN\tName")
-      termKeys <- lapply(tmpTermKeys, function(tmpTermKey){
-        return(paste0(tmpTermKey, " | ", term2pvalue[tmpTermKey]))
-      })
-      termKeys <- paste0(paste0(termKeys, collapse="\t"))
-      outputContentMatrix <- lapply(CASRNs, function(CASRN){
-        if (is.null(CASRN2Name[[CASRN]]) == FALSE){	
-          termNameOut <- CASRN2Name[[CASRN]]
-          if(nchar(termNameOut) > 30){ # If the term name is longer than 30 characters (arbitrary, can change later), truncate for readability on the heatmap images
-            termNameOut <- paste0(substring(termNameOut, 1, 30), "...", sep="")
-          }
-        }
-        casrnAndTerm <- paste0(CASRN, "\t", termNameOut)
-        termKeysInner <- lapply(tmpTermKeys, function(tmpTermKey){
-          if (tmpTermKey %in% CASRN2TermMatrix[[CASRN]] == TRUE){
-            return("1")
-          } else {
-            return("0")
-          }
-        })
-        return(paste0(casrnAndTerm, "\t", paste0(termKeysInner, collapse="\t")))
-      })
-      outputContent <- paste0(outputContentHeader, "\t", termKeys, "\n", paste0(outputContentMatrix, collapse="\n"))
-      
-      writeLines(outputContent, OUTFILE) 
-      close(OUTFILE)
-    }
-  })
-}	
+    })
+}
 
 get_column_index <- function(columnType) {
-  if (grepl("P", columnType, ignore.case=TRUE)) {	
-    return(5)
-  } else if(grepl("BH", columnType, ignore.case=TRUE)) {	
-    return(12)
-  } else if(grepl("BF", columnType, ignore.case=TRUE)) {
-    return(13)
-  } else {	
-    return("!ERROR! Wrong Signficance type. Use P, BH, or BF\n\n")
-  }
+    if (grepl("P", columnType, ignore.case=TRUE)) { 
+        return(5)
+    } else if(grepl("BH", columnType, ignore.case=TRUE)) { 
+        return(12)
+    } else if(grepl("BF", columnType, ignore.case=TRUE)) {
+        return(13)
+    } else { 
+        return("!ERROR! Wrong Signficance type. Use P, BH, or BF\n\n")
+    }
 }
 
-###### Create clustering images ###### 
-create_clustering_images <- function(outDir = "", imageFlags = "-color=BR"){
-  
-  # --------------------------------------
-  # Define required variables - Clustering
-  # --------------------------------------
-  dirName					    <- outDir
-  dirNameSplit				<- str_split(dirName, "/")[[1]]
-  dirTypeTag					<- ""
-  dirNameSplit <- dirNameSplit[nchar(dirNameSplit) > 0]
-  if(grepl("CLUSTER", dirNameSplit[1], fixed=TRUE) == TRUE){
-    dirTypeTag				<- "CLUSTER__"
-  } else if(grepl("CHART", dirNameSplit[1], fixed=TRUE) == TRUE) {	
-    dirTypeTag				<- "CHART__"
-  } else if (grepl("PRESELECTED", dirNameSplit[1], fixed=TRUE) == TRUE){
-    dirTypeTag				<- "PRESELECTED__"
-  }
-  
-  outputBaseDir				      <- outDir
-  libDir						        <- paste0(APP_DIR, "HClusterLibrary/")
-  path_separator			      <- ';'
-  log_transform				      <- "no"
-  row_center					      <- "no"
-  row_normalize				      <- "no"
-  column_center				      <- "no"
-  column_normalize		      <- "no"
-  column_distance_measure	  <- "2"	#pearson correlation
-  row_distance_measure		  <- "2"	#pearson correlation
-  clustering_method			    <- "m"	#pairwise complete-linkage
-  color_scheme				      <- "global"	# or "row normalized"
-  color_palette				      <- ""
-  
-  # -------------------------
-  # Handle additional options
-  # -------------------------
-  output_format			  <- "png"
-  #-.jpeg, .png, .tiff, .bmp, .eps
-  if (is.null(imageFlags) == FALSE & grepl("(jpeg|png|tiff|bmp|eps)", tolower(imageFlags), fixed=TRUE) == TRUE){	
-    output_format			<- tolower(imageFlags)
-  }
-  color_palette <- paste0(libDir, "colorSchemeBlackRed.txt", sep="")
-  
-  # ---------------------------------------------
-  # Define required variables - Clustering Images
-  # ---------------------------------------------
-  java_flags				    <- "-Djava.awt.headless=true -Xmx1024m"
-  row_size				      <- "16"
-  column_size			      <- "16"
-  show_grid				      <- "yes"
-  grid_color				    <- "0:0:0"
-  show_row_description	<- "yes"
-  show_row_names			  <- "yes"
-  row_to_highlight		  <- ""
-  row_highlight_color		<- ""
-  use_color_gradient		<- "no"
-  
-  # ---------------------------
-  # Check OS and define program - this is probably always going to be 64-bit Linux
-  # ---------------------------
-  cluster_program	      <- "clusterLinux64"
-  
-  # ------------------------------------------
-  # Load directory list
-  # ------------------------------------------
-  baseSubDirs	      <- list()
-  baseNameSplit	    <- str_split(dirName, "/")[[1]]
-  baseNameSplit <- baseNameSplit[nchar(baseNameSplit) > 0]
-  baseShortDirName  <- ''
-  if (baseNameSplit[length(baseNameSplit)] == ""){
-    baseShortDirName <- paste0(baseNameSplit[length(baseNameSplit)-1],'/')
-  } else {
-    baseShortDirName <- paste0(baseNameSplit[length(baseNameSplit)],'/')
-  }
-  
-  DIR <- list.files(dirName)
-  tmpDirs <- DIR
-  
-  # Remove current directory and previous directory
-  baseSubDirs <- lapply(tmpDirs, function(x){
-    if(x != "." & x != "..") {
-      return(x)
+# Create clustering images
+create_clustering_images <- function(outDir="", imageFlags="-color=BR"){
+    # Define required variables - Clustering
+    dirName <- outDir
+    dirNameSplit <- unlist(str_split(dirName, "/"))
+    dirTypeTag <- ""
+    dirNameSplit <- dirNameSplit[nchar(dirNameSplit) > 0]
+    if(grepl("CLUSTER", dirNameSplit[1], fixed=TRUE)){
+        dirTypeTag <- "CLUSTER__"
+    } else if(grepl("CHART", dirNameSplit[1], fixed=TRUE)) { 
+        dirTypeTag <- "CHART__"
+    } else if (grepl("PRESELECTED", dirNameSplit[1], fixed=TRUE)){
+        dirTypeTag <- "PRESELECTED__"
     }
-  })   
-  
-  
-  # ------------------------------------------
-  # Perform HClustering
-  # ------------------------------------------
-  perform_hclustering_per_directory (dirName, '', outputBaseDir, dirTypeTag, libDir, cluster_program, row_distance_measure, column_distance_measure, clustering_method, java_flags, output_format, column_size, row_size, show_grid, grid_color, show_row_description, show_row_names, row_to_highlight, row_highlight_color, color_scheme, color_palette, use_color_gradient)
-  
-  if (is.null(baseSubDirs[1]) == FALSE){
-    performHclusteringForEach <- mclapply(baseSubDirs, mc.cores=4, mc.silent=FALSE, function(x){
-    #performHclusteringForEach <- lapply(baseSubDirs, function(x){
-      perform_hclustering_per_directory (paste0(dirName, '/', x, baseShortDirName, '/', sep=""), outputBaseDir, dirTypeTag, libDir, cluster_program, row_distance_measure, column_distance_measure, clustering_method, java_flags, output_format, column_size, row_size, show_grid, grid_color, show_row_description, show_row_names, row_to_highlight, row_highlight_color, color_scheme, color_palette, use_color_gradient)
-    })
-  }
 
-  print("\n! COMPLETE ...\n")
-  return("success")
+    outputBaseDir <- outDir
+    libDir <- paste0(APP_DIR, "HClusterLibrary/")
+    path_separator <- ';'
+    log_transform <- "no"
+    row_center <- "no"
+    row_normalize <- "no"
+    column_center <- "no"
+    column_normalize <- "no"
+    column_distance_measure <- "2" #pearson correlation
+    row_distance_measure <- "2" #pearson correlation
+    clustering_method <- "m" #pairwise complete-linkage
+    color_scheme <- "global" # or "row normalized"
+    color_palette <- ""
+
+    # Handle additional options
+    output_format <- "png"
+    # .jpeg, .png, .tiff, .bmp, .eps
+    if (!is.null(imageFlags) & grepl("(jpeg|png|tiff|bmp|eps)", tolower(imageFlags), fixed=TRUE)){ 
+        output_format <- tolower(imageFlags)
+    }
+    color_palette <- paste0(libDir, "colorSchemeBlackRed.txt")
+
+    # Define required variables - Clustering Images
+    java_flags <- "-Djava.awt.headless=true -Xmx1024m"
+    row_size <- "16"
+    column_size <- "16"
+    show_grid <- "yes"
+    grid_color <- "0:0:0"
+    show_row_description <- "yes"
+    show_row_names <- "yes"
+    row_to_highlight <- ""
+    row_highlight_color <- ""
+    use_color_gradient <- "no"
+
+    # Check OS and define program - this is probably always going to be 64-bit Linux at the moment.
+    cluster_program <- "clusterLinux64"
+
+    # Load directory list
+    baseSubDirs <- list()
+    baseNameSplit <- unlist(str_split(dirName, "/"))
+    baseNameSplit <- baseNameSplit[nchar(baseNameSplit) > 0]
+    baseShortDirName  <- ''
+    if (baseNameSplit[length(baseNameSplit)] == ""){
+        baseShortDirName <- paste0(baseNameSplit[length(baseNameSplit)-1], '/')
+    } else {
+        baseShortDirName <- paste0(baseNameSplit[length(baseNameSplit)], '/')
+    }
+    
+    DIR <- list.files(dirName)
+    tmpDirs <- DIR
+
+    # Remove current directory and previous directory
+    baseSubDirs <- lapply(tmpDirs, function(x){
+        if(x != "." & x != "..") {
+            return(x)
+        }
+    })
+
+    # Perform HClustering
+    perform_hclustering_per_directory (dirName, '', outputBaseDir, dirTypeTag, libDir, cluster_program, row_distance_measure, column_distance_measure, clustering_method, java_flags, output_format, column_size, row_size, show_grid, grid_color, show_row_description, show_row_names, row_to_highlight, row_highlight_color, color_scheme, color_palette, use_color_gradient)
+    if (!is.null(baseSubDirs[1])){
+        performHclusteringForEach <- mclapply(baseSubDirs, mc.cores=CORES, mc.silent=FALSE, function(x){
+            perform_hclustering_per_directory (paste0(dirName, '/', x, baseShortDirName, '/'), outputBaseDir, dirTypeTag, libDir, cluster_program, row_distance_measure, column_distance_measure, clustering_method, java_flags, output_format, column_size, row_size, show_grid, grid_color, show_row_description, show_row_names, row_to_highlight, row_highlight_color, color_scheme, color_palette, use_color_gradient)
+        })
+    }
+    print("! COMPLETE ...")
+    return("success")
 }
 
 # Generate heatmap images using HierarchicalClusteringImages (HCI)
 perform_hclustering_per_directory <- function(givenDirName, additionalDirName, outputBaseDir, dirTypeTag, libDir, cluster_program, row_distance_measure, column_distance_measure, clustering_method, java_flags, output_format, column_size, row_size, show_grid, grid_color, show_row_description, show_row_names, row_to_highlight, row_highlight_color, color_scheme, color_palette, use_color_gradient) {
-  
-  # ------------------------------------------------------------------
-  # Load GCT files for hierarchical clustering, in the given directory
-  # ------------------------------------------------------------------
-  gctFiles    <- Sys.glob(paste0(givenDirName,"/","*.gct", sep=""), dirmark=FALSE)
-  
-  tmp1			  <- str_split (givenDirName, "/")[[1]]
-  tmp1        <- tmp1[nchar(tmp1) > 0]
-  baseDirName	<- tmp1[length(tmp1)]
-  outputDir		<- paste0(outputBaseDir, '/', sep="")
-  create_sub_directory(outputDir)
-  
-  # TODO: Multithread this
-  generateImagesProcess <-mclapply (gctFiles, function(infile){
-  #generateImagesProcess <-lapply (gctFiles, function(infile){
-    tmp1 <- str_split(infile, "/")[[1]]
+    # Load GCT files for hierarchical clustering, in the given directory
+    gctFiles <- Sys.glob(paste0(givenDirName, "/", "*.gct"), dirmark=FALSE)
+
+    tmp1 <- unlist(str_split (givenDirName, "/"))
     tmp1 <- tmp1[nchar(tmp1) > 0]
-    tmp2 <- str_split(tmp1[length(tmp1)], ".gct")[[1]]
-    tmp2 <- tmp2[nchar(tmp2) > 0]
-    
-    # Check gct file content and skip if there is less than 2 entries
-    if(check_gct_contains_more_than_two_lines(infile) == FALSE){
-      # Do nothing
-    }
-    else {
-      output_base_name	  <- paste0(outputDir, dirTypeTag, tmp2[1])
-      shorter_base_name		<- paste0(outputDir, dirTypeTag, tmp2[1])
-      cluster_input_file	<- paste0(shorter_base_name,".txt")
-      
-      if (convert_gct_to_cluster_input_file(infile, cluster_input_file, outputDir) == TRUE){
-        system(paste0(libDir, cluster_program, " -f ", cluster_input_file, " -g ", row_distance_measure, " -e ", column_distance_measure, " -m ", clustering_method, sep=""))
-        cdtFile	<- paste0(output_base_name, ".cdt", sep="")
-        gtrFile	<- paste0(output_base_name, ".gtr", sep="")
-        atrFile	<- paste0(output_base_name, ".atr", sep="")
-        atrCmd <- ""
-        gtrCmd <- ""
-        if (row_distance_measure != 0){	
-          gtrCmd <- paste0(" -x\"", gtrFile, "\"", sep="")
+    baseDirName <- tmp1[length(tmp1)]
+    outputDir <- paste0(outputBaseDir, '/')
+    create_sub_directory(outputDir)
+  
+    generateImagesProcess <- mclapply (gctFiles, function(infile){
+        tmp1 <- unlist(str_split(infile, "/"))
+        tmp1 <- tmp1[nchar(tmp1) > 0]
+        tmp2 <- unlist(str_split(tmp1[length(tmp1)], ".gct"))
+        tmp2 <- tmp2[nchar(tmp2) > 0]
+        # Check gct file content and skip if there is less than 2 entries
+        if(!check_gct_contains_more_than_two_lines(infile)){
+            # Do nothing
         }
-        if (column_distance_measure != 0){	
-          atrCmd <- paste0(" -y\"", atrFile, "\"", sep="")
+        else {
+            output_base_name <- paste0(outputDir, dirTypeTag, tmp2[1])
+            shorter_base_name <- paste0(outputDir, dirTypeTag, tmp2[1])
+            cluster_input_file <- paste0(shorter_base_name, ".txt")
+            if (convert_gct_to_cluster_input_file(infile, cluster_input_file, outputDir)){
+                #system2(paste0(libDir, cluster_program), paste0(" -f ", cluster_input_file, " -g ", row_distance_measure, " -e ", column_distance_measure, " -m ", clustering_method))
+                system(paste0(libDir, cluster_program, " -f ", cluster_input_file, " -g ", row_distance_measure, " -e ", column_distance_measure, " -m ", clustering_method))
+                cdtFile <- paste0(output_base_name, ".cdt")
+                gtrFile <- paste0(output_base_name, ".gtr")
+                atrFile <- paste0(output_base_name, ".atr")
+                atrCmd <- ""
+                gtrCmd <- ""
+                if (row_distance_measure != 0){ 
+                    gtrCmd <- paste0(" -x\"", gtrFile, "\"")
+                }
+                if (column_distance_measure != 0){ 
+                    atrCmd <- paste0(" -y\"", atrFile, "\"")
+                }
+                # Create heatmap image
+                system2("java", paste0(java_flags, " -DlibDir=", libDir, " -jar ", libDir, "hclimage-o.jar \"", cdtFile, "\" \"", output_base_name, "\" ", output_format, " -c", column_size, " -r", row_size, " -g", show_grid, " -l", grid_color, " -a", show_row_description, " -s", show_row_names, " -n", color_scheme, " -m", color_palette, " -u", use_color_gradient))
+            } else {
+                print(paste0("Conversion failed for ", infile, "\n"))
+            }
         }
-        # Create heatmap image
-        command	<- paste0("java ", java_flags, " -DlibDir=", libDir, " -jar ", libDir, "hclimage-o.jar \"", cdtFile, "\" \"", output_base_name, "\" ", output_format, " -c", column_size, " -r", row_size, " -g", show_grid, " -l", grid_color, " -a", show_row_description, " -s", show_row_names, " -n", color_scheme, " -m", color_palette, " -u", use_color_gradient, sep="")
-        system(command)
-        
-      } else {
-        print(paste0("conversion failed for ", infile, "\n", sep=""))
-      }
-    }
-  })
+    })
 }
 
 convert_gct_to_cluster_input_file <- function(gctFile, clusterInputFile, outputDir){
-  GCTFILE <- read.delim(gctFile, sep="\t", comment.char="", quote="", stringsAsFactors = FALSE, header=TRUE, skip=2, fill=TRUE, check.names=FALSE)
-  file.create(clusterInputFile)
-  CLUSTER <- file(clusterInputFile)
-  newHeader	  <- ""
-  newHeader_tmp <- ""
-  for (i in 3:length(colnames(GCTFILE))){
-    newHeader_tmp <- paste0(newHeader_tmp, "\t1", sep="")
-  }	
-  newHeader <- paste("UNIQID\tNAME\tGWEIGHT\tGORDER\t", paste0(colnames(GCTFILE)[3:length(colnames(GCTFILE))], collapse="\t"), "\nEWEIGHT\t\t\t", newHeader_tmp, sep="")
-  GORDER      <- 1
-  newContent	<- ""
-  newContent <- lapply(1:nrow(GCTFILE), function(i){
-    line <- GCTFILE[i,]
-    tmpSplit <- str_split(line, "\t")[[1]]
-    tmpSplit <- tmpSplit[nchar(tmpSplit) > 0]
-    stringToRet <- ""
-    if(is.na(tmpSplit[1]) == FALSE){
-      if(is.null(tmpSplit[1]) == FALSE & tmpSplit[1] != ""){
-        stringToRet <- paste0(tmpSplit[1], "\t", "", "\t1\t", GORDER, "\t", paste0(line[3:length(line)], collapse="\t"))
-      }
-    }
-    GORDER <<- GORDER + 1
-    return(stringToRet)
-    
-  })	
-  
-  write(paste0(newHeader, "\n", paste0(newContent,collapse="\n"), sep=""), CLUSTER, append=TRUE)
-  return(1)
+    GCTFILE <- read.delim(gctFile, sep="\t", comment.char="", quote="", stringsAsFactors=FALSE, header=TRUE, skip=2, fill=TRUE, check.names=FALSE)
+    file.create(clusterInputFile)
+    CLUSTER <- file(clusterInputFile)
+    newHeader_tmp <- paste0(lapply(seq(3, length(colnames(GCTFILE))), function(i){
+        return("\t1")
+    }), collapse="")
+    newHeader <- paste("UNIQID\tNAME\tGWEIGHT\tGORDER\t", paste0(colnames(GCTFILE)[seq(3, length(colnames(GCTFILE)))], collapse="\t"), "\nEWEIGHT\t\t\t", newHeader_tmp)
+    GORDER <- 1
+    newContent <- ""
+    newContent <- lapply(seq_len(nrow(GCTFILE)), function(i){
+        line <- GCTFILE[i, ]
+        tmpSplit <- unlist(str_split(line, "\t"))
+        tmpSplit <- tmpSplit[nchar(tmpSplit) > 0]
+        stringToRet <- ""
+        if(!is.na(tmpSplit[1])){
+            if(!is.null(tmpSplit[1]) & tmpSplit[1] != ""){
+                stringToRet <- paste0(tmpSplit[1], "\t", "", "\t1\t", GORDER, "\t", paste0(line[seq(3, length(line))], collapse="\t"))
+            }
+        }
+        GORDER <<- GORDER + 1
+        return(stringToRet)
+    })
+    write(paste0(newHeader, "\n", paste0(newContent, collapse="\n")), CLUSTER, append=TRUE)
+    return(1)
 }
-
-
 
 create_sub_directory <- function(outputDir){
-  tmp1 <- str_split(outputDir, "/")[[1]]
-  tmp1 <- tmp1[nchar(tmp1) > 0]
-  dirName <- paste0("/", tmp1, "/", sep="", collapse="")
-  dir.create(dirName)
+    tmp1 <- unlist(str_split(outputDir, "/"))
+    tmp1 <- tmp1[nchar(tmp1) > 0]
+    dirName <- paste0("/", tmp1, "/", collapse="")
+    dir.create(dirName)
 }
 
-# TODO: Make sure this is working with files of different sizes
 check_gct_contains_more_than_two_lines <- function(infile){
-  INFILE <- read.delim(infile, sep="\t", comment.char="", quote="", stringsAsFactors = FALSE, header=TRUE, skip=2, fill=TRUE)
-  lineCount	<- 0
-  lineCount <- nrow(INFILE)
-  if(lineCount >=2){
-    return(1)
-  } else {
-    return(0)
-  }
+    INFILE <- read.delim(infile, sep="\t", comment.char="", quote="", stringsAsFactors=FALSE, header=TRUE, skip=2, fill=TRUE)
+    lineCount <- 0
+    lineCount <- nrow(INFILE)
+    if(lineCount >=2){
+        return(1)
+    } else {
+        return(0)
+    }
 }
 
 ###### Create DAVID Chart and Cluster files ######
 create_david_chart_cluster <- function(baseDirName="", topTermLimit=10, mode="ALL", sigColumnName="P", sigCutoff=0.05, valueColumnName="P"){
-  
-  # -------------------------------------
-  # Get the corresponding directory names
-  # -------------------------------------
-  baseNameSplit <- str_split(baseDirName, "/")[[1]]
-  baseNameSplit <- baseNameSplit[nchar(baseNameSplit) > 0] #remove "" elements in split list
-  
-  baseShortDirName <- ""
-  if (baseNameSplit[length(baseNameSplit)] == ""){
-    baseShortDirName <- paste0(baseNameSplit[length(baseNameSplit)-1], '/', sep="")
-  } else {
-    baseShortDirName <- paste0(baseNameSplit[length(baseNameSplit)], '/', sep="")
-  }
-  annotationBaseDir <- "Annotation/"
-  baseOutputDir <- paste0(baseDirName, '/gct/', sep="")
+    # Get the corresponding directory names
+    baseNameSplit <- unlist(str_split(baseDirName, "/"))
+    baseNameSplit <- baseNameSplit[nchar(baseNameSplit) > 0] #remove "" elements in split list
+    baseShortDirName <- ""
+    if (baseNameSplit[length(baseNameSplit)] == ""){
+        baseShortDirName <- paste0(baseNameSplit[length(baseNameSplit)-1], '/')
+    } else {
+        baseShortDirName <- paste0(baseNameSplit[length(baseNameSplit)], '/')
+    }
+    annotationBaseDir <- "Annotation/"
+    baseOutputDir <- paste0(baseDirName, '/gct/')
 
-  if (dir.exists(baseOutputDir)) {
-    # do nothing if directory already exists (i.e., we are regenerating the network)
-  } else {
-    # else create the directory if this is the first time we are dealing with this data set
-    print("No directory found for $baseOutputDir. Creating...")
-    dir.create(baseOutputDir)
-  }
-  
-  # -------------------------------------
-  # Load term annotation data
-  # -------------------------------------
-  
-  # Get data saved from tox21enricher database
-  
-  # Load Annotations from data table
-  className2classID	<- lapply(1:nrow(outpClasses), function(line) outpClasses[line, "annoclassid"])
-  names(className2classID)	<- lapply(1:nrow(outpClasses), function(line) outpClasses[line, "annoclassname"])
-  classID2className	<- lapply(1:nrow(outpClasses), function(line) outpClasses[line, "annoclassname"])
-  names(classID2className) <- lapply(1:nrow(outpClasses), function(line) outpClasses[line, "annoclassid"])
-  
-  # TODO: This is not being populated correctly  
-  classID2annotationTerm2termUniqueID_lv1 <- lapply(split(outpAnnoDetail, outpAnnoDetail$annoclassid), function(x) {
-    return(split(x, x$annoterm))
-  })
+    if (dir.exists(baseOutputDir)) {
+        # do nothing if directory already exists (i.e., we are regenerating the network)
+    } else {
+        # else create the directory if this is the first time we are dealing with this data set
+        print(paste0("No directory found for ", baseOutputDir, ". Creating..."))
+        dir.create(baseOutputDir)
+    }
 
-  classID2annotationTerm2termUniqueID <- lapply(classID2annotationTerm2termUniqueID_lv1, function(x) {
-    return(lapply(x, function(y) {
-      inner_classID2annotationTerm2termUniqueID <- lapply(y$annotermid, function(z) y$annotermid)
-      names(inner_classID2annotationTerm2termUniqueID) <- y$annotermid
-      return(inner_classID2annotationTerm2termUniqueID)
-    }))
-  })
+    # Load term annotation data
 
-  # -------------------------------------
-  # Enumerate all possible directories
-  # -------------------------------------
-  # ARGV[1]       ARGV[2] ARGV[3]        ARGV[4]    ARGV[5]
-  process_variable_DAVID_CHART_directories (baseDirName, baseOutputDir, "", "",   topTermLimit,   mode,   sigColumnName, sigCutoff, valueColumnName, className2classID, classID2annotationTerm2termUniqueID)
-  process_variable_DAVID_CLUSTER_directories (baseDirName, baseOutputDir, "", "", topTermLimit,   mode,   sigColumnName, sigCutoff, valueColumnName, className2classID, classID2annotationTerm2termUniqueID)
-  
+    # Get data saved from tox21enricher database
+    # Load Annotations from data table
+    className2classID <- lapply(seq_len(nrow(outpClasses)), function(line) outpClasses[line, "annoclassid"])
+    names(className2classID) <- lapply(seq_len(nrow(outpClasses)), function(line) outpClasses[line, "annoclassname"])
+    classID2className <- lapply(seq_len(nrow(outpClasses)), function(line) outpClasses[line, "annoclassname"])
+    names(classID2className) <- lapply(seq_len(nrow(outpClasses)), function(line) outpClasses[line, "annoclassid"])
+
+    classID2annotationTerm2termUniqueID_lv1 <- lapply(split(outpAnnoDetail, outpAnnoDetail$annoclassid), function(x) {
+        return(split(x, x$annoterm))
+    })
+
+    classID2annotationTerm2termUniqueID <- lapply(classID2annotationTerm2termUniqueID_lv1, function(x) {
+        return(lapply(x, function(y) {
+            inner_classID2annotationTerm2termUniqueID <- lapply(y$annotermid, function(z) y$annotermid)
+            names(inner_classID2annotationTerm2termUniqueID) <- y$annotermid
+            return(inner_classID2annotationTerm2termUniqueID)
+        }))
+    })
+
+    # Enumerate all possible directories
+    process_variable_DAVID_CHART_directories (baseDirName, baseOutputDir, "", "", topTermLimit, mode, sigColumnName, sigCutoff, valueColumnName, className2classID, classID2annotationTerm2termUniqueID)
+    process_variable_DAVID_CLUSTER_directories (baseDirName, baseOutputDir, "", "", topTermLimit, mode, sigColumnName, sigCutoff, valueColumnName, className2classID, classID2annotationTerm2termUniqueID)
 }
 
-
-process_variable_DAVID_CLUSTER_directories <- function(dirName, outputDir, extTag, additionalFileName, topTermLimit,   mode,   sigColumnName, sigCutoff, valueColumnName, className2classID, classID2annotationTerm2termUniqueID){
-  
-  # Check the directory for any file
-  infiles <- Sys.glob(paste0(dirName,"/*_Cluster.txt"))
-  
-  if (is.null(infiles[1])){
-    return(FALSE)
-  }
-  
-  # Define number of top clusters
-  dir.create(outputDir)
-  dirInputName	      <- dirName
-  dirInputExpression	<- paste0(dirInputName, "ExpressionData/", sep="")
-  sigColumnIndex			<- get_column_index(sigColumnName) # 5=p-value, 12=BH p-value, 13=FDR
-  valueColumnIndex		<- get_column_index(valueColumnName)
-  summaryFileNameBase	<- additionalFileName
-  summaryFileNameExt	<- extTag
-  dirNameSplit			  <- str_split(dirName, "/")[[1]]
-  if (is.null(dirNameSplit[length(dirNameSplit)]) == FALSE) {
-    summaryFileNameBase 	<- paste0(summaryFileNameBase, "Cluster_Top", topTermLimit, "_", mode, "__", sigColumnName, "_", sigCutoff, "_", valueColumnName, sep="")
-    summaryFileNameExt		<- paste0(summaryFileNameExt,  "Cluster_Top", topTermLimit, "_", mode, "__", sigColumnName, "_", sigCutoff, "_", valueColumnName, sep="")
-  } else {
-    summaryFileNameBase 	<- paste0(summaryFileNameBase, "Cluster_Top", topTermLimit, "_", mode, "__", sigColumnName, "_", sigCutoff, "_", valueColumnName, sep="")
-    summaryFileNameExt		<- paste0(summaryFileNameExt,  "Cluster_Top", topTermLimit, "_", mode, "__", sigColumnName, "_", sigCutoff, "_", valueColumnName, sep="")
-  }
-  
-  # -----------------------------------------------------------------------------
-  # Load DAVID cluster files
-  
-  ID2Term			    <- list()
-  ID2Class		    <- list()
-  fileHeaderNames <- list()
-  pvalueMatrix	  <- list()
-  fcMatrix		    <- list()
-  upDownMatrix	  <- list()
-  
-  # Additional variables/hashes/arrays for expression details
-  geneID2expDetails	  <- list()
-  geneID2Description	<- list()
-  allBaseFileNames	  <- list()
-  gctFileHeader		    <- ""
-  geneID2ExpProfile	  <- list()
-  gctFileStatus		    <- 0
-  
-  # Load gct file, if available
-  # check gct file
-  gctFiles <- Sys.glob(paste0(dirInputName, "/*.gct"))
-  if (length(gctFiles) > 0) {
-    loadGctTmp <- load_gct_file_as_profile(gctFiles[1], geneID2ExpProfile)
-    gctFileStatus <- loadGctTmp[1]
-    gctFileHeader <- loadGctTmp[2]
-    geneID2ExpProfile <- loadGctTmp[3]
-  }
-  
-  # Step1. Get the list of significant terms
-  if(length(infiles) < 1){
-    return(FALSE)
-  }
-  
-  getSigTerms <- lapply(infiles, function(infile) {
-  #getSigTerms <- mclapply(infiles, mc.cores=4, mc.silent=FALSE, function(infile){
-    tmp1 <- str_split(infile, "/")[[1]]
-    tmpNameSplit <- str_split(tmp1[length(tmp1)], "__Cluster.txt")[[1]]
-    shortFileBaseName	<- tmpNameSplit[1]
-    originalSourceFile <- paste0(dirInputName, "/", shortFileBaseName, ".txt")
-    DATA <- read.delim(infile, sep="\t", comment.char="", quote="", stringsAsFactors = FALSE, header=FALSE, fill=TRUE, col.names=c("Category","Term","Count","%","PValue","CASRNs","List","Total","Pop Hits","Pop Total","Fold Enrichment","Bonferroni","Benjamini","FDR"))
-    lines <- DATA
-    if(nrow(lines) < 1){
-      return(FALSE)
+process_variable_DAVID_CLUSTER_directories <- function(dirName, outputDir, extTag, additionalFileName, topTermLimit, mode, sigColumnName, sigCutoff, valueColumnName, className2classID, classID2annotationTerm2termUniqueID){
+    # Check the directory for any file
+    infiles <- Sys.glob(paste0(dirName, "/*_Cluster.txt"))
+    if (is.null(infiles[1])){
+        return(FALSE)
     }
-    tmpIDList <- lapply(1:nrow(lines), function(i){
-      tmpSplit <- lapply(lines[i,], function(lineItem) {
-        return(lineItem)
-      })
-      if(grepl("^Annotation Cluster", tmpSplit[[1]])) {
-        firstClusterIndex <- i + 2
-        tmpSplitInner <- lapply(lines[firstClusterIndex,], function(lineItem) {
-          return(lineItem)
-        })
-        if (tmpSplitInner[[sigColumnIndex]] == "" | is.na(tmpSplitInner[[sigColumnIndex]]) == TRUE | grepl("^\\D", tmpSplitInner[[sigColumnIndex]]) == TRUE | as.double(tmpSplitInner[[sigColumnIndex]]) >= sigCutoff | as.double(tmpSplitInner[[10]]) < 1) {
-          # do nothing
-          return(NULL)
-        } else {
-          tmpID	<- paste0(tmpSplitInner[[1]], " | ", tmpSplitInner[[2]], sep="")
-          return(tmpID)
+    # Define number of top clusters
+    dir.create(outputDir)
+    dirInputName <- dirName
+    dirInputExpression <- paste0(dirInputName, "ExpressionData/")
+    sigColumnIndex <- get_column_index(sigColumnName) # 5=p-value, 12=BH p-value, 13=FDR
+    valueColumnIndex <- get_column_index(valueColumnName)
+    summaryFileNameBase <- additionalFileName
+    summaryFileNameExt <- extTag
+    dirNameSplit <- unlist(str_split(dirName, "/"))
+    if (!is.null(dirNameSplit[length(dirNameSplit)])) {
+        summaryFileNameBase <- paste0(summaryFileNameBase, "Cluster_Top", topTermLimit, "_", mode, "__", sigColumnName, "_", sigCutoff, "_", valueColumnName)
+        summaryFileNameExt <- paste0(summaryFileNameExt,  "Cluster_Top", topTermLimit, "_", mode, "__", sigColumnName, "_", sigCutoff, "_", valueColumnName)
+    } else {
+        summaryFileNameBase <- paste0(summaryFileNameBase, "Cluster_Top", topTermLimit, "_", mode, "__", sigColumnName, "_", sigCutoff, "_", valueColumnName)
+        summaryFileNameExt <- paste0(summaryFileNameExt,  "Cluster_Top", topTermLimit, "_", mode, "__", sigColumnName, "_", sigCutoff, "_", valueColumnName)
+    }
+
+    # Load DAVID cluster files
+    ID2Term <- list()
+    ID2Class <- list()
+    fileHeaderNames <- list()
+    pvalueMatrix <- list()
+    fcMatrix <- list()
+    upDownMatrix <- list()
+  
+    # Additional variables/hashes/arrays for expression details
+    geneID2expDetails <- list()
+    geneID2Description <- list()
+    allBaseFileNames <- list()
+    gctFileHeader <- ""
+    geneID2ExpProfile <- list()
+    gctFileStatus <- 0
+  
+    # Load gct file, if available
+    # check gct file
+    gctFiles <- Sys.glob(paste0(dirInputName, "/*.gct"))
+    if (length(gctFiles) > 0) {
+        loadGctTmp <- load_gct_file_as_profile(gctFiles[1], geneID2ExpProfile)
+        gctFileStatus <- loadGctTmp[1]
+        gctFileHeader <- loadGctTmp[2]
+        geneID2ExpProfile <- loadGctTmp[3]
+    }
+
+    # Step1. Get the list of significant terms
+    if(length(infiles) < 1){
+        return(FALSE)
+    }
+
+    getSigTerms <- lapply(infiles, function(infile) {
+        tmp1 <- unlist(str_split(infile, "/"))
+        tmpNameSplit <- unlist(str_split(tmp1[length(tmp1)], "__Cluster.txt"))
+        shortFileBaseName <- tmpNameSplit[1]
+        originalSourceFile <- paste0(dirInputName, "/", shortFileBaseName, ".txt")
+        DATA <- read.delim(infile, sep="\t", comment.char="", quote="", stringsAsFactors=FALSE, header=FALSE, fill=TRUE, col.names=c("Category", "Term", "Count", "%", "PValue", "CASRNs", "List", "Total", "Pop Hits", "Pop Total", "Fold Enrichment", "Bonferroni", "Benjamini", "FDR"))
+        lines <- DATA
+        if(nrow(lines) < 1){
+            return(FALSE)
         }
-      }
+        tmpIDList <- lapply(seq_len(nrow(lines)), function(i){
+            tmpSplit <- lapply(lines[i, ], function(lineItem) {
+                return(lineItem)
+            })
+            if(grepl("^Annotation Cluster", tmpSplit[[1]])) {
+                firstClusterIndex <- i + 2
+                tmpSplitInner <- lapply(lines[firstClusterIndex, ], function(lineItem) {
+                    return(lineItem)
+                })
+                if (tmpSplitInner[[sigColumnIndex]] == "" | is.na(tmpSplitInner[[sigColumnIndex]]) | grepl("^\\D", tmpSplitInner[[sigColumnIndex]]) | as.double(tmpSplitInner[[sigColumnIndex]]) >= sigCutoff | as.double(tmpSplitInner[[10]]) < 1) {
+                    # do nothing
+                    return(NULL)
+                } else {
+                    tmpID <- paste0(tmpSplitInner[[1]], " | ", tmpSplitInner[[2]])
+                    return(tmpID)
+                }
+            }
+        })
+        
+        #Get not null elements
+        tmpIDList <- tmpIDList[!vapply(tmpIDList, is.null, FUN.VALUE=logical(1))]
+        tmpIDList <- unlist(tmpIDList, recursive=FALSE)
+        
+        # Cut off entries over the limit
+        if(length(tmpIDList) > as.double(topTermLimit)){
+            tmpIDList <- tmpIDList[seq_len((as.double(topTermLimit)))]
+        }
+    
+        tmp_ID2Term <- lapply(seq_len(nrow(lines)), function(i){
+            tmpSplit <- lapply(lines[i, ], function(lineItem) {
+                return(lineItem)
+            })
+            if(grepl("^Annotation Cluster", tmpSplit[[1]])) {
+                firstClusterIndex <- i + 2
+                tmpSplitInner <- lapply(lines[firstClusterIndex, ], function(lineItem) {
+                    return(lineItem)
+                })
+                if (tmpSplitInner[[sigColumnIndex]] == "" | is.na(tmpSplitInner[[sigColumnIndex]]) | grepl("^\\D", tmpSplitInner[[sigColumnIndex]]) | as.double(tmpSplitInner[[sigColumnIndex]]) >= sigCutoff | as.double(tmpSplitInner[[10]]) < 1) {
+                    # do nothing
+                } else {
+                    tmpTerm <- paste0(tmpSplitInner[[1]], " | ", tmpSplitInner[[2]])
+                    return(tmpTerm)
+                }
+            }
+        })
+        #Get not null elements
+        tmp_ID2Term <- tmp_ID2Term[!vapply(tmp_ID2Term, is.null, FUN.VALUE=logical(1))]
+        tmp_ID2Term <- unlist(tmp_ID2Term, recursive=FALSE)
+        
+        # Cut off entries over the limit
+        if(length(tmp_ID2Term) > as.double(topTermLimit)){
+            tmp_ID2Term <- tmp_ID2Term[seq_len((as.double(topTermLimit)))]
+        }
+        
+        tmp_ID2Class <- lapply(seq_len(nrow(lines)), function(i){
+            tmpSplit <- lapply(lines[i, ], function(lineItem) {
+                return(lineItem)
+            })
+            if(grepl("^Annotation Cluster", tmpSplit[[1]])) {
+                firstClusterIndex <- i + 2
+                tmpSplitInner <- lapply(lines[firstClusterIndex, ], function(lineItem) {
+                    return(lineItem)
+                })
+                if (tmpSplitInner[[sigColumnIndex]] == "" | is.na(tmpSplitInner[[sigColumnIndex]]) | grepl("^\\D", tmpSplitInner[[sigColumnIndex]]) | as.double(tmpSplitInner[[sigColumnIndex]]) >= sigCutoff | as.double(tmpSplitInner[[10]]) < 1) {
+                    # do nothing
+                } else {
+                    return(tmpSplitInner[[1]])
+                }
+            }
+        })
+        #Get not null elements
+        tmp_ID2Class <- tmp_ID2Class[!vapply(tmp_ID2Class, is.null, FUN.VALUE=logical(1))]
+        tmp_ID2Class <- unlist(tmp_ID2Class, recursive=FALSE)
+        
+        # Cut off entries over the limit
+        if(length(tmp_ID2Class) > as.double(topTermLimit)){
+          tmp_ID2Class <- tmp_ID2Class[seq_len((as.double(topTermLimit)))]
+        }
+        names(tmp_ID2Term) <- tmpIDList
+        names(tmp_ID2Class) <- tmpIDList
+        return(list(ID2Term=tmp_ID2Term, ID2Class=tmp_ID2Class))
     })
     
+    getSigTermsFilteredTerms <- lapply(seq_len(length(getSigTerms)), function(i){
+        return(getSigTerms[[i]]["ID2Term"])
+    })
+    getSigTermsFilteredClasses <- lapply(seq_len(length(getSigTerms)), function(i){
+        return(getSigTerms[[i]]["ID2Class"])
+    })
+  
+    ID2Term  <- unique(unlist(unname(unlist(getSigTermsFilteredTerms, recursive=FALSE)), recursive=FALSE))
+    ID2Class <- unique(unlist(unname(unlist(getSigTermsFilteredClasses, recursive=FALSE)), recursive=FALSE))
+    # remove NA
+    ID2Term <- ID2Term[!vapply(ID2Term, is.na, FUN.VALUE=logical(1))]
+    ID2Class <- ID2Class[!vapply(ID2Class, is.na, FUN.VALUE=logical(1))]
+  
+    # For cluster, we want to append the class name before the term as a given term may appear in multiple classes. If that happens, heatmap generation will be messed up.
+    IDs <- ID2Term
+  
+    lapply(infiles, function(infile) {
+        tmp1 <- unlist(str_split(infile, "/"))
+        tmpNameSplit <- str_split(tmp1[length(tmp1)], "__Cluster.txt")
+        shortFileBaseName <- tmpNameSplit[1]
+        tmp2 <- unlist(str_split(tmp1[length(tmp1)], ".xls"))
+        if(length(tmp2[1]) == length(tmp1[length(tmp1)])) {
+            tmp2 <- unlist(str_split(tmp1[length(tmp1)], ".txt"))
+        }
+        tmp3 <- unlist(str_split(tmp2[1], "__Cluster"))
+        fileHeaderNames <<- append(fileHeaderNames, tmp3[1])
+
+        # Load expression data if any
+        expressionDataExist <- 0
+        expressionData <- list()
+        expressionDataFC <- list()
+        expressionHeader <- ""
+      
+        # Check term file and load
+        DATA <- tryCatch(read.delim(infile, sep="\t", comment.char="", quote="", stringsAsFactors=FALSE, header=TRUE, fill=TRUE, skip=1), error=function(cond) {
+            print("No lines in input file.")
+            return(data.frame())
+        })
+        if(nrow(DATA) > 0){
+            lapply(seq_len(nrow(DATA)), function(line) {
+                tmpSplit <- lapply(DATA[line, ], function(lineItem) {
+                    return(lineItem)
+                })
+                if (tmpSplit[[sigColumnIndex]] == "" | is.null(tmpSplit[[sigColumnIndex]]) | is.null(tmpSplit[[10]]) | grepl("^\\D", tmpSplit[[sigColumnIndex]]) | (mode == "ALL" & as.double(tmpSplit[[sigColumnIndex]]) >= sigCutoff) | as.double(tmpSplit[[10]]) < 1) {
+                    # Do nothing
+                } else {
+                    tmpID <- paste0(tmpSplit[[1]], " | ", tmpSplit[[2]])
+                    if (!is.null(ID2Term[tmpID])) {
+                        pvalueMatrix[[tmpID]][tmp3[1]]  <<- -1 * log10(as.double(tmpSplit[[valueColumnIndex]]))
+                        fcMatrix[[tmpID]][tmp3[1]] <<- tmpSplit[10]
+                    }
+                }
+            })
+        }
+    })
+
+    # Create a summary file
+    summaryFileName <- paste0(summaryFileNameBase, "__ValueMatrix.txt")
+    file.create(paste0(outputDir, summaryFileName))
+    SUMMARY <- file(paste0(outputDir, summaryFileName))
+    fileHeaderNames <- unlist(fileHeaderNames)
+    fileHeaderNames <- sort_by_file_number(fileHeaderNames)
+    writeToSummaryHeader <- paste0("GROUP\tID\tTerms\t", paste0(fileHeaderNames, collapse="\t"), "\n")
+    writeToSummary2 <- ""
+  
     #Get not null elements
-    tmpIDList <- tmpIDList[!sapply(tmpIDList, is.null)]
-    tmpIDList <- unlist(tmpIDList, recursive = FALSE)
-    
-    # Cut off entries over the limit
-    if(length(tmpIDList) > as.double(topTermLimit)){
-      tmpIDList <- tmpIDList[1:(as.double(topTermLimit))]
-    }
-
-    tmp_ID2Term <- lapply(1:nrow(lines), function(i){
-      tmpSplit <- lapply(lines[i,], function(lineItem) {
-        return(lineItem)
-      })
-      if(grepl("^Annotation Cluster", tmpSplit[[1]])) {
-        firstClusterIndex <- i + 2
-        tmpSplitInner <- lapply(lines[firstClusterIndex,], function(lineItem) {
-          return(lineItem)
+    IDs <- IDs[!vapply(IDs, is.na, FUN.VALUE=logical(1))]
+    IDs <- unlist(IDs, recursive=FALSE)
+    IDs <- unique(IDs)
+  
+    writeToSummary <- lapply(IDs, function(ID) { 
+        writeToSummaryLabel <- paste0(ID2Class[ID], "\t", ID, "\t")
+        IDSplit <- unlist(str_split(ID, "\\|"))
+        writeToSummary2 <- lapply(fileHeaderNames, function(header){
+            if (!is.null(pvalueMatrix[[ID]][header]) & !is.na(pvalueMatrix[[ID]][header])){
+                if(header %in% names(pvalueMatrix[[ID]])) {
+                    return(paste0(pvalueMatrix[[ID]][header]))
+                } else {
+                    return("0")
+                }
+            } else {
+                return("#")
+            }
         })
-        
-        if (tmpSplitInner[[sigColumnIndex]] == "" | is.na(tmpSplitInner[[sigColumnIndex]]) == TRUE | grepl("^\\D", tmpSplitInner[[sigColumnIndex]]) == TRUE | as.double(tmpSplitInner[[sigColumnIndex]]) >= sigCutoff | as.double(tmpSplitInner[[10]]) < 1) {
-          # do nothing
-        } else {
-          tmpTerm <- paste0(tmpSplitInner[[1]], " | ", tmpSplitInner[[2]])
-          return(tmpTerm)
-        }
-      }
+        writeToSummary2 <- paste0(writeToSummary2, collapse="\t")
+        writeToSummary2 <- gsub("#", "", writeToSummary2)
+        return(paste0(writeToSummaryLabel, "\t", writeToSummary2))
     })
-    #Get not null elements
-    tmp_ID2Term <- tmp_ID2Term[!sapply(tmp_ID2Term, is.null)]
-    tmp_ID2Term <- unlist(tmp_ID2Term, recursive = FALSE)
-    
-    # Cut off entries over the limit
-    if(length(tmp_ID2Term) > as.double(topTermLimit)){
-      tmp_ID2Term <- tmp_ID2Term[1:(as.double(topTermLimit))]
-    }
-    
-    tmp_ID2Class <- lapply(1:nrow(lines), function(i){
-      tmpSplit <- lapply(lines[i,], function(lineItem) {
-        return(lineItem)
-      })
-      if(grepl("^Annotation Cluster", tmpSplit[[1]])) {
-        firstClusterIndex <- i + 2
-        tmpSplitInner <- lapply(lines[firstClusterIndex,], function(lineItem) {
-          return(lineItem)
+    writeToSummary <- paste0(writeToSummary, collapse="\n")
+    write(paste0(writeToSummaryHeader, writeToSummary), SUMMARY, append=TRUE)
+    close(SUMMARY)
+
+    # Create a network summary file for Cluster
+    ForNetworkFile <- paste0(summaryFileNameBase, "__ValueMatrix.ForNet")
+    file.create(paste0(outputDir, ForNetworkFile))
+    NETWORK <- file(paste0(outputDir, ForNetworkFile))
+    writeToNetworkHeader <- paste0("GROUPID\tUID\tTerms\t", paste0(fileHeaderNames, collapse="\t"), "\n")
+    writeToNetwork2 <- ""
+  
+    writeToNetwork <- lapply(IDs, function(ID) {
+        idTermSplits <- unlist(str_split(ID, " \\| "))
+        tmpHashRef <- classID2annotationTerm2termUniqueID[[className2classID[[idTermSplits[1]]]]]
+        writeToNetwork2 <- paste0(className2classID[[idTermSplits[1]]], "\t", tmpHashRef[[idTermSplits[2]]], "\t", idTermSplits[2])
+        writeToNetwork_inner <- unname(unlist(lapply(fileHeaderNames, function(header) {
+            if (!is.na(unname(pvalueMatrix[[ID]][header]))) {
+                return(pvalueMatrix[[ID]][header])
+            } else {
+                return("#") # delete these later
+            }
+        })))
+        writeToNetwork_inner <- paste0(writeToNetwork_inner, collapse="\t")
+        writeToNetwork_inner <- gsub("#", "", writeToNetwork_inner, fixed=TRUE)
+        writeToNetwork2 <- paste0(writeToNetwork2, "\t", writeToNetwork_inner)
+    })
+    writeToNetwork <- paste0(writeToNetwork, collapse="\n")
+    write(paste0(writeToNetworkHeader, writeToNetwork), NETWORK, append=TRUE)
+    close(NETWORK)
+  
+    # Create a gct file from ValueMatrix
+    INFILE <- read.delim(paste0(outputDir, summaryFileNameBase, "__ValueMatrix.txt"), sep="\t", comment.char="", quote="", stringsAsFactors=FALSE, header=TRUE, fill=TRUE)
+    file.create(paste0(outputDir, summaryFileNameBase, "__ValueMatrix.gct"))
+    OUTFILE <- file(paste0(outputDir, summaryFileNameBase, "__ValueMatrix.gct"))
+    headerLine <- paste0(colnames(INFILE), collapse="\t")
+    headerSplit <- unlist(str_split(headerLine, "\t"))
+    sampleCnt <- length(headerSplit) - 3
+    geneCnt <- 0
+    content <- ""
+  
+    if(nrow(INFILE) > 0){
+        content <- lapply(seq_len(nrow(INFILE)), function(l) {
+            line <- paste0(INFILE[l, ], collapse="\t")
+            if (line == "") {
+                # Do nothing
+                return(NULL)
+            } else {
+                tmpSplit <- unlist(str_split(line, "\t"))
+                tmpSplit <- unlist(lapply(seq_len((sampleCnt+3)), function(i) {
+                    if(i >= 4){
+                        if (tmpSplit[i] == "NA" | is.na(tmpSplit[i]) | length(tmpSplit[i]) < 1 | is.null(tmpSplit[i])) {
+                            return(0)
+                        } 
+                    }
+                    return(tmpSplit[i])
+                }))
+                tmpSplit <- tmpSplit[-1] #Shift
+                return(paste0(tmpSplit, collapse="\t"))
+            }
         })
-        
-        if (tmpSplitInner[[sigColumnIndex]] == "" | is.na(tmpSplitInner[[sigColumnIndex]]) == TRUE | grepl("^\\D", tmpSplitInner[[sigColumnIndex]]) == TRUE | as.double(tmpSplitInner[[sigColumnIndex]]) >= sigCutoff | as.double(tmpSplitInner[[10]]) < 1) {
-          # do nothing
-        } else {
-          return(tmpSplitInner[[1]])
-        }
-      }
-    })
-    #Get not null elements
-    tmp_ID2Class <- tmp_ID2Class[!sapply(tmp_ID2Class, is.null)]
-    tmp_ID2Class <- unlist(tmp_ID2Class, recursive = FALSE)
-    
-    # Cut off entries over the limit
-    if(length(tmp_ID2Class) > as.double(topTermLimit)){
-      tmp_ID2Class <- tmp_ID2Class[1:(as.double(topTermLimit))]
+        content <- content[!vapply(content, is.null, FUN.VALUE=logical(1))]
+        geneCnt <- length(content)
+        content <- paste0(content, collapse="\n")
     }
-    
-    names(tmp_ID2Term) <- tmpIDList
-    names(tmp_ID2Class) <- tmpIDList
-    
-    return(list(ID2Term=tmp_ID2Term, ID2Class=tmp_ID2Class))
-    
-  })
-  
-  getSigTermsFilteredTerms <- lapply(1:length(getSigTerms), function(i){
-    return(getSigTerms[[i]]["ID2Term"])
-  })
-  
-  getSigTermsFilteredClasses <- lapply(1:length(getSigTerms), function(i){
-    return(getSigTerms[[i]]["ID2Class"])
-  })
-  
-  #TODO: make this more readable
-  ID2Term  <- unique(unlist(unname(unlist(getSigTermsFilteredTerms,   recursive = FALSE)), recursive = FALSE))
-  ID2Class <- unique(unlist(unname(unlist(getSigTermsFilteredClasses, recursive = FALSE)), recursive = FALSE))
-  # remove NA
-  ID2Term <- ID2Term[!sapply(ID2Term, is.na)]
-  ID2Class <- ID2Class[!sapply(ID2Class, is.na)]
-  
-  #IDs <- names(ID2Term)
-  # For cluster, we want to append the class name before the term as a given term may appear in multiple classes. If that happens, heatmap generation will be messed up.
-  IDs <- ID2Term
-  
-  for(infile in infiles) {
-    tmp1 <- str_split(infile, "/")[[1]]
-    tmpNameSplit <- str_split(tmp1[length(tmp1)], "__Cluster.txt")
-    shortFileBaseName	<- tmpNameSplit[1]
-    
-    tmp2 <- str_split(tmp1[length(tmp1)], ".xls")[[1]]
-    if(length(tmp2[1]) == length(tmp1[length(tmp1)])) {
-      tmp2 <- str_split(tmp1[length(tmp1)], ".txt")[[1]]
-    }
-    
-    tmp3 <- str_split(tmp2[1], "__Cluster")[[1]]
-    fileHeaderNames <- append(fileHeaderNames, tmp3[1])
-    
-    # ------------------------------------------------------------
-    # Load expression data if any
-    expressionDataExist <- 0
-    expressionData		  <- list()
-    expressionDataFC	  <- list()
-    expressionHeader    <- ""
-    
-    # ------------------------------------------------------------
-    # Check term file and load
-    # TODO: Do we need to do this again here? -> amendment: probably not
-    # try this with a trycatch
-    
-    DATA <- tryCatch(read.delim(infile, sep="\t", comment.char="", quote="", stringsAsFactors = FALSE, header=TRUE, fill=TRUE, skip=1),
-                     error=function(cond) {
-                       print("No lines in input file.")
-                       return(data.frame())
-                     })
-    
-    if(nrow(DATA) > 0){
-      #TODO: clean this up like the above code
-      for(line in 1:nrow(DATA)) {
-        tmpSplit <- lapply(DATA[line,], function(lineItem) {
-          return(lineItem)
-        })
-        
-        if (tmpSplit[[sigColumnIndex]] == "" | is.null(tmpSplit[[sigColumnIndex]]) == TRUE | is.null(tmpSplit[[10]]) == TRUE | grepl("^\\D", tmpSplit[[sigColumnIndex]]) == TRUE | (mode == "ALL" & as.double(tmpSplit[[sigColumnIndex]]) >= sigCutoff) | as.double(tmpSplit[[10]]) < 1) {
-          # Do nothing
-        } else {
-          tmpID	<- paste0(tmpSplit[[1]], " | ", tmpSplit[[2]])
-          if (is.null(ID2Term[tmpID]) == FALSE) {
-            pvalueMatrix[[tmpID]][tmp3[1]]  <- -1 * log10(as.double(tmpSplit[[valueColumnIndex]]))
-            fcMatrix[[tmpID]][tmp3[1]] <- tmpSplit[10]
-          }
-        }
-      }
-    }
-  }
-
-  # Create a summary file
-  summaryFileName <- paste0(summaryFileNameBase, "__ValueMatrix.txt", sep="")
-  file.create(paste0(outputDir, summaryFileName, sep=""))
-  SUMMARY <- file(paste0(outputDir, summaryFileName, sep=""))
-  fileHeaderNames <- unlist(fileHeaderNames)
-  fileHeaderNames <- sort_by_file_number(fileHeaderNames)
-  writeToSummaryHeader <- paste0("GROUP\tID\tTerms\t", paste0(fileHeaderNames, collapse="\t"), "\n", sep="")
-  writeToSummary2 <- ""
-  
-  #Get not null elements
-  IDs <- IDs[!sapply(IDs, is.na)]
-  IDs <- unlist(IDs, recursive = FALSE)
-  
-  IDs <- unique(IDs)
-  
-  writeToSummary <- lapply(IDs, function(ID) {	
-    writeToSummaryLabel <- paste0(ID2Class[ID],"\t",ID,"\t")
-    IDSplit <- str_split(ID, "\\|")[[1]]
-    writeToSummary2 <- lapply(fileHeaderNames, function(header){
-      if (is.null(pvalueMatrix[[ID]][header]) == FALSE & is.na(pvalueMatrix[[ID]][header]) == FALSE){
-        if(header %in% names(pvalueMatrix[[ID]])) {
-          return(paste0(pvalueMatrix[[ID]][header]))
-        } else {
-          return("0")
-        }
-      } else {
-        return("#")
-      }
-    })
-    writeToSummary2 <- paste0(writeToSummary2, collapse="\t")
-    writeToSummary2 <- gsub("#", "", writeToSummary2)
-    return(paste0(writeToSummaryLabel, "\t", writeToSummary2))
-  })
-
-  writeToSummary <- paste0(writeToSummary, collapse="\n")
-  write(paste0(writeToSummaryHeader, writeToSummary), SUMMARY, append=TRUE)
-  close(SUMMARY)
-
-  # Create a network summary file for Cluster
-  ForNetworkFile <- paste0(summaryFileNameBase, "__ValueMatrix.ForNet")
-  file.create(paste0(outputDir, ForNetworkFile))
-  NETWORK <- file(paste0(outputDir, ForNetworkFile))
-  writeToNetworkHeader <- paste0("GROUPID\tUID\tTerms\t", paste0(fileHeaderNames, collapse="\t"), "\n", sep="")
-  writeToNetwork2 <- ""
-  
-  writeToNetwork <- lapply(IDs, function(ID) {
-    idTermSplits <- unlist(str_split(ID, " \\| "))
-    tmpHashRef <- classID2annotationTerm2termUniqueID[[className2classID[[idTermSplits[1]]]]]
-    writeToNetwork2 <- paste0(className2classID[[idTermSplits[1]]], "\t", tmpHashRef[[idTermSplits[2]]], "\t", idTermSplits[2])
-    writeToNetwork_inner <- unname(unlist(lapply(fileHeaderNames, function(header) {
-      if (is.na(unname(pvalueMatrix[[ID]][header])) == FALSE) {
-        return(pvalueMatrix[[ID]][header])
-      } else {
-        return("#") # delete these later
-      }
-    })))
-    writeToNetwork_inner <- paste0(writeToNetwork_inner, collapse="\t")
-    writeToNetwork_inner <- gsub("#", "", writeToNetwork_inner, fixed=TRUE)
-    writeToNetwork2 <- paste0(writeToNetwork2, "\t", writeToNetwork_inner)
-  })
-  writeToNetwork <- paste0(writeToNetwork, collapse="\n")
-  write(paste0(writeToNetworkHeader, writeToNetwork), NETWORK, append=TRUE)
-  close(NETWORK)
-  
-  # Create a gct file from ValueMatrix
-  INFILE <- read.delim(paste0(outputDir, summaryFileNameBase, "__ValueMatrix.txt"), sep="\t", comment.char="", quote="", stringsAsFactors = FALSE, header=TRUE, fill=TRUE)
-  
-  file.create(paste0(outputDir, summaryFileNameBase, "__ValueMatrix.gct"))
-  OUTFILE <- file(paste0(outputDir, summaryFileNameBase, "__ValueMatrix.gct"))
-  
-  headerLine	<- paste0(colnames(INFILE), collapse="\t")
-  headerSplit	<- str_split(headerLine, "\t")[[1]]
-  sampleCnt	  <- length(headerSplit) - 3
-  geneCnt  <- 0
-  content	<- ""
-  
-  if(nrow(INFILE) > 0){
-    for(l in 1:nrow(INFILE)) {
-      line <- paste0(INFILE[l,], collapse="\t")
-      if (line == "") {
-        # Do nothing
-      } else {
-        tmpSplit <- str_split(line, "\t")[[1]]
-        for (i in 4:(sampleCnt+3)) {
-          if (tmpSplit[i] == "NA" | is.na(tmpSplit[i]) == TRUE | length(tmpSplit[i]) < 1 | is.null(tmpSplit[i]) == TRUE) {
-            tmpSplit[i] <- 0
-          }
-        }
-        
-        tmpSplit <- tmpSplit[-(1:1)] #Shift
-        content <- paste0(content, paste0(tmpSplit, collapse="\t"), "\n")
-        geneCnt <- geneCnt + 1
-      }
-    }	
-  }
-  write(paste0("#1.2\n", geneCnt, "\t", sampleCnt, "\n", paste0(colnames(INFILE)[-(1:1)],collapse="\t"), "\n", content), OUTFILE, append=TRUE)
-  close(OUTFILE)
-}	
+    write(paste0("#1.2\n", geneCnt, "\t", sampleCnt, "\n", paste0(colnames(INFILE)[-1], collapse="\t"), "\n", content), OUTFILE, append=TRUE)
+    close(OUTFILE)
+}
 
 process_variable_DAVID_CHART_directories <- function(dirName, outputDir, extTag, additionalFileName, topTermLimit,   mode,   sigColumnName, sigCutoff, valueColumnName, className2classID, classID2annotationTerm2termUniqueID){
+    # Check the directory for any file
+    infilesAll <- Sys.glob(paste0(dirName, "/*_Chart.txt"))
+    if (is.null(infilesAll[1])){
+        return(FALSE)
+    }
   
-  # Check the directory for any file
-  infilesAll <- Sys.glob(paste0(dirName,"/*_Chart.txt"))
-  if (is.null(infilesAll[1])){
-    return(FALSE)
-  }
+    # Define number of top clusters
+    dir.create(outputDir)
+    dirInputName <- dirName
+    dirInputExpression <- paste0(dirInputName, "ExpressionData/")
+    sigColumnIndex <- get_column_index(sigColumnName) # 5=p-value, 12=BH p-value, 13=FDR
+    valueColumnIndex <- get_column_index(valueColumnName)
+    summaryFileNameBase <- additionalFileName
+    summaryFileNameExt <- extTag
+    dirNameSplit <- unlist(str_split(dirName, "/"))
+    summaryFileNameBase <- paste0(summaryFileNameBase, "Chart_Top", topTermLimit, "_", mode, "__", sigColumnName, "_", sigCutoff, "_", valueColumnName)
+    summaryFileNameExt <- paste0(summaryFileNameExt,  "Chart_Top", topTermLimit, "_", mode, "__", sigColumnName, "_", sigCutoff, "_", valueColumnName)
   
-  # Define number of top clusters
-  dir.create(outputDir)
-  dirInputName	      <- dirName
-  dirInputExpression	<- paste0(dirInputName, "ExpressionData/", sep="")
-  sigColumnIndex			<- get_column_index(sigColumnName) # 5=p-value, 12=BH p-value, 13=FDR
-  valueColumnIndex		<- get_column_index(valueColumnName)
-  summaryFileNameBase	<- additionalFileName
-  summaryFileNameExt	<- extTag
-  dirNameSplit			  <- str_split(dirName, "/")[[1]]
-  if (is.null(dirNameSplit[length(dirNameSplit)]) == FALSE) {
-    summaryFileNameBase 	<- paste0(summaryFileNameBase, "Chart_Top", topTermLimit, "_", mode, "__", sigColumnName, "_", sigCutoff, "_", valueColumnName, sep="")
-    summaryFileNameExt		<- paste0(summaryFileNameExt,  "Chart_Top", topTermLimit, "_", mode, "__", sigColumnName, "_", sigCutoff, "_", valueColumnName, sep="")
-  } else {
-    summaryFileNameBase 	<- paste0(summaryFileNameBase, "Chart_Top", topTermLimit, "_", mode, "__", sigColumnName, "_", sigCutoff, "_", valueColumnName, sep="")
-    summaryFileNameExt		<- paste0(summaryFileNameExt,  "Chart_Top", topTermLimit, "_", mode, "__", sigColumnName, "_", sigCutoff, "_", valueColumnName, sep="")
-  }
-  
-  # -----------------------------------------------------------------------------
-  # Load DAVID Chart files
-  ID2Term			    <- list()
-  ID2Class		    <- list()
-  fileHeaderNames <- list()
-  pvalueMatrix	  <- list()
-  fcMatrix		    <- list()
-  upDownMatrix	  <- list()
-  
-  # Additional variables/hashes/arrays for expression details
-  geneID2expDetails	  <- list()
-  geneID2Description	<- list()
-  allBaseFileNames	  <- list()
-  gctFileHeader		    <- ""
-  geneID2ExpProfile	  <- list()
-  gctFileStatus		    <- 0
-  
-  # Load gct file, if available
-  # check gct file
-  gctFiles <- Sys.glob(paste0(dirInputName, "/*.gct"))
+    # Load DAVID Chart files
+    ID2Term <- list()
+    ID2Class <- list()
+    fileHeaderNames <- list()
+    pvalueMatrix <- list()
+    fcMatrix <- list()
+    upDownMatrix <- list()
 
-  #if (is.null(gctFiles[1]) == FALSE) {
-  if (length(gctFiles) > 0) {
-    # TODO: fix this vvv
-    loadGctTmp <- load_gct_file_as_profile(gctFiles[1], geneID2ExpProfile)
-    gctFileStatus <- loadGctTmp[1]
-    gctFileHeader <- loadGctTmp[2]
-    geneID2ExpProfile <- loadGctTmp[3]
-  }
+    # Additional variables/hashes/arrays for expression details
+    geneID2expDetails <- list()
+    geneID2Description <- list()
+    allBaseFileNames <- list()
+    gctFileHeader <- ""
+    geneID2ExpProfile <- list()
+    gctFileStatus <- 0
   
-  # Step0. Get only the files that actually have contents
-  infiles <- lapply(infilesAll, function(infile) {
-    DATA <- read.delim(infile, sep="\t", comment.char="", quote="", stringsAsFactors = FALSE, header=TRUE, fill=TRUE)
-    return(infile)
-  })
-  infiles <- infiles[!sapply(infiles, is.null)]
-  if (length(infiles) < 1) {
-    return (FALSE)
-  }
+    # Load gct file, if available
+    # check gct file
+    gctFiles <- Sys.glob(paste0(dirInputName, "/*.gct"))
+    if (length(gctFiles) > 0) {
+        # TODO: fix this vvv
+        loadGctTmp <- load_gct_file_as_profile(gctFiles[1], geneID2ExpProfile)
+        gctFileStatus <- loadGctTmp[1]
+        gctFileHeader <- loadGctTmp[2]
+        geneID2ExpProfile <- loadGctTmp[3]
+    }
+  
+    # Step0. Get only the files that actually have contents
+    infiles <- lapply(infilesAll, function(infile) {
+        DATA <- read.delim(infile, sep="\t", comment.char="", quote="", stringsAsFactors=FALSE, header=TRUE, fill=TRUE)
+        return(infile)
+    })
+    infiles <- infiles[!vapply(infiles, is.null, FUN.VALUE=logical(1))]
+    if (length(infiles) < 1) {
+        return (FALSE)
+    }
   
   # Step1. Get the list of significant terms
-  # TODO: convert to multithreaded
-  #getSigTerms <- mclapply(infiles, function(infile) {
-  getSigTerms <- lapply(infiles, function(infile) {
-    tmp1 <- str_split(infile, "/")[[1]]
-    tmpNameSplit <- str_split(tmp1[length(tmp1)], "__Chart.txt")[[1]]
-    shortFileBaseName	<- tmpNameSplit[1]
-    originalSourceFile <- paste0(dirInputName, "/", shortFileBaseName, ".txt")
-    DATA <- read.delim(infile, sep="\t", comment.char="", quote="", stringsAsFactors = FALSE, header=TRUE, fill=TRUE)
-    lines <- DATA
-    if(nrow(lines) < 1){
-      return(FALSE)
-    }
-    tmpIDList <- lapply(1:nrow(lines), function(i){
-      tmpSplit <- lapply(lines[i,], function(lineItem) {
-        return(lineItem)
-      })
-      if (tmpSplit[[sigColumnIndex]] == "" | is.na(tmpSplit[[sigColumnIndex]]) == TRUE | grepl("^\\D", tmpSplit[[sigColumnIndex]]) == TRUE | tmpSplit[[sigColumnIndex]] >= sigCutoff | tmpSplit[[10]] < 1) {
-        #    # do nothing
-      } else {
-        tmpID	<- paste0(tmpSplit[[2]],sep="")
-      }
-    })
-    
-    #Get not null elements
-    tmpIDList <- tmpIDList[!sapply(tmpIDList, is.null)]
-    tmpIDList <- tmpIDList[!sapply(tmpIDList, is.na)]
-    tmpIDList <- unlist(tmpIDList, recursive = FALSE)
-    
-    # Cut off entries over the limit
-    if(length(tmpIDList) > as.double(topTermLimit)){
-      tmpIDList <- tmpIDList[1:as.double(topTermLimit)]
-    }
-    
-    tmp_ID2Term <- lapply(1:nrow(lines), function(i){
-      tmpSplit <- lapply(lines[i,], function(lineItem) {
-        return(lineItem)
-      })
-      
-      if (tmpSplit[[sigColumnIndex]] == "" | is.na(tmpSplit[[sigColumnIndex]]) == TRUE | grepl("^\\D", tmpSplit[[sigColumnIndex]]) == TRUE | tmpSplit[[sigColumnIndex]] >= sigCutoff | tmpSplit[[10]] < 1) {
-        # do nothing
-      } else {
-        tmpTerm <- paste0(tmpSplit[[1]], "|", tmpSplit[[2]])
-        return(tmpTerm)
-      }
-    })
-    
-    #Get not null elements
-    tmp_ID2Term <- tmp_ID2Term[!sapply(tmp_ID2Term, is.null)]
-    tmp_ID2Term <- tmp_ID2Term[!sapply(tmp_ID2Term, is.na)]
-    tmp_ID2Term <- unlist(tmp_ID2Term, recursive = FALSE)
-    
-    # Cut off entries over the limit
-    if(length(tmp_ID2Term) > as.double(topTermLimit)){
-      tmp_ID2Term <- tmp_ID2Term[1:as.double(topTermLimit)]
-    }
-    
-    tmp_ID2Class <- lapply(1:nrow(lines), function(i){
-      tmpSplit <- lapply(lines[i,], function(lineItem) {
-        return(lineItem)
-      })
-      
-      if (tmpSplit[[sigColumnIndex]] == "" | is.na(tmpSplit[[sigColumnIndex]]) == TRUE | grepl("^\\D", tmpSplit[[sigColumnIndex]]) == TRUE | tmpSplit[[sigColumnIndex]] >= sigCutoff | tmpSplit[[10]] < 1) {
-        # do nothing
-      } else {
-        return(tmpSplit[[1]])
-      }
-    })
-    #Get not null elements
-    tmp_ID2Class <- tmp_ID2Class[!sapply(tmp_ID2Class, is.null)]
-    tmp_ID2Class <- tmp_ID2Class[!sapply(tmp_ID2Class, is.na)]
-    tmp_ID2Class <- unlist(tmp_ID2Class, recursive = FALSE)
-    
-    # Cut off entries over the limit
-    if(length(tmp_ID2Class) > as.double(topTermLimit)){
-      tmp_ID2Class <- tmp_ID2Class[1:as.double(topTermLimit)]
-    }
-    names(tmp_ID2Term) <- tmpIDList
-    names(tmp_ID2Class) <- tmpIDList
-    return(list(ID2Term=tmp_ID2Term, ID2Class=tmp_ID2Class))
-  })
-  getSigTermsFilteredTerms <- lapply(1:length(getSigTerms), function(i){
-    return(getSigTerms[[i]]["ID2Term"])
-  })
-  
-  getSigTermsFilteredClasses <- lapply(1:length(getSigTerms), function(i){
-    return(getSigTerms[[i]]["ID2Class"])
-  })
-  
-  ID2Term <- unlist(unname(unlist(getSigTermsFilteredTerms, recursive = FALSE)), recursive = FALSE)
-  ID2Class <- unlist(unname(unlist(getSigTermsFilteredClasses, recursive = FALSE)), recursive = FALSE)
-  # remove NA
-  ID2Term <- ID2Term[!sapply(ID2Term, is.na)]
-  ID2Class <- ID2Class[!sapply(ID2Class, is.na)]
-  
-  #TODO: this works differently for Chart
-  if (length(ID2Class) > 0){
-    IDs <- paste0(ID2Class, " | ", names(ID2Class))
-  } else {
-    IDs <- list()
-  }
-  
-  for(infile in infiles) {
-    tmp1 <- str_split(infile, "/")[[1]]
-    tmpNameSplit <- str_split(tmp1[length(tmp1)], "__Chart.txt")
-    shortFileBaseName	<- tmpNameSplit[1]
-    
-    tmp2 <- str_split(tmp1[length(tmp1)], ".xls")[[1]]
-    if(length(tmp2[1]) == length(tmp1[length(tmp1)])) {
-      tmp2 <- str_split(tmp1[length(tmp1)], ".txt")[[1]]
-    }
-    
-    tmp3 <- str_split(tmp2[1], "__Chart")[[1]]
-    fileHeaderNames <- append(fileHeaderNames, tmp3[1])
-    
-    # ------------------------------------------------------------
-    # Load expression data if any
-    expressionDataExist <- 0
-    expressionData		  <- list()
-    expressionDataFC	  <- list()
-    expressionHeader    <- ""
-    
-    # ------------------------------------------------------------
-    # Check term file and load
-    DATA <- read.delim(infile, sep="\t", comment.char="", quote="", stringsAsFactors = FALSE, header=TRUE, fill=TRUE)
-    
-    #TODO: clean this up like the above code
-    if (nrow(DATA) > 0){
-      for(line in 1:nrow(DATA)) {
-        tmpSplit <- lapply(DATA[line,], function(lineItem) {
-          return(lineItem)
+    getSigTerms <- lapply(infiles, function(infile) {
+        tmp1 <- unlist(str_split(infile, "/"))
+        tmpNameSplit <- unlist(str_split(tmp1[length(tmp1)], "__Chart.txt"))
+        shortFileBaseName <- tmpNameSplit[1]
+        originalSourceFile <- paste0(dirInputName, "/", shortFileBaseName, ".txt")
+        DATA <- read.delim(infile, sep="\t", comment.char="", quote="", stringsAsFactors=FALSE, header=TRUE, fill=TRUE)
+        lines <- DATA
+        if(nrow(lines) < 1){
+            return(FALSE)
+        }
+        tmpIDList <- lapply(seq_len(nrow(lines)), function(i){
+            tmpSplit <- lapply(lines[i, ], function(lineItem) {
+                return(lineItem)
+            })
+            if (tmpSplit[[sigColumnIndex]] == "" | is.na(tmpSplit[[sigColumnIndex]]) | grepl("^\\D", tmpSplit[[sigColumnIndex]]) | tmpSplit[[sigColumnIndex]] >= sigCutoff | tmpSplit[[10]] < 1) {
+                # do nothing
+            } else {
+                tmpID <- paste0(tmpSplit[[2]])
+            }
         })
-        if (tmpSplit[[sigColumnIndex]] == "" | is.null(tmpSplit[[sigColumnIndex]]) == TRUE | is.null(tmpSplit[[10]]) == TRUE | grepl("^\\D", tmpSplit[[sigColumnIndex]]) == TRUE | (mode == "ALL" & tmpSplit[[sigColumnIndex]] >= sigCutoff) | tmpSplit[[10]] < 1) {
-          # Do nothing
-        } else {
-          tmpID	<- paste0(tmpSplit[[1]], " | ", tmpSplit[[2]])
-          if (is.null(ID2Term[tmpID]) == FALSE) {
-            pvalueMatrix[[tmpID]][tmp3[1]]  <- -1 * log10(as.double(tmpSplit[[valueColumnIndex]]))
-            fcMatrix[[tmpID]][tmp3[1]]      <- tmpSplit[[10]]
-          }
+        
+        #Get not null elements
+        tmpIDList <- tmpIDList[!vapply(tmpIDList, is.null, FUN.VALUE=logical(1))]
+        tmpIDList <- tmpIDList[!vapply(tmpIDList, is.na, FUN.VALUE=logical(1))]
+        tmpIDList <- unlist(tmpIDList, recursive=FALSE)
+        
+        # Cut off entries over the limit
+        if(length(tmpIDList) > as.double(topTermLimit)){
+            tmpIDList <- tmpIDList[seq_len(as.double(topTermLimit))]
         }
-      }
-    }
-  }
-  
-  # Create a summary file
-  summaryFileName <- paste0(summaryFileNameBase, "__ValueMatrix.txt", sep="")
-  file.create(paste0(outputDir, summaryFileName, sep=""))
-  SUMMARY <- file(paste0(outputDir, summaryFileName, sep=""))
-  fileHeaderNames <- unlist(fileHeaderNames)
-  fileHeaderNames <- sort_by_file_number(fileHeaderNames)
-  writeToSummaryHeader <- paste0("GROUP\tID\tTerms\t", paste0(fileHeaderNames, collapse="\t"), "\n", sep="")
-  writeToSummary2 <- ""
-  
-  IDs <- unique(IDs)
-  
-  writeToSummary <- lapply(IDs, function(ID) {	
-    writeToSummaryLabel <- paste0(ID2Class[ID], "\t", ID)
-    writeToSummary2 <- lapply(fileHeaderNames, function(header){
-      if (is.null(pvalueMatrix[[ID]][header]) == FALSE & is.na(pvalueMatrix[[ID]][header]) == FALSE){
-        if(header %in% names(pvalueMatrix[[ID]])) {
-          return(paste0(pvalueMatrix[[ID]][header]))
-        } else {
-          return("0")
-        }
-      } else {
-        return("#")
-      }
-    })
-    writeToSummary2 <- paste0(writeToSummary2, collapse="\t")
-    writeToSummary2 <- gsub("#", "", writeToSummary2)
-    return(paste0(writeToSummaryLabel, "\t\t", writeToSummary2))
-  })
-  writeToSummary <- paste0(writeToSummary, collapse="\n")
-  write(paste0(writeToSummaryHeader, writeToSummary), SUMMARY, append=TRUE)
-  close(SUMMARY)
+        
+        tmp_ID2Term <- lapply(seq_len(nrow(lines)), function(i){
+            tmpSplit <- lapply(lines[i, ], function(lineItem) {
+                return(lineItem)
+            })
+          
+            if (tmpSplit[[sigColumnIndex]] == "" | is.na(tmpSplit[[sigColumnIndex]]) | grepl("^\\D", tmpSplit[[sigColumnIndex]]) | tmpSplit[[sigColumnIndex]] >= sigCutoff | tmpSplit[[10]] < 1) {
+                # do nothing
+            } else {
+                tmpTerm <- paste0(tmpSplit[[1]], "|", tmpSplit[[2]])
+                return(tmpTerm)
+            }
+        })
 
-  # Create a network summary file for Chart
-  ForNetworkFile <- paste0(summaryFileNameBase, "__ValueMatrix.ForNet")
-  file.create(paste0(outputDir, ForNetworkFile))
-  NETWORK <- file(paste0(outputDir, ForNetworkFile))
-  writeToNetworkHeader <- paste0("GROUPID\tUID\tTerms\t", paste0(fileHeaderNames, collapse="\t"), "\n", sep="")
-  writeToNetwork2 <- ""
-  writeToNetwork <- lapply(IDs, function(ID) {
-    idTermSplits <- unlist(str_split(ID, " \\| "))
-    tmpHashRef <- classID2annotationTerm2termUniqueID[[className2classID[[idTermSplits[1]]]]]
-    writeToNetwork2 <- paste0(className2classID[[idTermSplits[1]]], "\t", tmpHashRef[[idTermSplits[2]]], "\t", idTermSplits[2])
-    writeToNetwork_inner <- unname(unlist(lapply(fileHeaderNames, function(header) {
-      if (is.na(unname(pvalueMatrix[[ID]][header])) == FALSE) {
-        return(pvalueMatrix[[ID]][header])
-      } else {
-        return("#") # delete these later
-      }
-    })))
-    writeToNetwork_inner <- paste0(writeToNetwork_inner, collapse="\t")
-    writeToNetwork_inner <- gsub("#", "", writeToNetwork_inner, fixed=TRUE)
-    writeToNetwork2 <- paste0(writeToNetwork2, "\t", writeToNetwork_inner)
-  })
-  writeToNetwork <- paste0(writeToNetwork, collapse="\n")
-  write(paste0(writeToNetworkHeader, writeToNetwork), NETWORK, append=TRUE)
-  close(NETWORK)
-  
-  # Create a gct file from ValueMatrix
-  INFILE <- read.delim(paste0(outputDir, summaryFileNameBase, "__ValueMatrix.txt"), sep="\t", comment.char="", quote="", stringsAsFactors = FALSE, header=TRUE, fill=TRUE)
-  file.create(paste0(outputDir, summaryFileNameBase, "__ValueMatrix.gct"))
-  OUTFILE <- file(paste0(outputDir, summaryFileNameBase, "__ValueMatrix.gct"))
-  
-  headerLine	<- paste0(colnames(INFILE), collapse="\t")
-  headerSplit	<- str_split(headerLine, "\t")[[1]]
-  sampleCnt	  <- length(headerSplit) - 3
-  geneCnt  <- 0
-  content	<- ""
-  if(nrow(INFILE) > 0) {
-    for(l in 1:nrow(INFILE)) {
-      line <- paste0(INFILE[l,], collapse="\t")
-      
-      if (line == "") {
-        # Do nothing
-      } else {
-        tmpSplit <- str_split(line, "\t")[[1]]
-        for (i in 4:(sampleCnt+3)) {
-          if (tmpSplit[i] == "NA" | is.na(tmpSplit[i]) == TRUE | length(tmpSplit[i]) < 1 | is.null(tmpSplit[i]) == TRUE) {
-            tmpSplit[i] <- 0
-          }
+        #Get not null elements
+        tmp_ID2Term <- tmp_ID2Term[!vapply(tmp_ID2Term, is.null, FUN.VALUE=logical(1))]
+        tmp_ID2Term <- tmp_ID2Term[!vapply(tmp_ID2Term, is.na, FUN.VALUE=logical(1))]
+        tmp_ID2Term <- unlist(tmp_ID2Term, recursive=FALSE)
+        
+        # Cut off entries over the limit
+        if(length(tmp_ID2Term) > as.double(topTermLimit)){
+            tmp_ID2Term <- tmp_ID2Term[seq_len(as.double(topTermLimit))]
         }
-        tmpSplit <- tmpSplit[-(1:1)] #Shift
         
-        # TODO: Replace long annotation name with shorthand here?
+        tmp_ID2Class <- lapply(seq_len(nrow(lines)), function(i){
+            tmpSplit <- lapply(lines[i, ], function(lineItem) {
+                return(lineItem)
+            })
+            
+            if (tmpSplit[[sigColumnIndex]] == "" | is.na(tmpSplit[[sigColumnIndex]]) | grepl("^\\D", tmpSplit[[sigColumnIndex]]) | tmpSplit[[sigColumnIndex]] >= sigCutoff | tmpSplit[[10]] < 1) {
+                # do nothing
+            } else {
+                return(tmpSplit[[1]])
+            }
+        })
+        #Get not null elements
+        tmp_ID2Class <- tmp_ID2Class[!vapply(tmp_ID2Class, is.null, FUN.VALUE=logical(1))]
+        tmp_ID2Class <- tmp_ID2Class[!vapply(tmp_ID2Class, is.na, FUN.VALUE=logical(1))]
+        tmp_ID2Class <- unlist(tmp_ID2Class, recursive=FALSE)
         
-        content <- paste0(content, paste0(tmpSplit, collapse="\t"), "\n")
-        geneCnt <- geneCnt + 1
-      }
-    }	
-  }
-  write(paste0("#1.2\n", geneCnt, "\t", sampleCnt, "\n", paste0(colnames(INFILE)[-(1:1)],collapse="\t"), "\n", content), OUTFILE, append=TRUE)
-  close(OUTFILE)
+        # Cut off entries over the limit
+        if(length(tmp_ID2Class) > as.double(topTermLimit)){
+            tmp_ID2Class <- tmp_ID2Class[seq_len(as.double(topTermLimit))]
+        }
+        names(tmp_ID2Term) <- tmpIDList
+        names(tmp_ID2Class) <- tmpIDList
+        return(list(ID2Term=tmp_ID2Term, ID2Class=tmp_ID2Class))
+    })
+    getSigTermsFilteredTerms <- lapply(seq_len(length(getSigTerms)), function(i){
+        return(getSigTerms[[i]]["ID2Term"])
+    })
   
-}	
+    getSigTermsFilteredClasses <- lapply(seq_len(length(getSigTerms)), function(i){
+        return(getSigTerms[[i]]["ID2Class"])
+    })
+  
+    ID2Term <- unlist(unname(unlist(getSigTermsFilteredTerms, recursive=FALSE)), recursive=FALSE)
+    ID2Class <- unlist(unname(unlist(getSigTermsFilteredClasses, recursive=FALSE)), recursive=FALSE)
+    # remove NA
+    ID2Term <- ID2Term[!vapply(ID2Term, is.na, FUN.VALUE=logical(1))]
+    ID2Class <- ID2Class[!vapply(ID2Class, is.na, FUN.VALUE=logical(1))]
+  
+    if (length(ID2Class) > 0){
+        IDs <- paste0(ID2Class, " | ", names(ID2Class))
+    } else {
+        IDs <- list()
+    }
+  
+    lapply(infiles, function(infile) {
+        tmp1 <- unlist(str_split(infile, "/"))
+        tmpNameSplit <- str_split(tmp1[length(tmp1)], "__Chart.txt")
+        shortFileBaseName <- tmpNameSplit[1]
+        tmp2 <- unlist(str_split(tmp1[length(tmp1)], ".xls"))
+        if(length(tmp2[1]) == length(tmp1[length(tmp1)])) {
+            tmp2 <- unlist(str_split(tmp1[length(tmp1)], ".txt"))
+        }
+        tmp3 <- unlist(str_split(tmp2[1], "__Chart"))
+        fileHeaderNames <<- append(fileHeaderNames, tmp3[1])
+        
+        # Load expression data if any
+        expressionDataExist <- 0
+        expressionData <- list()
+        expressionDataFC <- list()
+        expressionHeader <- ""
+
+        # Check term file and load
+        DATA <- read.delim(infile, sep="\t", comment.char="", quote="", stringsAsFactors=FALSE, header=TRUE, fill=TRUE)
+        if (nrow(DATA) > 0){
+            lapply(seq_len(nrow(DATA)), function(line) {
+                tmpSplit <- lapply(DATA[line, ], function(lineItem) {
+                    return(lineItem)
+                })
+                if (tmpSplit[[sigColumnIndex]] == "" | is.null(tmpSplit[[sigColumnIndex]]) | is.null(tmpSplit[[10]]) | grepl("^\\D", tmpSplit[[sigColumnIndex]]) | (mode == "ALL" & tmpSplit[[sigColumnIndex]] >= sigCutoff) | tmpSplit[[10]] < 1) {
+                    # Do nothing
+                } else {
+                    tmpID <- paste0(tmpSplit[[1]], " | ", tmpSplit[[2]])
+                    if (!is.null(ID2Term[tmpID])) {
+                      pvalueMatrix[[tmpID]][tmp3[1]] <<- -1 * log10(as.double(tmpSplit[[valueColumnIndex]]))
+                      fcMatrix[[tmpID]][tmp3[1]] <<- tmpSplit[[10]]
+                    }
+                }
+            })
+        }
+    })
+    
+    # Create a summary file
+    summaryFileName <- paste0(summaryFileNameBase, "__ValueMatrix.txt")
+    file.create(paste0(outputDir, summaryFileName))
+    SUMMARY <- file(paste0(outputDir, summaryFileName))
+    fileHeaderNames <- unlist(fileHeaderNames)
+    fileHeaderNames <- sort_by_file_number(fileHeaderNames)
+    writeToSummaryHeader <- paste0("GROUP\tID\tTerms\t", paste0(fileHeaderNames, collapse="\t"), "\n")
+    writeToSummary2 <- ""
+    IDs <- unique(IDs)
+  
+    writeToSummary <- lapply(IDs, function(ID) {
+        writeToSummaryLabel <- paste0(ID2Class[ID], "\t", ID)
+        writeToSummary2 <- lapply(fileHeaderNames, function(header){
+            if (!is.null(pvalueMatrix[[ID]][header]) & !is.na(pvalueMatrix[[ID]][header])){
+                if(header %in% names(pvalueMatrix[[ID]])) {
+                    return(paste0(pvalueMatrix[[ID]][header]))
+                } else {
+                    return("0")
+                }
+            } else {
+                return("#")
+            }
+        })
+        writeToSummary2 <- paste0(writeToSummary2, collapse="\t")
+        writeToSummary2 <- gsub("#", "", writeToSummary2)
+        return(paste0(writeToSummaryLabel, "\t\t", writeToSummary2))
+    })
+    writeToSummary <- paste0(writeToSummary, collapse="\n")
+    write(paste0(writeToSummaryHeader, writeToSummary), SUMMARY, append=TRUE)
+    close(SUMMARY)
+
+    # Create a network summary file for Chart
+    ForNetworkFile <- paste0(summaryFileNameBase, "__ValueMatrix.ForNet")
+    file.create(paste0(outputDir, ForNetworkFile))
+    NETWORK <- file(paste0(outputDir, ForNetworkFile))
+    writeToNetworkHeader <- paste0("GROUPID\tUID\tTerms\t", paste0(fileHeaderNames, collapse="\t"), "\n")
+    writeToNetwork2 <- ""
+    writeToNetwork <- lapply(IDs, function(ID) {
+        idTermSplits <- unlist(str_split(ID, " \\| "))
+        tmpHashRef <- classID2annotationTerm2termUniqueID[[className2classID[[idTermSplits[1]]]]]
+        writeToNetwork2 <- paste0(className2classID[[idTermSplits[1]]], "\t", tmpHashRef[[idTermSplits[2]]], "\t", idTermSplits[2])
+        writeToNetwork_inner <- unname(unlist(lapply(fileHeaderNames, function(header) {
+            if (!is.na(unname(pvalueMatrix[[ID]][header]))) {
+                return(pvalueMatrix[[ID]][header])
+            } else {
+                return("#") # delete these later
+            }
+        })))
+        writeToNetwork_inner <- paste0(writeToNetwork_inner, collapse="\t")
+        writeToNetwork_inner <- gsub("#", "", writeToNetwork_inner, fixed=TRUE)
+        writeToNetwork2 <- paste0(writeToNetwork2, "\t", writeToNetwork_inner)
+    })
+    writeToNetwork <- paste0(writeToNetwork, collapse="\n")
+    write(paste0(writeToNetworkHeader, writeToNetwork), NETWORK, append=TRUE)
+    close(NETWORK)
+  
+    # Create a gct file from ValueMatrix
+    INFILE <- read.delim(paste0(outputDir, summaryFileNameBase, "__ValueMatrix.txt"), sep="\t", comment.char="", quote="", stringsAsFactors=FALSE, header=TRUE, fill=TRUE)
+    file.create(paste0(outputDir, summaryFileNameBase, "__ValueMatrix.gct"))
+    OUTFILE <- file(paste0(outputDir, summaryFileNameBase, "__ValueMatrix.gct"))
+    headerLine <- paste0(colnames(INFILE), collapse="\t")
+    headerSplit <- unlist(str_split(headerLine, "\t"))
+    sampleCnt <- length(headerSplit) - 3
+    geneCnt <- 0
+    content <- ""
+    if(nrow(INFILE) > 0) {
+        content <- lapply(seq_len(nrow(INFILE)), function(l) {
+            line <- paste0(INFILE[l, ], collapse="\t")
+            if (line == "") {
+                # Do nothing
+                return(NULL)
+            } else {
+                tmpSplit <- unlist(str_split(line, "\t"))
+                tmpSplit <- unlist(lapply(seq_len((sampleCnt+3)), function(i) {
+                    if(i >= 4){
+                        if (tmpSplit[i] == "NA" | is.na(tmpSplit[i]) | length(tmpSplit[i]) < 1 | is.null(tmpSplit[i])) {
+                            return(0)
+                        } 
+                    }
+                  return(tmpSplit[i])
+                }))
+                tmpSplit <- tmpSplit[-1] #Shift
+                return(paste0(tmpSplit, collapse="\t"))
+            }
+        })
+        content <- content[!vapply(content, is.null, FUN.VALUE=logical(1))]
+        geneCnt <- length(content)
+        content <- paste0(content, collapse="\n")
+    }
+    write(paste0("#1.2\n", geneCnt, "\t", sampleCnt, "\n", paste0(colnames(INFILE)[-1], collapse="\t"), "\n", content), OUTFILE, append=TRUE)
+    close(OUTFILE)
+}
 
 # Load GCT file as profile
 load_gct_file_as_profile <- function(infile, geneID2ExpProfileRef) {
-  INFILE <- read.delim(infile, sep="\t", comment.char="", quote="", stringsAsFactors = FALSE, header=TRUE, fill=TRUE)
-  header <- INFILE[1,]
-  if (grepl("^#1", header) == FALSE) {
-    # this is not a gct file
-    return(0)
-  }
-  header <- INFILE[3,]
-  
-  headerSplit <- str_split(header, "\t")[[1]]
-  maxValue	<- 0
-  lineCount	<- 0
-  for(line in 4:nrow(INFILE)) {
-    tmpSplit <- str_split(line, "\t")[[1]]
-    if (grepl("_at", tmpSplit[1]) == TRUE) {
-      # TODO: This ^^
+    INFILE <- read.delim(infile, sep="\t", comment.char="", quote="", stringsAsFactors=FALSE, header=TRUE, fill=TRUE)
+    header <- INFILE[1, ]
+    if (!grepl("^#1", header)) {
+        # This is not a gct file
+        return(0)
     }
-    # TODO: reference
-    geneID2ExpProfileRef[tmpSplit[1]] <- paste0(tmpSplit, collapse="\t")
-    if (lineCount < 10) {
-      for (i in 3:length(tmpSplit)) {
-        if(tmpSplit[i] > maxValue) {
-          maxValue <- tmpSplit[i]
+    header <- INFILE[3, ]
+    headerSplit <- unlist(str_split(header, "\t"))
+    maxValue <- 0
+    lineCount <- 0
+    lapply(seq(4, nrow(INFILE)), function(line) {
+        tmpSplit <- unlist(str_split(line, "\t"))
+        if (grepl("_at", tmpSplit[1])) {
+            # TODO: This ^^
         }
-      }
+        geneID2ExpProfileRef[tmpSplit[1]] <<- paste0(tmpSplit, collapse="\t")
+        if (lineCount < 10) {
+            lapply(seq(3, length(tmpSplit)), function(i) {
+                if(tmpSplit[i] > maxValue) {
+                    maxValue <<- tmpSplit[i]
+                }
+            })
+        }
+        lineCount <<- lineCount + 1
+    })
+    
+    # check if the gct file is not log-transformed
+    if(maxValue > 20) {
+        lapply(names(geneID2ExpProfileRef), function(geneID) {
+            tmpSplit <- unlist(str_split(geneID2ExpProfileRef[geneID], "/\t/"))
+            tmpSplit <- unlist(lapply (seq_len(length(tmpSplit)), function(i) {
+                if(i >= 3){
+                    return(log(tmpSplit[i])/log(2))
+                }
+                return(tmpSplit[i])
+            }))
+            geneID2ExpProfileRef[geneID] <<- paste0(tmpSplit, collapse="\t")
+        })
     }
-    lineCount <- lineCount + 1
-  }	
-  
-  # check if the gct file is not log-transformed
-  if(maxValue > 20) {
-    for (geneID in names(geneID2ExpProfileRef)) {
-      tmpSplit <- str_split(geneID2ExpProfileRef[geneID], "/\t/")[[1]]
-      for (i in 3:length(tmpSplit)) {
-        tmpSplit[i] <- log(tmpSplit[i])/log(2)
-      }
-      geneID2ExpProfileRef[geneID] <- paste0(tmpSplit, collapse="\t")
-    }
-  }
-  return(list(1, header))
+    return(list(1, header))
 }
 
 # Sort by file numbers (this is for the situation where the set names are like <Set 1, Set 2, Set 3, etc.>)
 sort_by_file_number <- function(originalArray) {
-  originalCount   <- length(originalArray)
-  sortedArray 	  <- list()
-  number2original <- list()
-  
-  if (is.null(originalArray[1]) == FALSE & grepl("\\w\\d+$", originalArray[1]) == TRUE) {
+    originalCount <- length(originalArray)
+    sortedArray <- list()
+    number2original <- list()
+    if (!is.null(originalArray[1]) & grepl("\\w\\d+$", originalArray[1])) {
+        # Number
+        number2originalNames <- lapply(seq_len(length(originalArray)), function(name){
+            if (grepl("\\w(\\d+)$", originalArray[name])) {
+                return(name)
+            }
+        })
+        number2originalNames <- unlist(number2originalNames, recursive=FALSE)
     
-    # Number
-    number2originalNames <- lapply(1:length(originalArray), function(name){
-      if (grepl("\\w(\\d+)$", originalArray[name]) == TRUE) {
-        return(name)
-      }
-    })
-    number2originalNames <- unlist(number2originalNames, recursive=FALSE)
-    # TODO: fix naming for this list ^^
-    
-    # Original name
-    number2original <- lapply(originalArray, function(name){
-      if (grepl("\\w(\\d+)$", name) == TRUE) {
-        return(name)
-      }
-    })
-    number2original <- unlist(number2original, recursive=FALSE)
-    sortedNumbers <- number2original[order(unlist(number2original), decreasing = FALSE)]
-    if (length(sortedNumbers) != length(originalArray)) {
-      return (originalArray)
-    } else {
-      sortedArray <- lapply(sortedNumbers, function(num){
-        return(num)
-      })
-      sortedArray<- unlist(sortedArray, recursive=FALSE)
-      return(sortedArray)
+        # Original name
+        number2original <- lapply(originalArray, function(name){
+            if (grepl("\\w(\\d+)$", name)) {
+                return(name)
+            }
+        })
+        number2original <- unlist(number2original, recursive=FALSE)
+        sortedNumbers <- number2original[order(unlist(number2original), decreasing=FALSE)]
+        if (length(sortedNumbers) != length(originalArray)) {
+            return (originalArray)
+        } else {
+            sortedArray <- lapply(sortedNumbers, function(num){
+                return(num)
+            })
+            sortedArray<- unlist(sortedArray, recursive=FALSE)
+            return(sortedArray)
+        }
     }
-  }
-  return(originalArray)
+    return(originalArray)
 }
 
-
-
-
 ###### Perform enrichment analysis ######
-perform_CASRN_enrichment_analysis <- function(CASRNRef, outputBaseDir, outfileBase, mappedCASRNsFromProcess, funCat2Selected, CASRN2funCatTerm, funCatTerm2CASRN, funCat2CASRNCount, funCat2termCount, funCatTerm2CASRNCount, pvalueThresholdToDisplay, similarityThreshold=0.50, initialGroupMembership, multipleLinkageThreshold, EASEThreshold, nodeCutoff, enrichmentUUID){
+perform_CASRN_enrichment_analysis <- function(CASRNRef, outputBaseDir, outfileBase, mappedCASRNsFromProcess, funCat2Selected, CASRN2funCatTerm, funCatTerm2CASRN, funCat2CASRNCount, funCat2termCount, funCatTerm2CASRNCount, pvalueThresholdToDisplay, similarityThreshold=0.50, initialGroupMembership, multipleLinkageThreshold, EASEThreshold, nodeCutoff=10, enrichmentUUID){
+    # Define output file names
+    outfileChart <- paste0(outputBaseDir, outfileBase, "__Chart.txt")
+    outfileSimple <- paste0(outputBaseDir, outfileBase, "__ChartSimple.txt")
+    outfileMatrix <- paste0(outputBaseDir, outfileBase, "__Matrix.txt")
+    
+    # Create directories if they don't exist
+    dir.create(paste0(outputBaseDir))
+    
+    # Open file connections to output files and initialize headers
+    OUTFILE <- file(outfileChart)
+    SIMPLE <- file(outfileSimple)
+    MATRIX <- file(outfileMatrix)
+    writeLines("Category\tTerm\tCount\t%\tPValue\tCASRNs\tList Total\tPop Hits\tPop Total\tFold Enrichment\tBonferroni\tBenjamini\tFDR", OUTFILE)
+    writeLines("Category\tTerm\tCount\t%\tPValue\tFold Enrichment\tBenjamini", SIMPLE)
+    
+    # Calculate EASE score
+    inputCASRNs <- CASRNRef
+    inputCASRNsCount <- length(inputCASRNs)
+    term2Contents <- list()
+    term2Pvalue <- list()
+    sigTerm2CASRNMatrix <- list()
+    mappedCASRNs <- mappedCASRNsFromProcess # Among the CASRNS, use only those included in the full Tox21 list
+    datArray <- list()
+    annoArray <- list()
   
-  # Define output file names
-  outfileChart    <- paste0(outputBaseDir, outfileBase, "__Chart.txt")
-  outfileSimple		<- paste0(outputBaseDir, outfileBase, "__ChartSimple.txt")
-  outfileMatrix		<- paste0(outputBaseDir, outfileBase, "__Matrix.txt")
-  
-  # Create directories if they don't exist
-  dir.create(paste0(outputBaseDir))
-  
-  # Open file connections to output files and initialize headers
-  OUTFILE         <- file(outfileChart)
-  SIMPLE          <- file(outfileSimple)
-  MATRIX          <- file(outfileMatrix)
-  writeLines("Category	Term	Count	%	PValue	CASRNs	List Total	Pop Hits	Pop Total	Fold Enrichment	Bonferroni	Benjamini	FDR", OUTFILE)
-  writeLines("Category	Term	Count	%	PValue	Fold Enrichment	Benjamini", SIMPLE)
-  
-  # Calculate EASE score
-  inputCASRNs   				<- CASRNRef
-  inputCASRNsCount      <- length(inputCASRNs)
-  term2Contents			    <- list()
-  term2Pvalue				    <- list()
-  sigTerm2CASRNMatrix   <- list()
-  mappedCASRNs			    <- mappedCASRNsFromProcess # Among the CASRNS, use only those included in the full Tox21 list
-  datArray	      <- list()
-  annoArray	      <- list()
-  
-  # Populate sigTerm2CASRNMatrix
-  #funCat2SelectedProcessed_sigTerm2CASRNMatrix <- lapply(names(funCat2Selected), function(funCat){
-  funCat2SelectedProcessed_sigTerm2CASRNMatrix <- mclapply(names(funCat2Selected), mc.cores=4, mc.silent=FALSE, function(funCat){
-    if (is.null(funCat2Selected[[funCat]]) == FALSE & funCat2Selected[[funCat]] != ""){
-      funCatTerms <- names(funCatTerm2CASRN[[funCat]])
-      tmp_sigTerm2CASRNMatrix <- lapply(funCatTerms, function(term){
-        sigTermResults <- lapply(names(mappedCASRNs), function(CASRN) {
-          if (!is.null(funCatTerm2CASRN[[funCat]][[term]][[CASRN]])){
-            return(1)
-          }
-          return(NULL)
+    # Populate sigTerm2CASRNMatrix
+    funCat2SelectedProcessed_sigTerm2CASRNMatrix <- mclapply(names(funCat2Selected), mc.cores=CORES, mc.silent=FALSE, function(funCat){
+        if (!is.null(funCat2Selected[[funCat]]) & funCat2Selected[[funCat]] != ""){
+            funCatTerms <- names(funCatTerm2CASRN[[funCat]])
+            tmp_sigTerm2CASRNMatrix <- lapply(funCatTerms, function(term){
+                sigTermResults <- lapply(names(mappedCASRNs), function(CASRN) {
+                    if (!is.null(funCatTerm2CASRN[[funCat]][[term]][[CASRN]])){
+                        return(1)
+                    }
+                    return(NULL)
+                })
+                names(sigTermResults) <- lapply(names(mappedCASRNs), function(CASRN) {
+                    if (!is.null(funCatTerm2CASRN[[funCat]][[term]][[CASRN]])){
+                        return(CASRN)  
+                    }
+                    return(NULL)
+                })
+                sigTermResults <- sigTermResults[vapply(sigTermResults, length, FUN.VALUE=numeric(1)) > 0]
+                return(sigTermResults)
+            })
+        }
+        names(tmp_sigTerm2CASRNMatrix) <- lapply(funCatTerms, function(term){
+            return(paste0(funCat, "|", term))
         })
-        names(sigTermResults) <- lapply(names(mappedCASRNs), function(CASRN) {
-          if (!is.null(funCatTerm2CASRN[[funCat]][[term]][[CASRN]])){
-            return(CASRN)  
-          }
-          return(NULL)
-        })
-        sigTermResults <- sigTermResults[!sapply(sigTermResults, function(x){
-          if(length(x) < 1){
-            return(TRUE)
-          }
-          return(FALSE)
-        })]
-        return(sigTermResults)
-      })
-    }
-    names(tmp_sigTerm2CASRNMatrix) <- lapply(funCatTerms, function(term){
-      return(paste0(funCat, "|", term))
+        tmp_sigTerm2CASRNMatrix <- tmp_sigTerm2CASRNMatrix[vapply(tmp_sigTerm2CASRNMatrix, length, FUN.VALUE=numeric(1)) > 0]
+        if(length(tmp_sigTerm2CASRNMatrix) < 1){
+            return(NULL)
+        }
+        return(tmp_sigTerm2CASRNMatrix)
     })
-    tmp_sigTerm2CASRNMatrix <- tmp_sigTerm2CASRNMatrix[!sapply(tmp_sigTerm2CASRNMatrix, function(x){
-      if(length(x) < 1){
-        return(TRUE)
-      }
-      return(FALSE)
-    })]
-    if(length(tmp_sigTerm2CASRNMatrix) < 1){
-      return(NULL)
-    }
-    return(tmp_sigTerm2CASRNMatrix)
-  })
-  funCat2SelectedProcessed_sigTerm2CASRNMatrix <- funCat2SelectedProcessed_sigTerm2CASRNMatrix[!sapply(funCat2SelectedProcessed_sigTerm2CASRNMatrix, is.null)]
-  sigTerm2CASRNMatrix <- unlist(funCat2SelectedProcessed_sigTerm2CASRNMatrix, recursive=FALSE)
+    funCat2SelectedProcessed_sigTerm2CASRNMatrix <- funCat2SelectedProcessed_sigTerm2CASRNMatrix[!vapply(funCat2SelectedProcessed_sigTerm2CASRNMatrix, is.null, FUN.VALUE=logical(1))]
+    sigTerm2CASRNMatrix <- unlist(funCat2SelectedProcessed_sigTerm2CASRNMatrix, recursive=FALSE)
 
-  # Populate datArray
-  #funCat2SelectedProcessed_datArray <- lapply(names(funCat2Selected), function(funCat){
-  funCat2SelectedProcessed_datArray <- mclapply(names(funCat2Selected), mc.cores=4, mc.silent=FALSE, function(funCat){
-    # Calculate the CASRN counts for the given categories
-    if (is.null(funCat2Selected[[funCat]]) == FALSE & funCat2Selected[[funCat]] != ""){
-      # Variables
-      
-      localTerms  <- lapply(names(mappedCASRNs), function(CASRN){
-        if (is.null(CASRN2funCatTerm[[CASRN]][[funCat]]) == FALSE){
-          return(names(CASRN2funCatTerm[[CASRN]][[funCat]]))
-        }
-      })
-      localTerms <- localTerms[!sapply(localTerms, is.null)]
-      totalCount <- length(localTerms)
-      targetTotalTermCount          <- length(localTerms)
-      targetTotalCASRNInFunCatCount <- totalCount
-      funCatTerms         <- names(funCatTerm2CASRN[[funCat]]) 
-      localTerm2content	  <- list()
-      localTerm2pvalue	  <- list()
-      localPvalue2term	  <- list()
-      tmp_datArray <- NULL
-      tmp_datArrayInner <- list()
-      tmp_annoArray <- NULL
-      tmp_annoArrayInner <- list()
-      
-      tmp_datArray <- lapply(funCatTerms, function(term){
-        if (is.null(funCatTerm2CASRN[[funCat]][term]) == FALSE & funCatTerm2CASRN[[funCat]][term] != ""){	
-          # This is a valid term, check if the CASRN count is more than 1
-          targetCASRNs <- lapply(names(mappedCASRNs), function(CASRN) {
-            #TODO: I think problem here?
-            if (is.null(funCatTerm2CASRN[[funCat]][[term]][[CASRN]]) == FALSE){
-              return(CASRN)
-            }
-          })
-          targetCASRNs <- targetCASRNs[!sapply(targetCASRNs, is.null)]
-          CASRNCount   <- length(targetCASRNs)
-          targetCASRNsRef   <- targetCASRNs
-          targetCASRNCount  <- CASRNCount
-          
-          # Calculate the EASE score
-          if (targetCASRNCount > 1){
-            np1 <- targetTotalCASRNInFunCatCount - 1
-            n11	<- targetCASRNCount - 1
-            npp <- funCat2CASRNCount[[funCat]]  
-            n1p <- funCatTerm2CASRNCount[[funCat]][[term]]
-            
-            # skip any under-represented terms
-            foldenrichment <- (targetCASRNCount/length(targetTotalCASRNInFunCatCount))/(n1p/npp)
-            pvalue <- 1
-            datArrayLine  <- list(n11, (n1p-n11), (np1-n11), (npp-n1p-np1+n11))
-            return(datArrayLine)
-          }
+    # Populate datArray
+    funCat2SelectedProcessed_datArray <- mclapply(names(funCat2Selected), mc.cores=CORES, mc.silent=FALSE, function(funCat){
+        # Calculate the CASRN counts for the given categories
+        if (!is.null(funCat2Selected[[funCat]]) & funCat2Selected[[funCat]] != ""){
+            # Variables
+            localTerms  <- lapply(names(mappedCASRNs), function(CASRN){
+                if (!is.null(CASRN2funCatTerm[[CASRN]][[funCat]])){
+                    return(names(CASRN2funCatTerm[[CASRN]][[funCat]]))
+                }
+            })
+            localTerms <- localTerms[!vapply(localTerms, is.null, FUN.VALUE=logical(1))]
+            totalCount <- length(localTerms)
+            targetTotalTermCount <- length(localTerms)
+            targetTotalCASRNInFunCatCount <- totalCount
+            funCatTerms <- names(funCatTerm2CASRN[[funCat]]) 
+            localTerm2content <- list()
+            localTerm2pvalue <- list()
+            localPvalue2term <- list()
+            tmp_datArray <- NULL
+            tmp_datArrayInner <- list()
+            tmp_annoArray <- NULL
+            tmp_annoArrayInner <- list()
+            tmp_datArray <- lapply(funCatTerms, function(term){
+                if (!is.null(funCatTerm2CASRN[[funCat]][term]) & funCatTerm2CASRN[[funCat]][term] != ""){ 
+                    # This is a valid term, check if the CASRN count is more than 1
+                    targetCASRNs <- lapply(names(mappedCASRNs), function(CASRN) {
+                        #TODO: I think problem here?
+                        if (!is.null(funCatTerm2CASRN[[funCat]][[term]][[CASRN]])){
+                            return(CASRN)
+                        }
+                    })
+                    targetCASRNs <- targetCASRNs[!vapply(targetCASRNs, is.null, FUN.VALUE=logical(1))]
+                    CASRNCount   <- length(targetCASRNs)
+                    targetCASRNsRef   <- targetCASRNs
+                    targetCASRNCount  <- CASRNCount
+                    
+                    # Calculate the EASE score
+                    if (targetCASRNCount > 1){
+                        np1 <- targetTotalCASRNInFunCatCount - 1
+                        n11 <- targetCASRNCount - 1
+                        npp <- funCat2CASRNCount[[funCat]]  
+                        n1p <- funCatTerm2CASRNCount[[funCat]][[term]]
+                        
+                        # skip any under-represented terms
+                        foldenrichment <- (targetCASRNCount/length(targetTotalCASRNInFunCatCount))/(n1p/npp)
+                        pvalue <- 1
+                        datArrayLine  <- list(n11, (n1p-n11), (np1-n11), (npp-n1p-np1+n11))
+                        return(datArrayLine)
+                    }
+                }
+                return(NULL)
+            })
+            tmp_datArray <- tmp_datArray[!vapply(tmp_datArray, is.null, FUN.VALUE=logical(1))]
+            return(tmp_datArray)
         }
         return(NULL)
-      })
-      tmp_datArray <- tmp_datArray[!sapply(tmp_datArray, is.null)]
-      return(tmp_datArray)
-    }
-    return(NULL)
-  })
-  funCat2SelectedProcessed_datArray <- funCat2SelectedProcessed_datArray[!sapply(funCat2SelectedProcessed_datArray, is.null)]
-  datArray <- unlist(funCat2SelectedProcessed_datArray, recursive=FALSE)
+    })
+    funCat2SelectedProcessed_datArray <- funCat2SelectedProcessed_datArray[!vapply(funCat2SelectedProcessed_datArray, is.null, FUN.VALUE=logical(1))]
+    datArray <- unlist(funCat2SelectedProcessed_datArray, recursive=FALSE)
 
-  # Populate annoArray
-  #funCat2SelectedProcessed_annoArray <- lapply(names(funCat2Selected), function(funCat){
-  funCat2SelectedProcessed_annoArray <- mclapply(names(funCat2Selected), mc.cores=4, mc.silent=FALSE, function(funCat){
-    # Calculate the CASRN counts for the given categories
-    if (is.null(funCat2Selected[[funCat]]) == FALSE & funCat2Selected[[funCat]] != ""){
-      # Variables
-      
-      localTerms  <- lapply(names(mappedCASRNs), function(CASRN){
-        if (is.null(CASRN2funCatTerm[[CASRN]][[funCat]]) == FALSE){
-          return(names(CASRN2funCatTerm[[CASRN]][[funCat]]))
-        }
-      })
-      localTerms <- localTerms[!sapply(localTerms, is.null)]
-      totalCount <- length(localTerms)
-      targetTotalTermCount          <- length(localTerms)
-      targetTotalCASRNInFunCatCount <- totalCount
-      funCatTerms         <- names(funCatTerm2CASRN[[funCat]]) 
-      localTerm2content	  <- list()
-      localTerm2pvalue	  <- list()
-      localPvalue2term	  <- list()
-      tmp_datArray <- NULL
-      tmp_datArrayInner <- list()
-      tmp_annoArray <- NULL
-      tmp_annoArrayInner <- list()
-      
-      tmp_annoArray <- lapply(funCatTerms, function(term){
-        if (is.null(funCatTerm2CASRN[[funCat]][term]) == FALSE & funCatTerm2CASRN[[funCat]][term] != ""){	
-          
-          # This is a valid term, check if the CASRN count is more than 1
-          # TODO: calculate CASRNCount by getting length instead of this
-          CASRNCount   <- 0
-          targetCASRNs <- list()
-          mappedCASRNsProcess <- lapply(names(mappedCASRNs), function(CASRN) {
-            #TODO: I think problem here?
-            if (is.null(funCatTerm2CASRN[[funCat]][[term]][[CASRN]]) == FALSE){
-              CASRNCount <<- CASRNCount + 1
-              targetCASRNs <<- append(targetCASRNs, CASRN)
-            }
-          })
-          
-          targetCASRNsRef   <- targetCASRNs
-          targetCASRNCount  <- CASRNCount
-          
-          # Calculate the EASE score
-          if (targetCASRNCount > 1){
-            np1 <- targetTotalCASRNInFunCatCount - 1
-            n11	<- targetCASRNCount - 1
-            npp <- funCat2CASRNCount[[funCat]]  
-            n1p <- funCatTerm2CASRNCount[[funCat]][[term]]
-            
-            # skip any under-represented terms
-            foldenrichment <- (targetCASRNCount/length(targetTotalCASRNInFunCatCount))/(n1p/npp)
-            pvalue <- 1
-            
-            # truncate pvalue digits after decimal to 15
-            annoArrayLine	<- c(funCat, term, targetCASRNCount, round((targetCASRNCount/inputCASRNsCount*100), digits=15),
-                               1, paste(unlist(unname(sapply(targetCASRNsRef, paste, collapse=", "))), collapse=', '), targetTotalCASRNInFunCatCount, 
-                               n1p, npp, (targetCASRNCount/targetTotalCASRNInFunCatCount)/(n1p/npp), 
-                               (1-(1-pvalue)^targetTotalTermCount))
-            tmp_annoArrayInner <- append(tmp_annoArrayInner, annoArrayLine)
-            return(tmp_annoArrayInner)
-          }
+    # Populate annoArray
+    funCat2SelectedProcessed_annoArray <- mclapply(names(funCat2Selected), mc.cores=CORES, mc.silent=FALSE, function(funCat){
+        # Calculate the CASRN counts for the given categories
+        if (!is.null(funCat2Selected[[funCat]]) & funCat2Selected[[funCat]] != ""){
+            # Variables
+            localTerms  <- lapply(names(mappedCASRNs), function(CASRN){
+                if (!is.null(CASRN2funCatTerm[[CASRN]][[funCat]])){
+                    return(names(CASRN2funCatTerm[[CASRN]][[funCat]]))
+                }
+            })
+            localTerms <- localTerms[!vapply(localTerms, is.null, FUN.VALUE=logical(1))]
+            totalCount <- length(localTerms)
+            targetTotalTermCount <- length(localTerms)
+            targetTotalCASRNInFunCatCount <- totalCount
+            funCatTerms <- names(funCatTerm2CASRN[[funCat]]) 
+            localTerm2content <- list()
+            localTerm2pvalue <- list()
+            localPvalue2term <- list()
+            tmp_datArray <- NULL
+            tmp_datArrayInner <- list()
+            tmp_annoArray <- NULL
+            tmp_annoArrayInner <- list()
+            tmp_annoArray <- lapply(funCatTerms, function(term){
+                if (!is.null(funCatTerm2CASRN[[funCat]][term]) & funCatTerm2CASRN[[funCat]][term] != ""){ 
+                    # This is a valid term, check if the CASRN count is more than 1
+                    # TODO: calculate CASRNCount by getting length instead of this
+                    CASRNCount   <- 0
+                    targetCASRNs <- list()
+                    mappedCASRNsProcess <- lapply(names(mappedCASRNs), function(CASRN) {
+                        #TODO: I think problem here?
+                        if (!is.null(funCatTerm2CASRN[[funCat]][[term]][[CASRN]])){
+                            CASRNCount <<- CASRNCount + 1
+                            targetCASRNs <<- append(targetCASRNs, CASRN)
+                        }
+                    })
+                    targetCASRNsRef <- targetCASRNs
+                    targetCASRNCount <- CASRNCount
+                    
+                    # Calculate the EASE score
+                    if (targetCASRNCount > 1){
+                        np1 <- targetTotalCASRNInFunCatCount - 1
+                        n11 <- targetCASRNCount - 1
+                        npp <- funCat2CASRNCount[[funCat]]  
+                        n1p <- funCatTerm2CASRNCount[[funCat]][[term]]
+                        
+                        # Skip any under-represented terms
+                        foldenrichment <- (targetCASRNCount/length(targetTotalCASRNInFunCatCount))/(n1p/npp)
+                        pvalue <- 1
+                        
+                        # Truncate pvalue digits after decimal to 15
+                        annoArrayLine <- c(funCat, term, targetCASRNCount, round((targetCASRNCount/inputCASRNsCount*100), digits=15), 1, paste(unlist(unname(vapply(targetCASRNsRef, paste, FUN.VALUE=character(1), collapse=", "))), collapse=', '), targetTotalCASRNInFunCatCount, n1p, npp, (targetCASRNCount/targetTotalCASRNInFunCatCount)/(n1p/npp), (1-(1-pvalue)^targetTotalTermCount))
+                        tmp_annoArrayInner <- append(tmp_annoArrayInner, annoArrayLine)
+                        return(tmp_annoArrayInner)
+                    }
+                }
+                return(NULL)
+            })
+            tmp_annoArray <- tmp_annoArray[!vapply(tmp_annoArray, is.null, FUN.VALUE=logical(1))]
+            return(tmp_annoArray)
         }
         return(NULL)
-      })
-      tmp_annoArray <- tmp_annoArray[!sapply(tmp_annoArray, is.null)]
-      return(tmp_annoArray)
-    }
-    return(NULL)
-  })
-  funCat2SelectedProcessed_annoArray <- unlist(funCat2SelectedProcessed_annoArray, recursive=FALSE)
-  funCat2SelectedProcessed_annoArray <- funCat2SelectedProcessed_annoArray[!sapply(funCat2SelectedProcessed_annoArray, is.null)]
-  annoArray <- funCat2SelectedProcessed_annoArray
+    })
+    funCat2SelectedProcessed_annoArray <- unlist(funCat2SelectedProcessed_annoArray, recursive=FALSE)
+    funCat2SelectedProcessed_annoArray <- funCat2SelectedProcessed_annoArray[!vapply(funCat2SelectedProcessed_annoArray, is.null, FUN.VALUE=logical(1))]
+    annoArray <- funCat2SelectedProcessed_annoArray
 
-  # Save the data file -> create "RINPUT" but as a data frame here
-  RINPUT_index1 <- list()
-  RINPUT_index2 <- list()
-  RINPUT_index3 <- list()
-  RINPUT_index4 <- list()
-  RINPUT <- lapply(datArray, function(arrayRef) {
-    if(length(arrayRef) > 0){
-      RINPUT_index1 <<- append(RINPUT_index1, arrayRef[[1]])
-      RINPUT_index2 <<- append(RINPUT_index2, arrayRef[[2]])
-      RINPUT_index3 <<- append(RINPUT_index3, arrayRef[[3]])
-      RINPUT_index4 <<- append(RINPUT_index4, arrayRef[[4]])
-    }
-  })
-  RINPUT_df <- data.frame(X1=unlist(RINPUT_index1), X2=unlist(RINPUT_index2), X3=unlist(RINPUT_index3), X4=unlist(RINPUT_index4))
+    # Save the data file -> create "RINPUT" but as a data frame here
+    RINPUT_index1 <- list()
+    RINPUT_index2 <- list()
+    RINPUT_index3 <- list()
+    RINPUT_index4 <- list()
+    RINPUT <- lapply(datArray, function(arrayRef) {
+        if(length(arrayRef) > 0){
+            RINPUT_index1 <<- append(RINPUT_index1, arrayRef[[1]])
+            RINPUT_index2 <<- append(RINPUT_index2, arrayRef[[2]])
+            RINPUT_index3 <<- append(RINPUT_index3, arrayRef[[3]])
+            RINPUT_index4 <<- append(RINPUT_index4, arrayRef[[4]])
+        }
+    })
+    RINPUT_df <- data.frame(X1=unlist(RINPUT_index1), X2=unlist(RINPUT_index2), X3=unlist(RINPUT_index3), X4=unlist(RINPUT_index4))
 
-  if(nrow(RINPUT_df) < 2){
+    if(nrow(RINPUT_df) < 2){
+        # Print out the matrix file
+        sortedHeaderTerms <- sigTerm2CASRNMatrix[order(unlist(sigTerm2CASRNMatrix), decreasing=FALSE)]
+        # Clean out NA values (TODO: Probably a better way to do this?)
+        sortedHeaderTerms <- sortedHeaderTerms[lengths(sortedHeaderTerms)!=0]
+        matrixHeader <- paste(names(sortedHeaderTerms), collapse='\t')
+        matrixPrintToFile <- lapply(names(mappedCASRNs), function(tmpCasrn){ 
+            tmpMatrixHeaderProcess <- lapply(names(sortedHeaderTerms), function(tmpMatrixHeader){
+                if (!is.null(sigTerm2CASRNMatrix[[tmpMatrixHeader]][[tmpCasrn]]) & tmpMatrixHeader != "NA"){
+                    return("1")
+                }
+                else{
+                    return("0")
+                }
+            })
+            return(paste0(tmpCasrn, "\t", paste0(tmpMatrixHeaderProcess, collapse="\t")))
+        })
+        matrixOutput <- paste0("CASRN\t", matrixHeader, "\n\n", paste0(matrixPrintToFile, collapse="\n"))
+        write(matrixOutput, outfileMatrix, append=TRUE)
+        close(MATRIX)
+        close(OUTFILE)
+        close(SIMPLE)
+        # Open and create a blank cluster file
+        outfileCluster <- paste0(outputBaseDir, outfileBase, "__Cluster.txt")
+        file.create(outfileCluster)
+        return(FALSE)
+    }
+    # The old Perl script used to create a R command file here to calculate results of the fisher test. Now this just works on a data frame
+    p.value <- apply(RINPUT_df, 1, function(x) {
+        fisher.test(matrix(unlist(x), nrow=2))$p.value
+    })
+    ROUTPUT <- data.frame(p.value, fdr=p.adjust(p.value))
+    # Load the output file 
+    ROutputData <- apply(ROUTPUT, 1, function(line){
+        if (length(line) > 0) {
+            ROutputLineSplit <- list(line[['p.value']], line[['fdr']])
+            return(ROutputLineSplit)
+        }
+    })
+  
+    # Integrate ROutput into the main hashes/arrays
+    # TODO: Error checking/handling for the case the number of lines are different between @annoArray and @ROutputData
+    # Remove empty elements in annoArray
+    annoArray <- annoArray[lengths(annoArray) > 0L]
+    
+    annoArrayIndex <- 1
+    pvalueUpdateProcess <- lapply(annoArray, function(i){
+        tmp <- c("p.value", "fdr")
+        # update the p-value
+        annoArray[[annoArrayIndex]][5] <<- ROutputData[[annoArrayIndex]][[1]]
+        
+        # add FDR to the array 
+        annoArray[[annoArrayIndex]][12] <<- ROutputData[[annoArrayIndex]][[2]]
+        annoArray[[annoArrayIndex]][13] <<- ROutputData[[annoArrayIndex]][[1]]
+        
+        # finalize the hashes
+        term2Contents[[paste0(annoArray[[annoArrayIndex]][1], "|", annoArray[[annoArrayIndex]][2])]] <<- paste0(annoArray[[annoArrayIndex]])
+        term2Pvalue[[paste0(annoArray[[annoArrayIndex]][1], "|", annoArray[[annoArrayIndex]][2])]] <<- ROutputData[[annoArrayIndex]][[1]]
+        
+        annoArrayIndex <<- annoArrayIndex + 1
+    })
+  
+    # Sort by the p-values across multiple funCat
+    sortedFunCatTerms <- term2Pvalue[order(unlist(term2Pvalue), decreasing=FALSE)]
+    sortedFunCatTermsCount <- length(sortedFunCatTerms)
+    simpleFunCatTermCount <- list()
+    funCatSimpleContent <- list()
+  
+    # write to OUTFILE
+    writeToChart <- unlist(lapply(names(sortedFunCatTerms), function(funCatTerm){ 
+        if (term2Pvalue[[funCatTerm]] <= pvalueThresholdToDisplay){
+            return(paste0(term2Contents[[funCatTerm]], collapse='\t'))
+        } else {
+            return(NULL)
+        }
+    }))
+    writeToChart <- writeToChart[!vapply(writeToChart, is.null, FUN.VALUE=logical(1))]
+    write(paste0(writeToChart, collapse="\n"), outfileChart, append=TRUE)
+  
+    #TODO: fill this list in a better way vvv
+    sortFunCatProcess <- unlist(lapply(names(sortedFunCatTerms), function(funCatTerm){ 
+        if (term2Pvalue[[funCatTerm]] <= pvalueThresholdToDisplay){ 
+            toSimple <- 0
+            tmpSplit <- term2Contents[[funCatTerm]]
+            if (tmpSplit[[10]] > 1){
+                localFunCat <- get_funCat_from_funCatTerm(funCatTerm)
+                if (is.null(simpleFunCatTermCount[[localFunCat]])){
+                    simpleFunCatTermCount[[localFunCat]] <<- 1
+                    toSimple <- 1
+                } 
+                else if(simpleFunCatTermCount[[localFunCat]] < nodeCutoff){
+                    simpleFunCatTermCount[[localFunCat]] <<- simpleFunCatTermCount[[localFunCat]] + 1
+                    toSimple <- 1
+                }
+                if(toSimple > 0){
+                    return(paste0(tmpSplit[[1]], "\t", tmpSplit[[2]], "\t", tmpSplit[[3]], "\t", tmpSplit[[4]], "\t", tmpSplit[[5]], "\t", tmpSplit[[10]], "\t", tmpSplit[[12]]))
+                } else {
+                    return(NULL)
+                }
+            }
+        }
+    }))
+    sortFunCatProcess <- sortFunCatProcess[!vapply(sortFunCatProcess, is.null, FUN.VALUE=logical(1))]
+    sortFunCatProcess <- sort(sortFunCatProcess)
+    write(paste0(sortFunCatProcess, collapse="\n"), outfileSimple, append=TRUE)
+    close(OUTFILE)
+    close(SIMPLE)
+
     # Print out the matrix file
-    sortedHeaderTerms <- sigTerm2CASRNMatrix[order(unlist(sigTerm2CASRNMatrix), decreasing = FALSE)]
+    sortedHeaderTerms <- sigTerm2CASRNMatrix[order(unlist(sigTerm2CASRNMatrix), decreasing=FALSE)]
     # Clean out NA values (TODO: Probably a better way to do this?)
     sortedHeaderTerms <- sortedHeaderTerms[lengths(sortedHeaderTerms)!=0]
     matrixHeader <- paste(names(sortedHeaderTerms), collapse='\t')
-    matrixPrintToFile <- lapply(names(mappedCASRNs), function(tmpCasrn){	
-      tmpMatrixHeaderProcess <- lapply(names(sortedHeaderTerms), function(tmpMatrixHeader){
-        if (!is.null(sigTerm2CASRNMatrix[[tmpMatrixHeader]][[tmpCasrn]]) & tmpMatrixHeader != "NA"){
-          return("1")
-        }
-        else{
-          return("0")
-        }
-      })
-      return(paste0(tmpCasrn, "\t", paste0(tmpMatrixHeaderProcess, collapse="\t")))
-    })	
+    matrixPrintToFile <- lapply(names(mappedCASRNs), function(tmpCasrn){ 
+        tmpMatrixHeaderProcess <- lapply(names(sortedHeaderTerms), function(tmpMatrixHeader){
+            if (!is.null(sigTerm2CASRNMatrix[[tmpMatrixHeader]][[tmpCasrn]]) & tmpMatrixHeader != "NA"){
+                return("1")
+            }
+            else{
+                return("0")
+            }
+        })
+        return(paste0(tmpCasrn, "\t", paste0(tmpMatrixHeaderProcess, collapse="\t")))
+    })
     matrixOutput <- paste0("CASRN\t", matrixHeader, "\n\n", paste0(matrixPrintToFile, collapse="\n"))
-    
     write(matrixOutput, outfileMatrix, append=TRUE)
     close(MATRIX)
-    
-    close(OUTFILE)
-    close(SIMPLE)
-    # Open and create a blank cluster file
-    outfileCluster <- paste0(outputBaseDir, outfileBase, "__Cluster.txt")
-    file.create(outfileCluster)
-    return(FALSE)
-  }
-  # create a R command file -> now just work on data frame
-  p.value <- apply(RINPUT_df, 1, function(x) {
-    fisher.test(matrix(unlist(x), nrow=2))$p.value
-  })
-  ROUTPUT <- data.frame(p.value, fdr=p.adjust(p.value))
-  # Load the output file 
-  ROutputData <- apply(ROUTPUT, 1, function(line){
-    if (length(line) > 0) {
-      ROutputLineSplit <- list(line[['p.value']], line[['fdr']])
-      return(ROutputLineSplit)
-    }
-  })
-  
-  # Integrate ROutput into the main hashes/arrays
-  # TODO: Error checking/handling for the case the number of lines are different between 
-  # @annoArray and @ROutputData
-  
-  # Remove empty elements in annoArray
-  annoArray <- annoArray[lengths(annoArray) > 0L]
 
-  #TODO: Make this better
-  annoArrayIndex <- 1
-  pvalueUpdateProcess <- lapply(annoArray, function(i){
-    tmp <- c("p.value", "fdr")
-    # update the p-value
-    annoArray[[annoArrayIndex]][5] <<- ROutputData[[annoArrayIndex]][[1]]
-    
-    # add FDR to the array 
-    annoArray[[annoArrayIndex]][12] <<- ROutputData[[annoArrayIndex]][[2]]
-    annoArray[[annoArrayIndex]][13] <<- ROutputData[[annoArrayIndex]][[1]]
-    
-    # finalize the hashes
-    term2Contents[[paste0(annoArray[[annoArrayIndex]][1], "|", annoArray[[annoArrayIndex]][2])]]	<<- paste0(annoArray[[annoArrayIndex]])
-    term2Pvalue[[paste0(annoArray[[annoArrayIndex]][1], "|", annoArray[[annoArrayIndex]][2])]]	<<- ROutputData[[annoArrayIndex]][[1]]
-    
-    annoArrayIndex <<- annoArrayIndex + 1
-  })
-  
-  # Sort by the p-values across multiple funCat
-  sortedFunCatTerms <- term2Pvalue[order(unlist(term2Pvalue), decreasing = FALSE)]
-  sortedFunCatTermsCount <- length(sortedFunCatTerms)
-  simpleFunCatTermCount	<- list()
-  funCatSimpleContent <- list()
-  
-  # write to OUTFILE
-  writeToChart <- unlist(lapply(names(sortedFunCatTerms), function(funCatTerm){ 
-    if (term2Pvalue[[funCatTerm]] <= pvalueThresholdToDisplay){
-      return(paste0(term2Contents[[funCatTerm]], collapse='\t'))
-    } else {
-      return(NULL)
-    }
-  }))
-  writeToChart <- writeToChart[!sapply(writeToChart, is.null)]
-  write(paste0(writeToChart, collapse="\n"), outfileChart, append=TRUE)
-  
-  #TODO: fill this list in a better way vvv
-  sortFunCatProcess <- unlist(lapply(names(sortedFunCatTerms), function(funCatTerm){ 
-    if (term2Pvalue[[funCatTerm]] <= pvalueThresholdToDisplay){	
-      toSimple <- 0
-      tmpSplit <- term2Contents[[funCatTerm]]
-      if (tmpSplit[[10]] > 1){
-        localFunCat <- get_funCat_from_funCatTerm(funCatTerm)
-        if (is.null(simpleFunCatTermCount[[localFunCat]])){
-          simpleFunCatTermCount[[localFunCat]] <<- 1
-          toSimple <- 1
-        } 
-        # Changed from "simpleFunCatTermCount[[localFunCat]] < 10" to "simpleFunCatTermCount[[localFunCat]] < N"
-        else if(simpleFunCatTermCount[[localFunCat]] < nodeCutoff){
-          simpleFunCatTermCount[[localFunCat]] <<- simpleFunCatTermCount[[localFunCat]] + 1
-          toSimple <- 1
-        }
-        if(toSimple > 0){
-          return(paste0(tmpSplit[[1]], "\t", tmpSplit[[2]], "\t", tmpSplit[[3]], "\t", tmpSplit[[4]], "\t", tmpSplit[[5]], "\t", tmpSplit[[10]], "\t", tmpSplit[[12]]))
-        } else {
-          return(NULL)
-        }
-      }
-    }
-  }))
-  sortFunCatProcess <- sortFunCatProcess[!sapply(sortFunCatProcess, is.null)]
-  sortFunCatProcess <- sort(sortFunCatProcess)
-  write(paste0(sortFunCatProcess, collapse="\n"), outfileSimple, append=TRUE)
-  close(OUTFILE)
-  close(SIMPLE)
-
-  # Print out the matrix file
-  sortedHeaderTerms <- sigTerm2CASRNMatrix[order(unlist(sigTerm2CASRNMatrix), decreasing = FALSE)]
-  # Clean out NA values (TODO: Probably a better way to do this?)
-  sortedHeaderTerms <- sortedHeaderTerms[lengths(sortedHeaderTerms)!=0]
-  matrixHeader <- paste(names(sortedHeaderTerms), collapse='\t')
-  matrixPrintToFile <- lapply(names(mappedCASRNs), function(tmpCasrn){	
-    tmpMatrixHeaderProcess <- lapply(names(sortedHeaderTerms), function(tmpMatrixHeader){
-      if (!is.null(sigTerm2CASRNMatrix[[tmpMatrixHeader]][[tmpCasrn]]) & tmpMatrixHeader != "NA"){
-        return("1")
-      }
-      else{
-        return("0")
-      }
-    })
-    return(paste0(tmpCasrn, "\t", paste0(tmpMatrixHeaderProcess, collapse="\t")))
-  })	
-  matrixOutput <- paste0("CASRN\t", matrixHeader, "\n\n", paste0(matrixPrintToFile, collapse="\n"))
-  
-  write(matrixOutput, outfileMatrix, append=TRUE)
-  close(MATRIX)
-
-  # ----------------------------------------------------------------------
-  #	Perform functional term clustering
-  # ----------------------------------------------------------------------
-  # Calculate enrichment score
-  df <- read.delim(outfileChart, sep="\t", comment.char="", quote="", stringsAsFactors = FALSE)
-  res <- kappa_cluster(x=df, outputBaseDir=outputBaseDir, outfileBase=outfileBase, sortedFunCatTerms=sortedFunCatTerms, sigTerm2CASRNMatrix=sigTerm2CASRNMatrix, sortedFunCatTermsCount=sortedFunCatTermsCount, inputCASRNsCount=inputCASRNsCount, similarityThreshold=similarityThreshold, initialGroupMembership=initialGroupMembership, multipleLinkageThreshold=multipleLinkageThreshold, EASEThreshold=EASEThreshold, term2Pvalue=term2Pvalue, term2Contents=term2Contents, enrichmentUUID=enrichmentUUID)
+    # Perform functional term clustering
+    # Calculate enrichment score
+    df <- read.delim(outfileChart, sep="\t", comment.char="", quote="", stringsAsFactors=FALSE)
+    res <- kappa_cluster(x=df, outputBaseDir=outputBaseDir, outfileBase=outfileBase, sortedFunCatTerms=sortedFunCatTerms, sigTerm2CASRNMatrix=sigTerm2CASRNMatrix, sortedFunCatTermsCount=sortedFunCatTermsCount, inputCASRNsCount=inputCASRNsCount, similarityThreshold=similarityThreshold, initialGroupMembership=initialGroupMembership, multipleLinkageThreshold=multipleLinkageThreshold, EASEThreshold=EASEThreshold, term2Pvalue=term2Pvalue, term2Contents=term2Contents, enrichmentUUID=enrichmentUUID)
 }
 
 calculate_funcat_mapped_total_CASRN_count <- function(mappedCASRNsRef, funCat, CASRN2funCatTerm){
-  totalCount <- 0
-  terms <- list()
-  
-  CASRNResults  <- lapply(names(mappedCASRNsRef), function(CASRN){
-    if (is.null(CASRN2funCatTerm[[CASRN]][funCat]) == FALSE){
-      totalCount <<- totalCount + 1
-      terms <- names(CASRN2funCatTerm[[CASRN]][[funCat]])
+    totalCount <- 0
+    terms <- list()
+    CASRNResults  <- lapply(names(mappedCASRNsRef), function(CASRN){
+      if (!is.null(CASRN2funCatTerm[[CASRN]][funCat])){
+          totalCount <<- totalCount + 1
+          terms <- names(CASRN2funCatTerm[[CASRN]][[funCat]])
+      }
+      return(terms)
+    })
+    localTerms  <- CASRNResults
+    if(length(c(unlist(localTerms))) > 0){
+        return(data.frame(localTerms=localTerms, totalCount=totalCount))  
+    } else {
+        return(data.frame(localTerms=c("NA"), totalCount=totalCount))  
     }
-    return(terms)
-  })
-  localTerms  <- CASRNResults
-  
-  if(length(c(unlist(localTerms))) > 0){
-    return(data.frame(localTerms = localTerms, totalCount = totalCount))  
-  } else {
-    return(data.frame(localTerms = c("NA"), totalCount = totalCount))  
-  }
-  
 }
 
-#TODO: FIX THIS - populate sigTerm2CASRNMatrixRef
 calculate_funcat_mapped_CASRN_count <- function(mappedCASRNsRef, funCat, term, sigTerm2CASRNMatrixRef, CASRN2funCatTerm, funCatTerm2CASRN){
-  CASRNCount   <- 0
-  targetCASRNs <- list()
-  sigTerm2CASRNMatrixTmp <- list()
-  
-  mappedCASRNsProcess <- lapply(names(mappedCASRNsRef), function(CASRN) {
-    if (is.null(funCatTerm2CASRN[[funCat]][[term]][[CASRN]]) == FALSE){
-      CASRNCount <<- CASRNCount + 1
-      targetCASRNs <<- append(targetCASRNs, CASRN)
-      sigTerm2CASRNMatrixTmp[[paste0(funCat, "|", term)]] <<- list()
-      sigTerm2CASRNMatrixTmp[[paste0(funCat, "|", term)]][CASRN] <<- 1
+    CASRNCount   <- 0
+    targetCASRNs <- list()
+    sigTerm2CASRNMatrixTmp <- list()
+    mappedCASRNsProcess <- lapply(names(mappedCASRNsRef), function(CASRN) {
+        if (!is.null(funCatTerm2CASRN[[funCat]][[term]][[CASRN]])){
+            CASRNCount <<- CASRNCount + 1
+            targetCASRNs <<- append(targetCASRNs, CASRN)
+            sigTerm2CASRNMatrixTmp[[paste0(funCat, "|", term)]] <<- list()
+            sigTerm2CASRNMatrixTmp[[paste0(funCat, "|", term)]][CASRN] <<- 1
+        }
+    })
+    if(length(targetCASRNs) > 0){
+        return (data.frame(targetCASRNs=c(unlist(targetCASRNs)), sigTerm2CASRNMatrixTmp=c(unlist(sigTerm2CASRNMatrixTmp)), CASRNCount=CASRNCount))  
+    } 
+    else{
+        return (data.frame(targetCASRNs=c("NA"), sigTerm2CASRNMatrixTmp=c("NA"), CASRNCount=CASRNCount))
     }
-  })
-  
-  if(length(targetCASRNs) > 0){
-    return (data.frame(targetCASRNs = c(unlist(targetCASRNs)), sigTerm2CASRNMatrixTmp = c(unlist(sigTerm2CASRNMatrixTmp)), CASRNCount = CASRNCount))  
-  } 
-  else{
-    return (data.frame(targetCASRNs = c("NA"), sigTerm2CASRNMatrixTmp = c("NA"), CASRNCount = CASRNCount))
-  }
-  
-}
-
-check_CASRN <- function(CASRN, CASRN2DSSTox){
-  if(is.null(CASRN2DSSTox[[CASRN]])==FALSE){
-    return(TRUE)
-  }
 }
 
 get_funCat_from_funCatTerm <- function(funCatTerm){
-  tmpSplit <- unlist(str_split(funCatTerm, '\\|'))
-  return(tmpSplit[1])
+    tmpSplit <- unlist(str_split(funCatTerm, '\\|'))
+    return(tmpSplit[1])
 }
 
 kappa_cluster <- function(x, deg=NULL, useTerm=FALSE, cutoff=0.5, overlap=0.5, minSize=5, escore=3, outputBaseDir, outfileBase, sortedFunCatTerms, sigTerm2CASRNMatrix, sortedFunCatTermsCount, inputCASRNsCount=0, similarityThreshold=0.50, initialGroupMembership, multipleLinkageThreshold=0.5, EASEThreshold=1.0, term2Pvalue, term2Contents, enrichmentUUID) {
-  # ----------------------------------------------------------------------
-  #	Perform functional term clustering
-  # ----------------------------------------------------------------------
-  # Update status file
-  # Connect to DB to get status info
-  poolStatus <- dbPool(
-    drv = dbDriver("PostgreSQL", max.con = 100),
-    dbname = tox21db$database,
-    host = tox21db$host,
-    user = tox21db$uid,
-    password = tox21db$pwd,
-    idleTimeout = 3600000
-  )
-  # Set step flag for each set name
-  query <- sqlInterpolate(ANSI(), paste0("UPDATE status SET step=3 WHERE uuid='",enrichmentUUID,"' AND setname='",outfileBase,"';"), id="fetchStatus")
-  outp <- dbGetQuery(poolStatus, query)
-  # Close pool
-  poolClose(poolStatus)
+    # Perform functional term clustering
+    # Update status file
+    # Connect to DB to get status info
+    poolStatus <- dbPool(
+        drv=dbDriver("PostgreSQL", max.con=100),
+        dbname=tox21queue$database,
+        host=tox21queue$host,
+        user=tox21queue$uid,
+        password=tox21queue$pwd,
+        idleTimeout=3600000
+    )
+    # Set step flag for each set name
+    query <- sqlInterpolate(ANSI(), paste0("UPDATE status SET step=3 WHERE uuid='", enrichmentUUID, "' AND setname='", outfileBase, "';"), id="fetchStatus")
+    outp <- dbGetQuery(poolStatus, query)
+    # Close pool
+    poolClose(poolStatus)
   
-  # ----------------------------------------------------------------------
-  # 	Step#1: Calculate kappa score
-  # ----------------------------------------------------------------------
-
-  mappedCASRNCheck	<- list()
-  mappedCASRNIDs		<- list()
-  posTermCASRNCount	<- list()
-  
-  posTermCASRNCount <- lapply(names(sortedFunCatTerms), function(funCatTerm){
-    localCASRNIDs <- sigTerm2CASRNMatrix[[funCatTerm[[1]]]]
-    return(length(localCASRNIDs))
-  })
-  
-  # Set names
-  names(posTermCASRNCount) <- lapply(names(sortedFunCatTerms), function(funCatTerm){
-    return(funCatTerm[[1]])
-  })
-  
-  tmp_mappedCASRNCheck <- lapply(names(sortedFunCatTerms), function(funCatTerm){
-    localCASRNIDs <- names(sigTerm2CASRNMatrix[funCatTerm[[1]]])
-    tmp_inner_mappedCASRNCheck <- lapply(localCASRNIDs, function(CASRNID){
-      return(1)
+    # Step#1: Calculate kappa score
+    mappedCASRNCheck <- list()
+    mappedCASRNIDs <- list()
+    posTermCASRNCount <- list()
+    posTermCASRNCount <- lapply(names(sortedFunCatTerms), function(funCatTerm){
+        localCASRNIDs <- sigTerm2CASRNMatrix[[funCatTerm[[1]]]]
+        return(length(localCASRNIDs))
     })
-    tmp_inner_mappedCASRNCheck <- unlist(tmp_inner_mappedCASRNCheck, recursive = FALSE)
-    tmp_names_mappedCASRNCheck <- lapply(localCASRNIDs, function(CASRNID){
-      return(CASRNID)
+  
+    # Set names
+    names(posTermCASRNCount) <- lapply(names(sortedFunCatTerms), function(funCatTerm){
+        return(funCatTerm[[1]])
     })
-    tmp_names_mappedCASRNCheck <- unlist(tmp_names_mappedCASRNCheck, recursive = FALSE)
-    return(list(CASRNID=tmp_names_mappedCASRNCheck, content=tmp_inner_mappedCASRNCheck))
-  })
   
-  mappedCASRNCheckNames <- lapply(1:length(tmp_mappedCASRNCheck), function(i){
-    return(tmp_mappedCASRNCheck[[i]]["CASRNID"])
-  })
-  mappedCASRNCheckContent <- lapply(1:length(tmp_mappedCASRNCheck), function(i){
-    return(tmp_mappedCASRNCheck[[i]]["content"])
-  })
-  
-  # TODO: better way to do this??
-  mappedCASRNCheck        <- unlist(unname(unlist(mappedCASRNCheckContent, recursive=FALSE)))
-  names(mappedCASRNCheck) <- unlist(unname(unlist(mappedCASRNCheckNames, recursive=FALSE)))
-  
-  mappedCASRNIDs				  <- names(mappedCASRNCheck)
-  totalMappedCASRNIDCount	<- length(mappedCASRNIDs)
-  
-  # Calculate kappa score for each term pair
-  sortedFunCatTerms <- names(sortedFunCatTerms)
-  termpair2kappaOverThreshold <- mclapply ((1:(sortedFunCatTermsCount-1)), mc.cores=4, mc.silent=FALSE, function(i) {
-    termpair2kappaOverThresholdInner <- lapply (((i+1):(sortedFunCatTermsCount)), function(j) {
-      #calculate_kappa_statistics 
-      term1term2		<- 0
-      term1only			<- 0
-      term2only			<- 0
-      term1term2Non	<- 0
-      
-      posTerm1Total	<- posTermCASRNCount[[sortedFunCatTerms[i]]]
-      posTerm2Total	<- posTermCASRNCount[[sortedFunCatTerms[j]]]
-      negTerm1Total	<- inputCASRNsCount - posTerm1Total			# note that the total is inputCASRNsCount not the mapped total
-      negTerm2Total	<- inputCASRNsCount - posTerm2Total			# note that the total is inputCASRNsCount not the mapped total
-      
-      # Get number of chemicals that are shared or not for term1 and term2
-      sharedTerms <- intersect(names(sigTerm2CASRNMatrix[[sortedFunCatTerms[i]]]), names(sigTerm2CASRNMatrix[[sortedFunCatTerms[j]]]))
-      term1term2		<- length(sharedTerms)
-      term1only			<- length(names(sigTerm2CASRNMatrix[[sortedFunCatTerms[i]]])) - length(sharedTerms)
-      term2only			<- length(names(sigTerm2CASRNMatrix[[sortedFunCatTerms[j]]])) - length(sharedTerms)
-      term1term2Non	<- inputCASRNsCount - term1term2 - term1only - term2only
-      
-      # Calculate the kappa score 
-      # http://david.abcc.ncifcrf.gov/content.jsp?file=linear_search.html
-      Oab <- (term1term2 + term1term2Non)/inputCASRNsCount
-      Aab <- ((posTerm1Total * posTerm2Total) + (negTerm1Total * negTerm2Total))/(inputCASRNsCount * inputCASRNsCount)
-      
-      if (Aab != 1) {
-        Kappa	<- as.double(sprintf("%.2f", (Oab - Aab)/(1 - Aab)))
-        if (Kappa > similarityThreshold) {
-          iTerm <- paste0(sortedFunCatTerms[i])
-          jTerm <- paste0(sortedFunCatTerms[j])
-          ijFrame <- data.frame(iTerm=paste0(jTerm), jTerm=paste0(iTerm), stringsAsFactors=FALSE)
-          colnames(ijFrame) <- list(iTerm, jTerm)
-          return(ijFrame)
-        }
-      }
-      return(NULL)
-    })
-    termpair2kappaOverThresholdInner <- termpair2kappaOverThresholdInner[!sapply(termpair2kappaOverThresholdInner, is.null)]
-    if(length(termpair2kappaOverThresholdInner) > 0){
-      termpair2kappaOverThresholdInner <- unlist(termpair2kappaOverThresholdInner, recursive=FALSE)
-      return(termpair2kappaOverThresholdInner)
-    }
-    return(NULL)
-  })
-  termpair2kappaOverThreshold <- unlist( termpair2kappaOverThreshold[!sapply(termpair2kappaOverThreshold, is.null)], recursive=FALSE )
-  termpair2kappaOverThreshold <- tapply(unlist(termpair2kappaOverThreshold, use.names=FALSE), rep(names(termpair2kappaOverThreshold), lengths(termpair2kappaOverThreshold)), FUN=c)
-
-  # ----------------------------------------------------------------------
-  # 	Step#2: Create qualified initial seeding groups
-  # ----------------------------------------------------------------------
-  #	Each term could form a initial seeding group (initial seeds) 
-  #   as long as it has close relationships (kappa > 0.35 or any designated number) 
-  #   with more than > 2 or any designated number of other members. 
-  
-  # Update status file
-  # Connect to DB to get status info
-  poolStatus <- dbPool(
-    drv = dbDriver("PostgreSQL", max.con = 100),
-    dbname = tox21db$database,
-    host = tox21db$host,
-    user = tox21db$uid,
-    password = tox21db$pwd,
-    idleTimeout = 3600000
-  )
-  # Set step flag for each set name
-  query <- sqlInterpolate(ANSI(), paste0("UPDATE status SET step=4 WHERE uuid='",enrichmentUUID,"' AND setname='",outfileBase,"';"), id="fetchStatus")
-  outp <- dbGetQuery(poolStatus, query)
-  # Close pool
-  poolClose(poolStatus)
-  
-  term2sToPass <- NULL
-  if(length(termpair2kappaOverThreshold) > 0){
-    termpair2kappaOverThreshold <- termpair2kappaOverThreshold[order(names(termpair2kappaOverThreshold), decreasing = TRUE)]
-    # Prepend sortedFunCatTerms to each element in list
-    term2sToPass <- lapply((1:sortedFunCatTermsCount), function(i){
-      return( append(termpair2kappaOverThreshold[[sortedFunCatTerms[i]]], sortedFunCatTerms[i], after=0) )
-    })
-    names(term2sToPass) <- mclapply((1:sortedFunCatTermsCount), mc.cores=4, mc.silent=FALSE, function(i){
-      return( sortedFunCatTerms[i] )
-    })
-  }
-
-  #qualifiedSeeds <- lapply((1:sortedFunCatTermsCount), function(i){
-  qualifiedSeeds <- mclapply((1:sortedFunCatTermsCount), mc.cores=4, mc.silent=FALSE, function(i){
-    # Seed condition #1: initial group membership
-    if (!is.null(termpair2kappaOverThreshold[[sortedFunCatTerms[i]]]) & length(termpair2kappaOverThreshold[[sortedFunCatTerms[i]]]) >= (initialGroupMembership-1)) {
-      # Seed condition #2: majority of the members 
-      results_calculate_percentage_of_membership_over_threshold <- calculate_percentage_of_membership_over_threshold (termpair2kappaOverThreshold, term2sToPass[[sortedFunCatTerms[i]]])
-      over_percentage <- unlist(results_calculate_percentage_of_membership_over_threshold["overPercentage"])
-      term2sRef <- results_calculate_percentage_of_membership_over_threshold["term2s"]
-      if (as.numeric(over_percentage) > as.numeric(multipleLinkageThreshold)) {
-        # this seed group is qualified
-        return(unlist(unname(term2sRef)))
-      }
-    }
-    return(NULL)
-  })
-  # remove empty nested lists
-  qualifiedSeeds <- lapply(qualifiedSeeds, function(innerList) innerList[sapply(innerList, length) > 0])
-  qualifiedSeeds <- qualifiedSeeds[!sapply(qualifiedSeeds, is.null)]
-
-  # ----------------------------------------------------------------------
-  # 	Step#3: Iteratively merge qualifying seeds
-  # ----------------------------------------------------------------------
-  
-  # Update status file
-  # Connect to DB to get status info
-  poolStatus <- dbPool(
-    drv = dbDriver("PostgreSQL", max.con = 100),
-    dbname = tox21db$database,
-    host = tox21db$host,
-    user = tox21db$uid,
-    password = tox21db$pwd,
-    idleTimeout = 3600000
-  )
-  # Set step flag for each set name
-  query <- sqlInterpolate(ANSI(), paste0("UPDATE status SET step=5 WHERE uuid='",enrichmentUUID,"' AND setname='",outfileBase,"';"), id="fetchStatus")
-  outp <- dbGetQuery(poolStatus, query)
-  # Close pool
-  poolClose(poolStatus)
-  
-  remainingSeeds	<- qualifiedSeeds
-  finalGroups <- vector("list", length(remainingSeeds))
-  finalGroupsIndex <- 1
-  
-  while(!is.null(unlist(remainingSeeds[1]))){
-    currentSeedRef	 <- remainingSeeds[[1]]
-    remainingSeeds	 <- remainingSeeds[-1]
-    newSeeds <- list()
-    while(TRUE) {
-      results_get_the_best_seed <- get_the_best_seed (currentSeedRef, remainingSeeds, newSeeds, multipleLinkageThreshold, finalGroupsIndex)
-      # update the current reference seed ref with new seeds
-      remainingSeeds <- results_get_the_best_seed[["remainingSeedsRef"]]
-      newSeeds <- results_get_the_best_seed[["newSeedRef"]]
-      seedStatus <- results_get_the_best_seed[["finished"]]
-      if(seedStatus == 0) {
-        break
-      } else {
-        currentSeedRef <- newSeeds
-      }
-    }
-    # if there is no more merging possible, add the current seeds to the final groups
-    finalGroups[[finalGroupsIndex]] <- currentSeedRef
-    finalGroupsIndex <- finalGroupsIndex+ 1
-  }
-  
-  # Remove null elements
-  finalGroups <- lapply(finalGroups, function(innerList){
-    if(length(innerList) > 0) {
-      return(innerList)
-    }
-  })
-  finalGroups <- finalGroups[!sapply(finalGroups, is.null)]
-  
-  # ----------------------------------------------------------------------
-  # 	Step#4: Calculate enrichment score and print out the results
-  # ----------------------------------------------------------------------
-  
-  # Update status file
-  # Connect to DB to get status info
-  poolStatus <- dbPool(
-    drv = dbDriver("PostgreSQL", max.con = 100),
-    dbname = tox21db$database,
-    host = tox21db$host,
-    user = tox21db$uid,
-    password = tox21db$pwd,
-    idleTimeout = 3600000
-  )
-  # Set step flag for each set name
-  query <- sqlInterpolate(ANSI(), paste0("UPDATE status SET step=6 WHERE uuid='",enrichmentUUID,"' AND setname='",outfileBase,"';"), id="fetchStatus")
-  outp <- dbGetQuery(poolStatus, query)
-  # Close pool
-  poolClose(poolStatus)
-  
-  outfileCluster	<- paste0(outputBaseDir, outfileBase, "__Cluster.txt")
-  CLUSTER         <- file(outfileCluster)
-  
-  clusterHeader <- "Category\tTerm\tCount\t%\tPValue\tCASRNs\tList Total\tPop Hits\tPop Total\tFold Enrichment\tBonferroni\tBenjamini\tFDR\n"
-  EASEScore	    <- list()
-  
-  if(length(finalGroups) > 0){
-    EASEScore <- lapply(1:length(finalGroups), function(i){
-      return(calculate_Enrichment_Score (finalGroups[i], term2Pvalue))
-    })
-    EASEScore <- unlist(EASEScore, recursive=FALSE)
-  }
-  
-  # Sort
-  clusterNumber	<- 0
-  sortedIndex <- finalGroups
-  names(sortedIndex) <- EASEScore
-  sortedIndexFloat <- unlist(lapply(names(sortedIndex), function(x){
-    return(as.numeric(x))
-  }))
-  sortedIndex <- sortedIndex[order(sortedIndexFloat, decreasing=TRUE)]
-
-  writeToClusterFinal <- NULL
-  if(length(sortedIndex) > 0){
-    writeToClusterFinal <- lapply(1:length(sortedIndex), function(myIndex) {
-      if(length(finalGroups[[myIndex]] > 0)){
-        writeToCluster <- paste0("Annotation Cluster ", (clusterNumber+1), "\tEnrichment Score: ", names(sortedIndex)[myIndex], "\n", clusterHeader)
-        clusterNumber <<- clusterNumber + 1
-        # sort terms again by p-value
-        finalGroups2Pvalue <- lapply(sortedIndex[[myIndex]], function(term){
-          return(term2Pvalue[[term]])
+    tmp_mappedCASRNCheck <- lapply(names(sortedFunCatTerms), function(funCatTerm){
+        localCASRNIDs <- names(sigTerm2CASRNMatrix[funCatTerm[[1]]])
+        tmp_inner_mappedCASRNCheck <- lapply(localCASRNIDs, function(CASRNID){
+            return(1)
         })
-        finalGroups2Pvalue <- unlist(finalGroups2Pvalue, recursive=FALSE)
-        
-        names(finalGroups2Pvalue) <- sortedIndex[[myIndex]]
-        sortedFunCatTerms <- finalGroups2Pvalue[order(unlist(finalGroups2Pvalue), decreasing = FALSE)]
-        writeTermsToCluster <- lapply(names(sortedFunCatTerms), function(myTerm) return(paste0(term2Contents[[myTerm]], collapse="\t")))
-        writeToCluster <- paste0(writeToCluster, paste0(writeTermsToCluster, collapse="\n"), "\n")
-        return(writeToCluster)
-      }
+        tmp_inner_mappedCASRNCheck <- unlist(tmp_inner_mappedCASRNCheck, recursive=FALSE)
+        tmp_names_mappedCASRNCheck <- lapply(localCASRNIDs, function(CASRNID){
+            return(CASRNID)
+        })
+        tmp_names_mappedCASRNCheck <- unlist(tmp_names_mappedCASRNCheck, recursive=FALSE)
+        return(list(CASRNID=tmp_names_mappedCASRNCheck, content=tmp_inner_mappedCASRNCheck))
     })
-  }
-  writeToClusterFinal <- paste0(paste0(writeToClusterFinal, collapse="\n"), "\n")
-  write(writeToClusterFinal, CLUSTER, append=TRUE)
-  close(CLUSTER)
-  return(1)
+  
+    mappedCASRNCheckNames <- lapply(seq_len(length(tmp_mappedCASRNCheck)), function(i){
+        return(tmp_mappedCASRNCheck[[i]]["CASRNID"])
+    })
+    mappedCASRNCheckContent <- lapply(seq_len(length(tmp_mappedCASRNCheck)), function(i){
+        return(tmp_mappedCASRNCheck[[i]]["content"])
+    })
+  
+    mappedCASRNCheck <- unlist(unname(unlist(mappedCASRNCheckContent, recursive=FALSE)))
+    names(mappedCASRNCheck) <- unlist(unname(unlist(mappedCASRNCheckNames, recursive=FALSE)))
+    mappedCASRNIDs <- names(mappedCASRNCheck)
+    totalMappedCASRNIDCount <- length(mappedCASRNIDs)
+  
+    # Calculate kappa score for each term pair
+    sortedFunCatTerms <- names(sortedFunCatTerms)
+    termpair2kappaOverThreshold <- mclapply ((seq_len((sortedFunCatTermsCount-1))), mc.cores=CORES, mc.silent=FALSE, function(i) {
+        termpair2kappaOverThresholdInner <- lapply (seq((i+1), sortedFunCatTermsCount), function(j) {
+            #calculate_kappa_statistics 
+            term1term2 <- 0
+            term1only <- 0
+            term2only <- 0
+            term1term2Non <- 0
+            
+            posTerm1Total <- posTermCASRNCount[[sortedFunCatTerms[i]]]
+            posTerm2Total <- posTermCASRNCount[[sortedFunCatTerms[j]]]
+            negTerm1Total <- inputCASRNsCount - posTerm1Total # note that the total is inputCASRNsCount not the mapped total
+            negTerm2Total <- inputCASRNsCount - posTerm2Total # note that the total is inputCASRNsCount not the mapped total
+            
+            # Get number of chemicals that are shared or not for term1 and term2
+            sharedTerms <- intersect(names(sigTerm2CASRNMatrix[[sortedFunCatTerms[i]]]), names(sigTerm2CASRNMatrix[[sortedFunCatTerms[j]]]))
+            term1term2 <- length(sharedTerms)
+            term1only <- length(names(sigTerm2CASRNMatrix[[sortedFunCatTerms[i]]])) - length(sharedTerms)
+            term2only <- length(names(sigTerm2CASRNMatrix[[sortedFunCatTerms[j]]])) - length(sharedTerms)
+            term1term2Non <- inputCASRNsCount - term1term2 - term1only - term2only
+            
+            # Calculate the kappa score 
+            # http://david.abcc.ncifcrf.gov/content.jsp?file=linear_search.html
+            Oab <- (term1term2 + term1term2Non)/inputCASRNsCount
+            Aab <- ((posTerm1Total * posTerm2Total) + (negTerm1Total * negTerm2Total))/(inputCASRNsCount * inputCASRNsCount)
+            if (Aab != 1) {
+                Kappa <- as.double(sprintf("%.2f", (Oab - Aab)/(1 - Aab)))
+                if (Kappa > similarityThreshold) {
+                    iTerm <- paste0(sortedFunCatTerms[i])
+                    jTerm <- paste0(sortedFunCatTerms[j])
+                    ijFrame <- data.frame(iTerm=paste0(jTerm), jTerm=paste0(iTerm), stringsAsFactors=FALSE)
+                    colnames(ijFrame) <- list(iTerm, jTerm)
+                    return(ijFrame)
+                }
+            }
+            return(NULL)
+        })
+        termpair2kappaOverThresholdInner <- termpair2kappaOverThresholdInner[!vapply(termpair2kappaOverThresholdInner, is.null, FUN.VALUE=logical(1))]
+        if(length(termpair2kappaOverThresholdInner) > 0){
+            termpair2kappaOverThresholdInner <- unlist(termpair2kappaOverThresholdInner, recursive=FALSE)
+            return(termpair2kappaOverThresholdInner)
+        }
+        return(NULL)
+    })
+    termpair2kappaOverThreshold <- unlist( termpair2kappaOverThreshold[!vapply(termpair2kappaOverThreshold, is.null, FUN.VALUE=logical(1))], recursive=FALSE )
+    termpair2kappaOverThreshold <- tapply(unlist(termpair2kappaOverThreshold, use.names=FALSE), rep(names(termpair2kappaOverThreshold), lengths(termpair2kappaOverThreshold)), FUN=c)
+
+    # Step#2: Create qualified initial seeding groups
+    # Each term could form a initial seeding group (initial seeds) as long as it has close relationships (kappa > 0.35 or any designated number) with more than > 2 or any designated number of other members. 
+    # Update status file
+    # Connect to DB to get status info
+    poolStatus <- dbPool(
+        drv=dbDriver("PostgreSQL", max.con=100),
+        dbname=tox21queue$database,
+        host=tox21queue$host,
+        user=tox21queue$uid,
+        password=tox21queue$pwd,
+        idleTimeout=3600000
+    )
+    # Set step flag for each set name
+    query <- sqlInterpolate(ANSI(), paste0("UPDATE status SET step=4 WHERE uuid='", enrichmentUUID, "' AND setname='", outfileBase, "';"), id="fetchStatus")
+    outp <- dbGetQuery(poolStatus, query)
+    # Close pool
+    poolClose(poolStatus)
+  
+    term2sToPass <- NULL
+    if(length(termpair2kappaOverThreshold) > 0){
+        termpair2kappaOverThreshold <- termpair2kappaOverThreshold[order(names(termpair2kappaOverThreshold), decreasing=TRUE)]
+        # Prepend sortedFunCatTerms to each element in list
+        term2sToPass <- lapply(seq_len(sortedFunCatTermsCount), function(i){
+            return( append(termpair2kappaOverThreshold[[sortedFunCatTerms[i]]], sortedFunCatTerms[i], after=0) )
+        })
+        names(term2sToPass) <- mclapply(seq_len(sortedFunCatTermsCount), mc.cores=CORES, mc.silent=FALSE, function(i){
+            return( sortedFunCatTerms[i] )
+        })
+    }
+
+    qualifiedSeeds <- mclapply(seq_len(sortedFunCatTermsCount), mc.cores=CORES, mc.silent=FALSE, function(i){
+        # Seed condition #1: initial group membership
+        if (!is.null(termpair2kappaOverThreshold[[sortedFunCatTerms[i]]]) & length(termpair2kappaOverThreshold[[sortedFunCatTerms[i]]]) >= (initialGroupMembership-1)) {
+            # Seed condition #2: majority of the members 
+            results_calculate_percentage_of_membership_over_threshold <- calculate_percentage_of_membership_over_threshold (termpair2kappaOverThreshold, term2sToPass[[sortedFunCatTerms[i]]])
+            over_percentage <- unlist(results_calculate_percentage_of_membership_over_threshold["overPercentage"])
+            term2sRef <- results_calculate_percentage_of_membership_over_threshold["term2s"]
+            if (as.numeric(over_percentage) > as.numeric(multipleLinkageThreshold)) {
+                # this seed group is qualified
+                return(unlist(unname(term2sRef)))
+            }
+        }
+        return(NULL)
+    })
+    # remove empty nested lists
+    qualifiedSeeds <- lapply(qualifiedSeeds, function(innerList) innerList[vapply(innerList, length, FUN.VALUE=numeric(1)) > 0])
+    qualifiedSeeds <- qualifiedSeeds[!vapply(qualifiedSeeds, is.null, FUN.VALUE=logical(1))]
+
+    #  Step#3: Iteratively merge qualifying seeds
+    # Update status file
+    # Connect to DB to get status info
+    poolStatus <- dbPool(
+        drv=dbDriver("PostgreSQL", max.con=100),
+        dbname=tox21queue$database,
+        host=tox21queue$host,
+        user=tox21queue$uid,
+        password=tox21queue$pwd,
+        idleTimeout=3600000
+    )
+    # Set step flag for each set name
+    query <- sqlInterpolate(ANSI(), paste0("UPDATE status SET step=5 WHERE uuid='", enrichmentUUID, "' AND setname='", outfileBase, "';"), id="fetchStatus")
+    outp <- dbGetQuery(poolStatus, query)
+    # Close pool
+    poolClose(poolStatus)
+    
+    remainingSeeds <- qualifiedSeeds
+    finalGroups <- vector("list", length(remainingSeeds))
+    finalGroupsIndex <- 1
+  
+    while(!is.null(unlist(remainingSeeds[1]))){
+        currentSeedRef <- remainingSeeds[[1]]
+        remainingSeeds <- remainingSeeds[-1]
+        newSeeds <- list()
+        while(TRUE) {
+            results_get_the_best_seed <- get_the_best_seed (currentSeedRef, remainingSeeds, newSeeds, multipleLinkageThreshold, finalGroupsIndex)
+            # update the current reference seed ref with new seeds
+            remainingSeeds <- results_get_the_best_seed[["remainingSeedsRef"]]
+            newSeeds <- results_get_the_best_seed[["newSeedRef"]]
+            seedStatus <- results_get_the_best_seed[["finished"]]
+            if(seedStatus == 0) {
+                break
+            } else {
+                currentSeedRef <- newSeeds
+            }
+        }
+        # if there is no more merging possible, add the current seeds to the final groups
+        finalGroups[[finalGroupsIndex]] <- currentSeedRef
+        finalGroupsIndex <- finalGroupsIndex+ 1
+    }
+  
+    # Remove null elements
+    finalGroups <- lapply(finalGroups, function(innerList){
+        if(length(innerList) > 0) {
+            return(innerList)
+        }
+    })
+    finalGroups <- finalGroups[!vapply(finalGroups, is.null, FUN.VALUE=logical(1))]
+  
+    # Step#4: Calculate enrichment score and print out the results
+    # Update status file
+    # Connect to DB to get status info
+    poolStatus <- dbPool(
+        drv=dbDriver("PostgreSQL", max.con=100),
+        dbname=tox21queue$database,
+        host=tox21queue$host,
+        user=tox21queue$uid,
+        password=tox21queue$pwd,
+        idleTimeout=3600000
+    )
+    # Set step flag for each set name
+    query <- sqlInterpolate(ANSI(), paste0("UPDATE status SET step=6 WHERE uuid='", enrichmentUUID, "' AND setname='", outfileBase, "';"), id="fetchStatus")
+    outp <- dbGetQuery(poolStatus, query)
+    # Close pool
+    poolClose(poolStatus)
+    
+    outfileCluster <- paste0(outputBaseDir, outfileBase, "__Cluster.txt")
+    CLUSTER <- file(outfileCluster)
+    clusterHeader <- "Category\tTerm\tCount\t%\tPValue\tCASRNs\tList Total\tPop Hits\tPop Total\tFold Enrichment\tBonferroni\tBenjamini\tFDR\n"
+    EASEScore <- list()
+  
+    if(length(finalGroups) > 0){
+        EASEScore <- lapply(seq_len(length(finalGroups)), function(i){
+            return(calculate_Enrichment_Score (finalGroups[i], term2Pvalue))
+        })
+        EASEScore <- unlist(EASEScore, recursive=FALSE)
+    }
+  
+    # Sort
+    clusterNumber <- 0
+    sortedIndex <- finalGroups
+    names(sortedIndex) <- EASEScore
+    sortedIndexFloat <- unlist(lapply(names(sortedIndex), function(x){
+        return(as.numeric(x))
+    }))
+    sortedIndex <- sortedIndex[order(sortedIndexFloat, decreasing=TRUE)]
+
+    writeToClusterFinal <- NULL
+    if(length(sortedIndex) > 0){
+        writeToClusterFinal <- lapply(seq_len(length(sortedIndex)), function(myIndex) {
+            if(length(finalGroups[[myIndex]] > 0)){
+                writeToCluster <- paste0("Annotation Cluster ", (clusterNumber+1), "\tEnrichment Score: ", names(sortedIndex)[myIndex], "\n", clusterHeader)
+                clusterNumber <<- clusterNumber + 1
+                # sort terms again by p-value
+                finalGroups2Pvalue <- lapply(sortedIndex[[myIndex]], function(term){
+                    return(term2Pvalue[[term]])
+                })
+                finalGroups2Pvalue <- unlist(finalGroups2Pvalue, recursive=FALSE)
+                names(finalGroups2Pvalue) <- sortedIndex[[myIndex]]
+                sortedFunCatTerms <- finalGroups2Pvalue[order(unlist(finalGroups2Pvalue), decreasing=FALSE)]
+                writeTermsToCluster <- lapply(names(sortedFunCatTerms), function(myTerm) return(paste0(term2Contents[[myTerm]], collapse="\t")))
+                writeToCluster <- paste0(writeToCluster, paste0(writeTermsToCluster, collapse="\n"), "\n")
+                return(writeToCluster)
+            }
+        })
+    }
+    writeToClusterFinal <- paste0(paste0(writeToClusterFinal, collapse="\n"), "\n")
+    write(writeToClusterFinal, CLUSTER, append=TRUE)
+    close(CLUSTER)
+    return(1)
 }
 
 calculate_Enrichment_Score <- function(tmp_groupRef, term2PvalueRef) {
-  EASESum <- 0
-  groupRef <- tmp_groupRef[[1]]
-  for (termTmp in groupRef) {
-    term <- termTmp[[1]]
-    if(is.null(term2PvalueRef[[term]][[1]])) {
-      EASESum <- EASESum +  16
-    } else {
-      if (term2PvalueRef[[term]][[1]] == 0) {
-          EASESum <- EASESum +  16
-      } else {
-        EASESum <- EASESum + -log(term2PvalueRef[[term]][[1]])/log(10)
-      }
-    }
-  }
-  
-  enrichmentScore <- EASESum / length(groupRef)
-  return(enrichmentScore)
+    EASESum <- 0
+    groupRef <- tmp_groupRef[[1]]
+    EASESum <- Reduce("+", unlist(lapply(groupRef, function(termTmp) {
+        term <- termTmp[[1]]
+        if(is.null(term2PvalueRef[[term]][[1]])) {
+            return(16)
+        } else {
+            if (term2PvalueRef[[term]][[1]] == 0) {
+                return(16)
+            } else {
+                return(-log(term2PvalueRef[[term]][[1]])/log(10))
+            }
+        }
+    })))
+    enrichmentScore <- EASESum / length(groupRef)
+    return(enrichmentScore)
 }
 
 calculate_percentage_of_membership_over_threshold <- function(termpair2kappaOverThresholdRef, term2s) {
-  # calculate 
-  passedPair <- unlist(lapply (1:(length(term2s)-1), function(i) {
-    passedPairInner <- lapply ( ( (i+1):(length(term2s)) ), function(j) {
-      if(term2s[j] %in% termpair2kappaOverThresholdRef[[term2s[i]]]) {
-        return(1)
-      } 
-      return(NULL)
-    })
-    passedPairInner <- unlist(passedPairInner[!sapply(passedPairInner, is.null)])
-    return(passedPairInner)
-  }))
-  passedPair <- passedPair[!sapply(passedPair, is.null)]
-  passedPair <- length(passedPair)
-  
-  #use n choose k to calculate total number of unique pairs
-  totalPairs <- choose(length(term2s), 2)
-  return(list(overPercentage=(passedPair/totalPairs), term2s=term2s))
+    # calculate 
+    passedPair <- unlist(lapply(seq_len((length(term2s)-1)), function(i) {
+        passedPairInner <- lapply(seq((i+1), (length(term2s))), function(j) {
+            if(term2s[j] %in% termpair2kappaOverThresholdRef[[term2s[i]]]) {
+                return(1)
+            } 
+            return(NULL)
+        })
+        passedPairInner <- unlist(passedPairInner[!vapply(passedPairInner, is.null, FUN.VALUE=logical(1))])
+        return(passedPairInner)
+    }))
+    passedPair <- passedPair[!vapply(passedPair, is.null, FUN.VALUE=logical(1))]
+    passedPair <- length(passedPair)
+    
+    # Use n choose k to calculate total number of unique pairs
+    totalPairs <- choose(length(term2s), 2)
+    return(list(overPercentage=(passedPair/totalPairs), term2s=term2s))
 }
 
 get_the_best_seed <- function(currentSeedRef, remainingSeedsRef, newSeedRef, multipleLinkageThreshold, index) {
-  bestOverlapping		    <- 0
-  bestSeedIndex			    <- ""
-  currentSeedTerms	    <- currentSeedRef
-  currentSeedTermCount	<- length(currentSeedTerms)
-  
-  if(length(remainingSeedsRef) > 1){
-    for (i in 1:(length(remainingSeedsRef)-1)) {
-      # calculate the overlapping
-      secondSeedTerms	<- remainingSeedsRef[[i]]
-      commonCount		  <- length(intersect(secondSeedTerms, currentSeedTerms))
-      totalCount		  <- length(secondSeedTerms)
-      overlapping	<- 2*commonCount / (currentSeedTermCount + totalCount)
-      
-      # !CHECK! '>' or '>='
-      if (overlapping > multipleLinkageThreshold) {
-        if (bestOverlapping < overlapping) {
-          bestOverlapping 	<- overlapping
-          bestSeedIndex		  <- i
-        }
-      }
-    } 
-  }
-  
-  if (bestOverlapping == 0) {
-    # no more merging is possible
-    return(list(remainingSeedsRef=remainingSeedsRef, newSeedRef=newSeedRef, finished=0))
-  } else {
-    # best mergable seed found
-    newSeedRef <- union(currentSeedTerms, remainingSeedsRef[[bestSeedIndex]])
-    # splice
-    remainingSeedsRef <- remainingSeedsRef[-bestSeedIndex]
-    return(list(remainingSeedsRef=remainingSeedsRef, newSeedRef=newSeedRef, finished=1))
-  }
+    bestOverlapping <- 0
+    bestSeedIndex <- ""
+    currentSeedTerms <- currentSeedRef
+    currentSeedTermCount <- length(currentSeedTerms)
+    if(length(remainingSeedsRef) > 1){
+        lapply(seq_len((length(remainingSeedsRef)-1)), function(i) {
+            # calculate the overlapping
+            secondSeedTerms <- remainingSeedsRef[[i]]
+            commonCount <- length(intersect(secondSeedTerms, currentSeedTerms))
+            totalCount <- length(secondSeedTerms)
+            overlapping <- 2*commonCount / (currentSeedTermCount + totalCount)
+            if (overlapping > multipleLinkageThreshold) {
+                if (bestOverlapping < overlapping) {
+                    bestOverlapping <<- overlapping
+                    bestSeedIndex <<- i
+                }
+            }
+        })
+    }
+    if (bestOverlapping == 0) {
+        # no more merging is possible
+        return(list(remainingSeedsRef=remainingSeedsRef, newSeedRef=newSeedRef, finished=0))
+    } else {
+        # best mergable seed found
+        newSeedRef <- union(currentSeedTerms, remainingSeedsRef[[bestSeedIndex]])
+        # splice
+        remainingSeedsRef <- remainingSeedsRef[-bestSeedIndex]
+        return(list(remainingSeedsRef=remainingSeedsRef, newSeedRef=newSeedRef, finished=1))
+    }
 }
 
-########################################################################################################################################################################################################################################################
-
 # Fetch all annotations in the Tox21 Enricher database for given CASRNs.
-# enrichmentUUID UUID for Input/Output directory on local machine, generated by Tox21 Enricher application.
-# annoSelectStr String, comma-delimited, containing all enabled annotations for this enrichment process. Passed from Tox21 Enricher application.
 getAnnotations <- function(enrichmentUUID="-1", annoSelectStr="MESH=checked,PHARMACTIONLIST=checked,ACTIVITY_CLASS=checked,ADVERSE_EFFECT=checked,INDICATION=checked,KNOWN_TOXICITY=checked,MECH_LEVEL_1=checked,MECH_LEVEL_2=checked,MECH_LEVEL_3=checked,MECHANISM=checked,MODE_CLASS=checked,PRODUCT_CLASS=checked,STRUCTURE_ACTIVITY=checked,TA_LEVEL_1=checked,TA_LEVEL_2=checked,TA_LEVEL_3=checked,THERAPEUTIC_CLASS=checked,TISSUE_TOXICITY=checked,DRUGBANK_ATC=checked,DRUGBANK_ATC_CODE=checked,DRUGBANK_CARRIERS=checked,DRUGBANK_ENZYMES=checked,DRUGBANK_TARGETS=checked,DRUGBANK_TRANSPORTERS=checked,CTD_CHEM2DISEASE=checked,CTD_CHEM2GENE_25=checked,CTD_CHEMICALS_DISEASES=checked,CTD_CHEMICALS_GENES=checked,CTD_CHEMICALS_GOENRICH_CELLCOMP=checked,CTD_CHEMICALS_GOENRICH_MOLFUNCT=checked,CTD_CHEMICALS_PATHWAYS=checked,CTD_GOSLIM_BIOPROCESS=checked,CTD_PATHWAY=checked,HTS_ACTIVE=checked,LEADSCOPE_TOXICITY=checked,MULTICASE_TOX_PREDICTION=checked,TOXCAST_ACTIVE=checked,TOXINS_TARGETS=checked,TOXPRINT_STRUCTURE=checked,TOXREFDB=checked,", nodeCutoff=10) {
-  # async
-  #future_promise({
-  # Connect to db
-  poolInput <- dbPool(
-    drv = dbDriver("PostgreSQL", max.con = 100),
-    dbname = tox21db$database,
-    host = tox21db$host,
-    user = tox21db$uid,
-    password = tox21db$pwd,
-    port = tox21db$port,
-    idleTimeout = 3600000
-  )
-  # Add request to database
-  query <- sqlInterpolate(ANSI(), paste0("INSERT INTO enrichment_list(id, chemlist, type, node_cutoff, anno_select_str, timestamp_start, ip) VALUES('", enrichmentUUID, "','", "placeholder", "','", "placeholder", "','", nodeCutoff, "','", annoSelectStr, "','", Sys.time(), "','", "placeholder", "');"), id="addToDb")
-  outp <- dbGetQuery(poolInput, query)
-  poolClose(poolInput)
-  
-  # Get list of selected annotations
-  annoSelect <- unlist(strsplit(annoSelectStr,"=checked,", fixed=TRUE), recursive=FALSE)
-  # Get input sets
-  inDir <- paste0(APP_DIR, "Input/", enrichmentUUID)    # Directory for input files for enrichment set
-  outDir <- paste0(APP_DIR, "Output/", enrichmentUUID)  # Directory for output files for enrichment set
-  inputSets <- Sys.glob(paste0(inDir,"/*"))
-
-  annotationMatrix <- mclapply(inputSets, mc.cores=4, mc.silent=FALSE, function(infile){
     # Connect to db
-    poolMatrix <- dbPool(
-      drv = dbDriver("PostgreSQL", max.con = 100),
-      dbname = tox21db$database,
-      host = tox21db$host,
-      user = tox21db$uid,
-      password = tox21db$pwd,
-      port = tox21db$port,
-      idleTimeout = 3600000
+    poolInput <- dbPool(
+        drv=dbDriver("PostgreSQL", max.con=100),
+        dbname=tox21queue$database,
+        host=tox21queue$host,
+        user=tox21queue$uid,
+        password=tox21queue$pwd,
+        port=tox21queue$port,
+        idleTimeout=3600000
     )
+    # Add request to database
+    query <- sqlInterpolate(ANSI(), paste0("INSERT INTO enrichment_list(id, chemlist, type, node_cutoff, anno_select_str, timestamp_start, ip) VALUES('", enrichmentUUID, "','", "placeholder", "','", "placeholder", "','", nodeCutoff, "','", annoSelectStr, "','", Sys.time(), "','", "placeholder", "');"), id="addToDb")
+    outp <- dbGetQuery(poolInput, query)
+    poolClose(poolInput)
     
-    # Get set name
-    setNameSplit <- unlist(str_split(infile, "/"))
-    setNameSplit2 <- unlist(str_split(setNameSplit[length(setNameSplit)], "\\."))
-    setName <- setNameSplit2[1]
-    
-    # Read input files
-    input <- tryCatch({
-      read.delim(infile, sep="\t", comment.char="", quote="", stringsAsFactors = FALSE, header = FALSE)
-    }, error=function(e){
-      return(NULL)
+    # Get list of selected annotations
+    annoSelect <- unlist(str_split(annoSelectStr, "=checked,"), recursive=FALSE)
+    # Get input sets
+    inDir <- paste0(APP_DIR, "Input/", enrichmentUUID) # Directory for input files for enrichment set
+    outDir <- paste0(APP_DIR, "Output/", enrichmentUUID) # Directory for output files for enrichment set
+    inputSets <- Sys.glob(paste0(inDir, "/*"))
+  
+    annotationMatrix <- mclapply(inputSets, mc.cores=CORES, mc.silent=FALSE, function(infile){
+        # Connect to db
+        poolMatrix <- dbPool(
+            drv=dbDriver("PostgreSQL", max.con=100),
+            dbname=tox21config$database,
+            host=tox21config$host,
+            user=tox21config$uid,
+            password=tox21config$pwd,
+            port=tox21config$port,
+            idleTimeout=3600000
+        )
+        
+        # Get set name
+        setNameSplit <- unlist(str_split(infile, "/"))
+        setNameSplit2 <- unlist(str_split(setNameSplit[length(setNameSplit)], "\\."))
+        setName <- setNameSplit2[1]
+        
+        # Read input files
+        input <- tryCatch({
+            read.delim(infile, sep="\t", comment.char="", quote="", stringsAsFactors=FALSE, header=FALSE)
+        }, error=function(e){
+            return(NULL)
+        })
+        if(length(input) < 1) {
+            return(NULL)
+        }
+        
+        # Get just the CASRNs
+        inputCASRNs <- input[, 1]
+        
+        # Read status file and update step
+        # Connect to DB to get status info
+        poolStatus <- dbPool(
+            drv=dbDriver("PostgreSQL", max.con=100),
+            dbname=tox21queue$database,
+            host=tox21queue$host,
+            user=tox21queue$uid,
+            password=tox21queue$pwd,
+            idleTimeout=3600000
+        )
+        # Set step flag for each set name
+        query <- sqlInterpolate(ANSI(), paste0("UPDATE status SET step=2 WHERE uuid='", enrichmentUUID, "' AND setname='", setName, "';"), id="fetchStatus")
+        outp <- dbGetQuery(poolStatus, query)
+        # Close pool
+        poolClose(poolStatus)
+        
+        # Get the corresponding annotations for each input CASRN
+        annotations <- lapply(inputCASRNs, function(CASRN){
+            # Grab matrix
+            queryMatrix <- sqlInterpolate(ANSI(), paste0("SELECT annotation FROM annotation_matrix WHERE casrn='", CASRN, "';"))
+            outpMatrix <- tryCatch({
+                dbGetQuery(poolMatrix, queryMatrix)
+            }, error=function(e){
+                print(e)
+                return(NULL)
+            })
+            fetchedCASRNs <- outpMatrix[, 1]
+            
+            # Split up list of annotation IDs
+            fetchedCASRNsList <- unlist(str_split(fetchedCASRNs, "\\|"))
+            fetchedCASRNsList <- fetchedCASRNsList[lapply(fetchedCASRNsList, length) > 0]
+            fetchedCASRNsList <- fetchedCASRNsList[-length(fetchedCASRNsList)]
+            return(fetchedCASRNsList)
+        })
+        # Set list names to CASRNs
+        names(annotations) <- inputCASRNs
+        
+        # Read status file and update step
+        # Connect to DB to get status info
+        poolStatus <- dbPool(
+            drv=dbDriver("PostgreSQL", max.con=100),
+            dbname=tox21queue$database,
+            host=tox21queue$host,
+            user=tox21queue$uid,
+            password=tox21queue$pwd,
+            idleTimeout=3600000
+        )
+        # Set step flag for each set name
+        query <- sqlInterpolate(ANSI(), paste0("UPDATE status SET step=3 WHERE uuid='", enrichmentUUID, "' AND setname='", setName, "';"), id="fetchStatus")
+        outp <- dbGetQuery(poolStatus, query)
+        # Close pool
+        poolClose(poolStatus)
+        
+        # Create output files for each CASRN in the Set
+        individualMatrix <- lapply(inputCASRNs, function(CASRN){
+            print(paste0("Creating output file at: ", paste0(outDir, "/", setName, "__", CASRN, ".txt")))
+            file.create(paste0(outDir, "/", setName, "__", CASRN, ".txt"))
+            OUTPUT <- file(paste0(outDir, "/", setName, "__", CASRN, ".txt"))
+            outAnnotationList <- paste0(annotations[[CASRN]], collapse="\n")
+            
+            # Fetch actual term names from IDs
+            fetchedTerms <- lapply(annotations[[CASRN]], function(annotation){
+                queryTerm <- sqlInterpolate(ANSI(), paste0("SELECT term FROM annotation_matrix_terms WHERE id=", annotation, ";"))
+                outpTerm <- dbGetQuery(poolMatrix, queryTerm)
+                fetchedTerm <- outpTerm[[1, 1]]
+                
+                # Check if the fetched term is in the selected annotations
+                fetchedTermSplit <- unlist(str_split(fetchedTerm, "__"), recursive=FALSE)[1]
+                if(fetchedTermSplit %in% annoSelect){
+                    # replace "__" with "\t" for better utility and return
+                    return(gsub("__", "\t", fetchedTerm))
+                }
+                # else, return null if we deselected the annotation set for this given annotation
+                return(NULL)
+            })
+            fetchedTerms <- fetchedTerms[!vapply(fetchedTerms, is.null, FUN.VALUE=logical(1))]
+            fetchedTerms <- unlist(fetchedTerms, recursive=FALSE)
+          
+            # Write annotations to output file
+            if(!is.null(fetchedTerms)){
+                writeLines(fetchedTerms, OUTPUT)
+            } else { # blank file if no matches
+                writeLines("No matching annotations.", OUTPUT)
+            }
+            close(OUTPUT)
+            return(fetchedTerms)
+        })
+        # Set list names to CASRNs
+        # Merge class and annotation names
+        individualMatrix <- lapply(individualMatrix, function(x){
+            fixedInnerList <- unlist(lapply(x, function(y){
+                return(gsub("\t", "\\|", y))
+            }))
+        })
+        names(individualMatrix) <- inputCASRNs
+        combinedMatrix <- unlist(unname(individualMatrix), recursive=FALSE)
+
+        # Read status file and update step
+        # Connect to DB to get status info
+        poolStatus <- dbPool(
+            drv=dbDriver("PostgreSQL", max.con=100),
+            dbname=tox21queue$database,
+            host=tox21queue$host,
+            user=tox21queue$uid,
+            password=tox21queue$pwd,
+            idleTimeout=3600000
+        )
+        # Set step flag for each set name
+        query <- sqlInterpolate(ANSI(), paste0("UPDATE status SET step=4 WHERE uuid='", enrichmentUUID, "' AND setname='", setName, "';"), id="fetchStatus")
+        outp <- dbGetQuery(poolStatus, query)
+        # Close pool
+        poolClose(poolStatus)
+        
+        # Create matrix file for all CASRNs in set
+        file.create(paste0(outDir, "/", setName, "__FullMatrix.txt"))
+        MATRIX <- file(paste0(outDir, "/", setName, "__FullMatrix.txt"))
+        matrixHeader <- paste(combinedMatrix, collapse='\t')
+        matrixOutput <- paste0("CASRN\t", matrixHeader, "\n\n")
+        
+        matrixOutputFull <- lapply(inputCASRNs, function(CASRN){
+            matrixOutput <- paste0(matrixOutput, CASRN)
+            matrixOutputLine <- lapply(combinedMatrix, function(matrixItem){
+                if (matrixItem %in% individualMatrix[[CASRN]]){
+                    return("1")
+                }
+                else{
+                    return("0")
+                } 
+            })
+           return(paste0(CASRN, "\t", paste0(matrixOutputLine, collapse="\t")))
+        })
+        # Write to matrix file
+        write(paste0(matrixOutput, paste0(matrixOutputFull, collapse="\n")), MATRIX, append=TRUE)
+        
+        # Close pool connection to db when done accessing
+        poolClose(poolMatrix)
+        return(TRUE)
     })
-    if(length(input) < 1) {
-      return(NULL)
+    annotationMatrix <- annotationMatrix[!vapply(annotationMatrix, is.null, FUN.VALUE=logical(1))]
+    if(length(annotationMatrix) < 1){
+        # Return error message
+        return("No lines available in any input file. Cannot fetch annotations.")
     }
     
-    # Get just the CASRNs
-    inputCASRNs <- input[, 1]
+    # zip result files
+    if(dir.exists(outDir)){
+        zipDir <- dir(outDir, recursive=TRUE, include.dirs=TRUE)
+        filesToZip <- unlist(lapply(zipDir, function(x) paste0(outDir, "/", x)))
+        system2("cd", paste0(outDir, "/ ; zip -r9X ./tox21enricher_", enrichmentUUID, ".zip ./*")) 
+    } else { # Return with error if did not complete. Do not update in database
+        return(-1) 
+    }
     
-    # Read status file and update step
-    # Connect to DB to get status info
-    poolStatus <- dbPool(
-      drv = dbDriver("PostgreSQL", max.con = 100),
-      dbname = tox21db$database,
-      host = tox21db$host,
-      user = tox21db$uid,
-      password = tox21db$pwd,
-      idleTimeout = 3600000
+    # Connect to db
+    poolUpdate <- dbPool(
+        drv=dbDriver("PostgreSQL", max.con=100),
+        dbname=tox21queue$database,
+        host=tox21queue$host,
+        user=tox21queue$uid,
+        password=tox21queue$pwd,
+        port=tox21queue$port,
+        idleTimeout=3600000
     )
-    # Set step flag for each set name
-    query <- sqlInterpolate(ANSI(), paste0("UPDATE status SET step=2 WHERE uuid='",enrichmentUUID,"' AND setname='",setName,"';"), id="fetchStatus")
-    outp <- dbGetQuery(poolStatus, query)
-    # Close pool
-    poolClose(poolStatus)
-    
-    # Get the corresponding annotations for each input CASRN
-    annotations <- lapply(inputCASRNs, function(CASRN){
-      # Grab matrix
-      queryMatrix <- sqlInterpolate(ANSI(), paste0("SELECT annotation FROM annotation_matrix WHERE casrn = '", CASRN, "';"))
-      outpMatrix <- tryCatch({
-        dbGetQuery(poolMatrix, queryMatrix)
-      }, error=function(e){
-        print(e)
-        return(NULL)
-      })
-      fetchedCASRNs <- outpMatrix[, 1]
-      
-      # Split up list of annotation IDs
-      fetchedCASRNsList <- unlist(str_split(fetchedCASRNs, "\\|"))
-      fetchedCASRNsList <- fetchedCASRNsList[lapply(fetchedCASRNsList, length) > 0]
-      fetchedCASRNsList <- fetchedCASRNsList[-length(fetchedCASRNsList)]
-      return(fetchedCASRNsList)
-      
-    })
-    # Set list names to CASRNs
-    names(annotations) <- inputCASRNs
-    
-    # Read status file and update step
-    # Connect to DB to get status info
-    poolStatus <- dbPool(
-      drv = dbDriver("PostgreSQL", max.con = 100),
-      dbname = tox21db$database,
-      host = tox21db$host,
-      user = tox21db$uid,
-      password = tox21db$pwd,
-      idleTimeout = 3600000
-    )
-    # Set step flag for each set name
-    query <- sqlInterpolate(ANSI(), paste0("UPDATE status SET step=3 WHERE uuid='",enrichmentUUID,"' AND setname='",setName,"';"), id="fetchStatus")
-    outp <- dbGetQuery(poolStatus, query)
-    # Close pool
-    poolClose(poolStatus)
-    
-    # Create output files for each CASRN in the Set
-    individualMatrix <- lapply(inputCASRNs, function(CASRN){
-      print(paste0("creating output file at: ", paste0(outDir, "/", setName, "__", CASRN, ".txt")))
-      file.create(paste0(outDir, "/", setName, "__", CASRN, ".txt"))
-      OUTPUT <- file(paste0(outDir, "/", setName, "__", CASRN, ".txt"))
-      outAnnotationList <- paste0(annotations[[CASRN]], collapse="\n")
-      
-      # Fetch actual term names from IDs
-      fetchedTerms <- lapply(annotations[[CASRN]], function(annotation){
-        queryTerm <- sqlInterpolate(ANSI(), paste0("SELECT term FROM annotation_matrix_terms WHERE id = ", annotation, ";"))
-        outpTerm <- dbGetQuery(poolMatrix, queryTerm)
-        fetchedTerm <- outpTerm[[1, 1]]
-        
-        # Check if the fetched term is in the selected annotations
-        fetchedTermSplit <- unlist(str_split(fetchedTerm, "__"), recursive=FALSE)[1]
-        if(fetchedTermSplit %in% annoSelect){
-          # replace "__" with "\t" for better utility and return
-          return(gsub("__", "\t", fetchedTerm))
-        }
-        # else, return null if we deselected the annotation set for this given annotation
-        return(NULL)
-      })
-      fetchedTerms <- fetchedTerms[!sapply(fetchedTerms, is.null)]
-      fetchedTerms <- unlist(fetchedTerms, recursive=FALSE)
-      
-      # Write annotations to output file
-      if(is.null(fetchedTerms) == FALSE){
-        writeLines(fetchedTerms, OUTPUT)
-      } else { # blank file if no matches
-        writeLines("No matching annotations.", OUTPUT)
-      }
-      close(OUTPUT)
-      return(fetchedTerms)
-    })
-    # Set list names to CASRNs
-    names(individualMatrix) <- inputCASRNs
-    combinedMatrix <- unlist(unname(individualMatrix), recursive = FALSE)
-    
-    # Read status file and update step
-    # Connect to DB to get status info
-    poolStatus <- dbPool(
-      drv = dbDriver("PostgreSQL", max.con = 100),
-      dbname = tox21db$database,
-      host = tox21db$host,
-      user = tox21db$uid,
-      password = tox21db$pwd,
-      idleTimeout = 3600000
-    )
-    # Set step flag for each set name
-    query <- sqlInterpolate(ANSI(), paste0("UPDATE status SET step=4 WHERE uuid='",enrichmentUUID,"' AND setname='",setName,"';"), id="fetchStatus")
-    outp <- dbGetQuery(poolStatus, query)
-    # Close pool
-    poolClose(poolStatus)
-    
-    # Create matrix file for all CASRNs in set
-    file.create(paste0(outDir, "/", setName, "__FullMatrix.txt"))
-    MATRIX <- file(paste0(outDir, "/", setName, "__FullMatrix.txt"))
-    matrixHeader <- paste(combinedMatrix, collapse='\t')
-    matrixOutput <- paste0("CASRN\t", matrixHeader, "\n\n")
-    
-    matrixOutputFull <- lapply(inputCASRNs, function(CASRN){
-      matrixOutput <- paste0(matrixOutput, CASRN, sep="")
-      matrixOutputLine <- lapply(combinedMatrix, function(matrixItem){
-        if (matrixItem %in% individualMatrix[[CASRN]]){
-          return("1")
-        }
-        else{
-          return("0")
-        } 
-      })
-     return(paste0(CASRN, "\t", paste0(matrixOutputLine, collapse="\t")))
-    })
-    # Write to matrix file
-    write(paste0(matrixOutput, paste0(matrixOutputFull, collapse="\n")), MATRIX, append=TRUE)
-    
-    # Close pool connection to db when done accessing
-    poolClose(poolMatrix)
-    
-    return(TRUE)
-  })
-  annotationMatrix <- annotationMatrix[!sapply(annotationMatrix, is.null)]
-  if(length(annotationMatrix) < 1){
-    # Return error message
-    return("No lines available in any input file. Cannot fetch annotations.")
-  }
-  
-  # zip result files
-  if(dir.exists(outDir)){
-    zipDir <- dir(outDir, recursive=TRUE, include.dirs=TRUE)
-    filesToZip <- unlist(lapply(zipDir, function(x) paste0(outDir, "/", x)))
-    system(paste0("cd ", outDir, "/ ; zip -r9X ./tox21enricher_", enrichmentUUID, ".zip ./*")) 
-  } else { # Return with error if did not complete. Do not update in database
-    return(-1) 
-  }
-  
-  # Connect to db
-  poolUpdate <- dbPool(
-    drv = dbDriver("PostgreSQL", max.con = 100),
-    dbname = tox21db$database,
-    host = tox21db$host,
-    user = tox21db$uid,
-    password = tox21db$pwd,
-    port = tox21db$port,
-    idleTimeout = 3600000
-  )
-  # update database with ending timestamp for enrichment
-  query <- sqlInterpolate(ANSI(), paste0("UPDATE enrichment_list SET timestamp_finish='", Sys.time(), "' WHERE id='", enrichmentUUID, "';"), id="addToDb")
-  outp <- dbGetQuery(poolUpdate, query)
-  poolClose(poolUpdate)
-  
-  return(200)
+    # update database with ending timestamp for enrichment
+    query <- sqlInterpolate(ANSI(), paste0("UPDATE enrichment_list SET timestamp_finish='", Sys.time(), "' WHERE id='", enrichmentUUID, "';"), id="addToDb")
+    outp <- dbGetQuery(poolUpdate, query)
+    poolClose(poolUpdate)
+    return(200)
 } 
 
 # Keeps looping and looks for unfinished requests
 queue <- function(){
-  while(TRUE){
-    # Connect to db
-    poolQueue <- dbPool(
-      drv = dbDriver("PostgreSQL", max.con = 100),
-      dbname = tox21db$database,
-      host = tox21db$host,
-      user = tox21db$uid,
-      password = tox21db$pwd,
-      idleTimeout = 3600000
-    )
-    
-    # Get only unfinished requests ("finished" flag is set to 0)
-    query <- sqlInterpolate(ANSI(), paste0("SELECT * FROM queue WHERE finished=0;"), id="createQueueEntry")
-    outp <- dbGetQuery(poolQueue, query)
-    
-    # Close pool
-    poolClose(poolQueue)
-    
-    if(nrow(outp) > 0){
-    
-      # Sort requests from database by index value
-      inputSets <- outp[order(outp$index),] 
-  
-      # Only process first five requests in queue at a time
-      upperBound <- nrow(inputSets)
-      if(nrow(inputSets) > 5){
-        upperBound <- 5
-      }
-      
-      future({
-
-      mclapply(1:upperBound, mc.cores=4, mc.silent=FALSE, function(input){
-        # Get data from queue table entry
-        queueFile <- inputSets[input,]
-        mode <- queueFile[1,1]
-        enrichmentUUID <- queueFile[1,2]
-        annoSelectStr <- queueFile[1,3]
-        nodeCutoff <- queueFile[1,4]
-        status_code <- 500
-        
-        # Connect to DB to get status info
-        poolStatus <- dbPool(
-          drv = dbDriver("PostgreSQL", max.con = 100),
-          dbname = tox21db$database,
-          host = tox21db$host,
-          user = tox21db$uid,
-          password = tox21db$pwd,
-          idleTimeout = 3600000
+    while(TRUE){
+        # Connect to db
+        poolQueue <- dbPool(
+            drv=dbDriver("PostgreSQL", max.con=100),
+            dbname=tox21queue$database,
+            host=tox21queue$host,
+            user=tox21queue$uid,
+            password=tox21queue$pwd,
+            idleTimeout=3600000
         )
         
-        # Get status entry for corresponding queue entry
-        query <- sqlInterpolate(ANSI(), paste0("SELECT * FROM status WHERE uuid='",enrichmentUUID,"';"), id="fetchStatus")
-        outp <- dbGetQuery(poolStatus, query)
-        statusFiles <- outp
-  
-        # Read status entry(ies) and change flag to signify enrichment has started
-        for(i in 1:nrow(statusFiles)){
-          tmpSetName <- statusFiles[i, "setname"]
-          print("tmpSetName")
-          print(tmpSetName)
-          query <- sqlInterpolate(ANSI(), paste0("UPDATE status SET step=1 WHERE uuid='",enrichmentUUID,"' AND setname='",tmpSetName,"';"), id="fetchStatus")
-          outp <- dbGetQuery(poolStatus, query)
-        }
-          
+        # Get only unfinished requests ("finished" flag is set to 0)
+        query <- sqlInterpolate(ANSI(), paste0("SELECT * FROM queue WHERE finished=0;"), id="createQueueEntry")
+        outp <- dbGetQuery(poolQueue, query)
+        
         # Close pool
-        poolClose(poolStatus)
+        poolClose(poolQueue)
         
-        # Perform enrichment analysis or fetch relevant annotations
-        if(mode == "annotation") {
-          status_code <- getAnnotations(enrichmentUUID=enrichmentUUID, annoSelectStr=annoSelectStr, nodeCutoff=nodeCutoff)
-        } else { # else query R API server 
-          status_code <- performEnrichment(enrichmentUUID=enrichmentUUID, annoSelectStr=annoSelectStr, nodeCutoff=nodeCutoff)
-        } 
+        if(nrow(outp) > 0){
+            # Sort requests from database by index value
+            inputSets <- outp[order(outp$index), ] 
         
-        # Connect to DB to set appropriate finishing flags
-        poolFinished <- dbPool(
-          drv = dbDriver("PostgreSQL", max.con = 100),
-          dbname = tox21db$database,
-          host = tox21db$host,
-          user = tox21db$uid,
-          password = tox21db$pwd,
-          idleTimeout = 3600000
-        )
-        
-        # Check if request was cancelled
-        query <- sqlInterpolate(ANSI(), paste0("SELECT cancel FROM queue WHERE uuid='",enrichmentUUID,"';"), id="checkCancel")
-        outp <- dbGetQuery(poolFinished, query)
-        
-        cancelValue <- outp[1, "cancel"]
-        if(cancelValue == 1){
-          status_code <- -1
+            # Only process first five requests in queue at a time
+            upperBound <- nrow(inputSets)
+            if(nrow(inputSets) > 5){
+              upperBound <- 5
+            }
+            
+            #future({
+                #mclapply(seq_len(upperBound), mc.cores=CORES, mc.silent=FALSE, function(input){
+                lapply(seq_len(upperBound), function(input){
+                    # Get data from queue table entry
+                    queueFile <- inputSets[input, ]
+                    mode <- queueFile[1, 1]
+                    enrichmentUUID <- queueFile[1, 2]
+                    annoSelectStr <- queueFile[1, 3]
+                    nodeCutoff <- queueFile[1, 4]
+                    status_code <- 500
+                      
+                    # Connect to DB to get status info
+                    poolStatus <- dbPool(
+                        drv=dbDriver("PostgreSQL", max.con=100),
+                        dbname=tox21queue$database,
+                        host=tox21queue$host,
+                        user=tox21queue$uid,
+                        password=tox21queue$pwd,
+                        idleTimeout=3600000
+                    )
+                      
+                    # Get status entry for corresponding queue entry
+                    query <- sqlInterpolate(ANSI(), paste0("SELECT * FROM status WHERE uuid='", enrichmentUUID, "';"), id="fetchStatus")
+                    outp <- dbGetQuery(poolStatus, query)
+                    statusFiles <- outp
+                
+                    # Read status entry(ies) and change flag to signify enrichment has started
+                    lapply(seq_len(nrow(statusFiles)), function(i){
+                        tmpSetName <- statusFiles[i, "setname"]
+                        query <- sqlInterpolate(ANSI(), paste0("UPDATE status SET step=1 WHERE uuid='", enrichmentUUID, "' AND setname='", tmpSetName, "';"), id="fetchStatus")
+                        outp <- dbGetQuery(poolStatus, query)
+                    })
+                        
+                    # Close pool
+                    poolClose(poolStatus)
+                      
+                    # Perform enrichment analysis or fetch relevant annotations
+                    if(mode == "annotation") {
+                        status_code <- getAnnotations(enrichmentUUID=enrichmentUUID, annoSelectStr=annoSelectStr, nodeCutoff=nodeCutoff)
+                    } else { # else query R API server 
+                        status_code <- performEnrichment(enrichmentUUID=enrichmentUUID, annoSelectStr=annoSelectStr, nodeCutoff=nodeCutoff)
+                    } 
+                      
+                    # Connect to DB to set appropriate finishing flags
+                    poolFinished <- dbPool(
+                        drv=dbDriver("PostgreSQL", max.con=100),
+                        dbname=tox21queue$database,
+                        host=tox21queue$host,
+                        user=tox21queue$uid,
+                        password=tox21queue$pwd,
+                        idleTimeout=3600000
+                    )
+                    
+                    # Check if request was cancelled
+                    query <- sqlInterpolate(ANSI(), paste0("SELECT cancel FROM queue WHERE uuid='", enrichmentUUID, "';"), id="checkCancel")
+                    outp <- dbGetQuery(poolFinished, query)
+                      
+                    cancelValue <- outp[1, "cancel"]
+                    if(cancelValue == 1){
+                        status_code <- -1
+                    }
+                      
+                    # Upon success
+                    if (status_code == 200){
+                        # Set flag for queue
+                        query <- sqlInterpolate(ANSI(), paste0("UPDATE queue SET finished=1 WHERE uuid='", enrichmentUUID, "';"), id="deleteEntries")
+                        outp <- dbGetQuery(poolFinished, query)
+                    } else if (status_code == -1) {
+                        print(paste0("Request cancelled for ", enrichmentUUID, ". Deleting..."))
+                        # Set flag for queue
+                        query <- sqlInterpolate(ANSI(), paste0("UPDATE queue SET finished=1 WHERE uuid='", enrichmentUUID, "';"), id="deleteEntries")
+                        outp <- dbGetQuery(poolFinished, query)
+                        # Delete from enrichment_list
+                        query <- sqlInterpolate(ANSI(), paste0("DELETE FROM enrichment_list WHERE id='", enrichmentUUID, "';"), id="deleteEntries")
+                        outp <- dbGetQuery(poolFinished, query)
+                    } else { # Else, generate error file for reference
+                        print(paste0("Error performing enrichment: ", status_code, " : "))
+                        # Set error message in queue table
+                        query <- sqlInterpolate(ANSI(), paste0("UPDATE queue SET error='Error performing enrichment. Please try again.' WHERE uuid='", enrichmentUUID, "';"), id="addErrorMsg")
+                        outp <- dbGetQuery(poolFinished, query)
+                        # Set flag for queue
+                        query <- sqlInterpolate(ANSI(), paste0("UPDATE queue SET finished=1 WHERE uuid='", enrichmentUUID, "';"), id="deleteEntries")
+                        outp <- dbGetQuery(poolFinished, query)
+                    }
+                    # Close pool
+                    poolClose(poolFinished)
+                })
+            #}, seed=TRUE)
         }
-        
-        # Upon success
-        if (status_code == 200){
-          # Set flag for queue
-          query <- sqlInterpolate(ANSI(), paste0("UPDATE queue SET finished=1 WHERE uuid='",enrichmentUUID,"';"), id="deleteEntries")
-          outp <- dbGetQuery(poolFinished, query)
-        } else if (status_code == -1) {
-          print(paste0("Request cancelled for ", enrichmentUUID, ". Deleting..."))
-          # Set flag for queue
-          query <- sqlInterpolate(ANSI(), paste0("UPDATE queue SET finished=1 WHERE uuid='",enrichmentUUID,"';"), id="deleteEntries")
-          outp <- dbGetQuery(poolFinished, query)
-          # Delete from enrichment_list
-          query <- sqlInterpolate(ANSI(), paste0("DELETE FROM enrichment_list WHERE id='",enrichmentUUID,"';"), id="deleteEntries")
-          outp <- dbGetQuery(poolFinished, query)
-        } else { # Else, generate error file for reference
-          print(paste0("Error performing enrichment: ", status_code, " : "))
-          # Set error message in queue table
-          query <- sqlInterpolate(ANSI(), paste0("UPDATE queue SET error='Error performing enrichment. Please try again.' WHERE uuid='",enrichmentUUID,"';"), id="addErrorMsg")
-          outp <- dbGetQuery(poolFinished, query)
-          # Set flag for queue
-          query <- sqlInterpolate(ANSI(), paste0("UPDATE queue SET finished=1 WHERE uuid='",enrichmentUUID,"';"), id="deleteEntries")
-          outp <- dbGetQuery(poolFinished, query)
-        }
-        # Close pool
-        poolClose(poolFinished)
-      })
-      }, seed=TRUE)
-      
+        # Wait
+        Sys.sleep(2)
     }
-    # Wait
-    Sys.sleep(2)
-  }
 }
 
 # Queue

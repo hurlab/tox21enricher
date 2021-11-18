@@ -28,6 +28,7 @@ UPDATE public.annotation_class SET baseurl = 'https://ntp.niehs.nih.gov/data/dru
 UPDATE public.annotation_class SET baseurl = 'https://ntp.niehs.nih.gov/data/drugmatrix/' WHERE annoclassname = 'MECH_LEVEL_2';
 UPDATE public.annotation_class SET baseurl = 'https://ntp.niehs.nih.gov/data/drugmatrix/' WHERE annoclassname = 'MECH_LEVEL_3';
 UPDATE public.annotation_class SET baseurl = 'https://ntp.niehs.nih.gov/data/drugmatrix/' WHERE annoclassname = 'MECHANISM';
+UPDATE public.annotation_class SET baseurl = 'https://www.ncbi.nlm.nih.gov/mesh/?term=' WHERE annoclassname = 'MESH';
 UPDATE public.annotation_class SET baseurl = 'https://ntp.niehs.nih.gov/data/drugmatrix/' WHERE annoclassname = 'MODE_CLASS';
 UPDATE public.annotation_class SET baseurl = 'http://www.multicase.com/case-ultra-models' WHERE annoclassname = 'MULTICASE_TOX_PREDICTION';
 UPDATE public.annotation_class SET baseurl = 'placeholder' WHERE annoclassname = 'PHARMACTIONLIST';
@@ -42,7 +43,6 @@ UPDATE public.annotation_class SET baseurl = 'https://comptox.epa.gov/dashboard'
 UPDATE public.annotation_class SET baseurl = 'http://www.t3db.ca/biodb/polypeptides/' WHERE annoclassname = 'TOXINS_TARGETS';
 UPDATE public.annotation_class SET baseurl = 'https://toxprint.org/#GenericStructuralFragments' WHERE annoclassname = 'TOXPRINT_STRUCTURE';
 UPDATE public.annotation_class SET baseurl = 'https://www.ncbi.nlm.nih.gov/pmc/articles/PMC6944327/' WHERE annoclassname = 'TOXREFDB';
-UPDATE public.annotation_class SET baseurl = 'https://www.ncbi.nlm.nih.gov/mesh/?term=' WHERE annoclassname = 'MESH';
 
 /* Annotation type for categorizing */
 UPDATE public.annotation_class SET annotype = 'DrugMatrix Annotation' WHERE annoclassname = 'ACTIVITY_CLASS';
@@ -69,6 +69,7 @@ UPDATE public.annotation_class SET annotype = 'DrugMatrix Annotation' WHERE anno
 UPDATE public.annotation_class SET annotype = 'DrugMatrix Annotation' WHERE annoclassname = 'MECH_LEVEL_2';
 UPDATE public.annotation_class SET annotype = 'DrugMatrix Annotation' WHERE annoclassname = 'MECH_LEVEL_3';
 UPDATE public.annotation_class SET annotype = 'DrugMatrix Annotation' WHERE annoclassname = 'MECHANISM';
+UPDATE public.annotation_class SET annotype = 'PubChem Compound Annotation' WHERE annoclassname = 'MESH';
 UPDATE public.annotation_class SET annotype = 'DrugMatrix Annotation' WHERE annoclassname = 'MODE_CLASS';
 UPDATE public.annotation_class SET annotype = 'Other' WHERE annoclassname = 'MULTICASE_TOX_PREDICTION';
 UPDATE public.annotation_class SET annotype = 'PubChem Compound Annotation' WHERE annoclassname = 'PHARMACTIONLIST';
@@ -83,7 +84,6 @@ UPDATE public.annotation_class SET annotype = 'Other' WHERE annoclassname = 'TOX
 UPDATE public.annotation_class SET annotype = 'Other' WHERE annoclassname = 'TOXINS_TARGETS';
 UPDATE public.annotation_class SET annotype = 'Other' WHERE annoclassname = 'TOXPRINT_STRUCTURE';
 UPDATE public.annotation_class SET annotype = 'Other' WHERE annoclassname = 'TOXREFDB';
-UPDATE public.annotation_class SET annotype = 'PubChem Compound Annotation' WHERE annoclassname = 'MESH';
 
 /* Groovy-friendly strings for class names (not used in R, but kept for backwards compatibility) */
 UPDATE public.annotation_class SET annogroovyclassname = 'activityClass' WHERE annoclassname = 'ACTIVITY_CLASS';
@@ -110,6 +110,7 @@ UPDATE public.annotation_class SET annogroovyclassname = 'mechLevel1' WHERE anno
 UPDATE public.annotation_class SET annogroovyclassname = 'mechLevel2' WHERE annoclassname = 'MECH_LEVEL_2';
 UPDATE public.annotation_class SET annogroovyclassname = 'mechLevel3' WHERE annoclassname = 'MECH_LEVEL_3';
 UPDATE public.annotation_class SET annogroovyclassname = 'mechanism' WHERE annoclassname = 'MECHANISM';
+UPDATE public.annotation_class SET annogroovyclassname = 'meshTerm' WHERE annoclassname = 'MESH';
 UPDATE public.annotation_class SET annogroovyclassname = 'modeClass' WHERE annoclassname = 'MODE_CLASS';
 UPDATE public.annotation_class SET annogroovyclassname = 'multicaseToxPrediction' WHERE annoclassname = 'MULTICASE_TOX_PREDICTION';
 UPDATE public.annotation_class SET annogroovyclassname = 'pharmAction' WHERE annoclassname = 'PHARMACTIONLIST';
@@ -124,7 +125,6 @@ UPDATE public.annotation_class SET annogroovyclassname = 'toxCast' WHERE annocla
 UPDATE public.annotation_class SET annogroovyclassname = 'toxinsTargets' WHERE annoclassname = 'TOXINS_TARGETS';
 UPDATE public.annotation_class SET annogroovyclassname = 'toxPrintStructure' WHERE annoclassname = 'TOXPRINT_STRUCTURE';
 UPDATE public.annotation_class SET annogroovyclassname = 'toxRefDb' WHERE annoclassname = 'TOXREFDB';
-UPDATE public.annotation_class SET annogroovyclassname = 'meshTerm' WHERE annoclassname = 'MESH';
 
 /* Annotation descriptions for use in tooltips */
 UPDATE public.annotation_class SET annodesc = 'Chemical/Drug to activity class (e.g. DNA damager, anti-inflammatory) annotation provided by the DrugMatrix Database.' WHERE annoclassname = 'ACTIVITY_CLASS';
@@ -151,6 +151,7 @@ UPDATE public.annotation_class SET annodesc = 'Chemical/Drug to mechanistic (e.g
 UPDATE public.annotation_class SET annodesc = 'Chemical/Drug to mechanistic (e.g., Androgen Receptor Antagonist) annotation that is less specific that level 1 and more specific than level 2.' WHERE annoclassname = 'MECH_LEVEL_2';
 UPDATE public.annotation_class SET annodesc = 'Chemical/Drug to mechanistic (e.g., Androgen Receptor) annotation that is more specific than level 2.' WHERE annoclassname = 'MECH_LEVEL_3';
 UPDATE public.annotation_class SET annodesc = 'Chemical/Drug to mechanism (e.g. lipid metabolism, block neuronal transmission) annotation provided by the DrugMatrix Database.' WHERE annoclassname = 'MECHANISM';
+UPDATE public.annotation_class SET annodesc = 'Chemical to MeSH Chemical and Drug [D}, specifically the terminal branch MeSH terms in the “D” subset provided by Pubchem.' WHERE annoclassname = 'MESH';
 UPDATE public.annotation_class SET annodesc = 'Chemical/Drug to mode class (e.g., Enzyme Inhibitor, Receptor Agonist) annotation provided by the DrugMatrix Database.' WHERE annoclassname = 'MODE_CLASS';
 UPDATE public.annotation_class SET annodesc = 'Chemical to SAR-based predicted toxicological effects provided by Mutlicase SAR models.' WHERE annoclassname = 'MULTICASE_TOX_PREDICTION';
 UPDATE public.annotation_class SET annodesc = 'Chemical to Pharmacological Action terms derived from the USNLM. Provided by the DrugMatrix Database.' WHERE annoclassname = 'PHARMACTIONLIST';
@@ -165,4 +166,44 @@ UPDATE public.annotation_class SET annodesc = 'Chemical to in vitro biological a
 UPDATE public.annotation_class SET annodesc = 'Chemical to molecular target annotation. The annotations in this set associate chemicals with their known molecular targets/ molecular initiators (e.g., receptors) that have been curated in Toxin and Toxin Target Database.' WHERE annoclassname = 'TOXINS_TARGETS';
 UPDATE public.annotation_class SET annodesc = 'Chemical to substructure/chemotype annotations. A detailed description of the ToxPrint chemotypes can be found here (https://toxprint.org/).' WHERE annoclassname = 'TOXPRINT_STRUCTURE';
 UPDATE public.annotation_class SET annodesc = 'Chemical to in vivo toxicological effect annotations. The annotations in the set associate chemicals with their toxicological effects in guideline toxicity studies.' WHERE annoclassname = 'TOXREFDB';
-UPDATE public.annotation_class SET annodesc = 'Chemical to MeSH Chemical and Drug [D}, specifically the terminal branch MeSH terms in the “D” subset provided by Pubchem.' WHERE annoclassname = 'MESH';
+
+/* RGB-formatted colors for each class for displaying in network */
+UPDATE public.annotation_class SET networkcolor = '255,11,11' WHERE annoclassname = 'ACTIVITY_CLASS';
+UPDATE public.annotation_class SET networkcolor = '246,71,36' WHERE annoclassname = 'ADVERSE_EFFECT';
+UPDATE public.annotation_class SET networkcolor = '33,209,86' WHERE annoclassname = 'CTD_CHEMICALS_DISEASES';
+UPDATE public.annotation_class SET networkcolor = '107,237,124' WHERE annoclassname = 'CTD_CHEMICALS_GENES';
+UPDATE public.annotation_class SET networkcolor = '169,232,178' WHERE annoclassname = 'CTD_CHEMICALS_GOENRICH_CELLCOMP';
+UPDATE public.annotation_class SET networkcolor = '12,201,107' WHERE annoclassname = 'CTD_CHEMICALS_GOENRICH_MOLFUNCT';
+UPDATE public.annotation_class SET networkcolor = '105,207,58' WHERE annoclassname = 'CTD_CHEMICALS_PATHWAYS';
+UPDATE public.annotation_class SET networkcolor = '253,174,17' WHERE annoclassname = 'CTD_GOFAT_BIOPROCESS';
+UPDATE public.annotation_class SET networkcolor = '171,118,14' WHERE annoclassname = 'CTD_GOSLIM_BIOPROCESS';
+UPDATE public.annotation_class SET networkcolor = '217,252,41' WHERE annoclassname = 'DRUGBANK_ATC';
+UPDATE public.annotation_class SET networkcolor = '50,185,253' WHERE annoclassname = 'DRUGBANK_ATC_CODE';
+UPDATE public.annotation_class SET networkcolor = '254,254,25' WHERE annoclassname = 'DRUGBANK_CARRIERS';
+UPDATE public.annotation_class SET networkcolor = '48,246,246' WHERE annoclassname = 'DRUGBANK_ENZYMES';
+UPDATE public.annotation_class SET networkcolor = '178,253,29' WHERE annoclassname = 'DRUGBANK_TARGETS';
+UPDATE public.annotation_class SET networkcolor = '7,210,250' WHERE annoclassname = 'DRUGBANK_TRANSPORTERS';
+UPDATE public.annotation_class SET networkcolor = '144,244,43' WHERE annoclassname = 'HTS_ACTIVE';
+UPDATE public.annotation_class SET networkcolor = '80,140,20' WHERE annoclassname = 'HTS_STRONGACTIVE';
+UPDATE public.annotation_class SET networkcolor = '102,245,30' WHERE annoclassname = 'INDICATION';
+UPDATE public.annotation_class SET networkcolor = '54,254,14' WHERE annoclassname = 'KNOWN_TOXICITY';
+UPDATE public.annotation_class SET networkcolor = '42,246,42' WHERE annoclassname = 'LEADSCOPE_TOXICITY';
+UPDATE public.annotation_class SET networkcolor = '18,253,58' WHERE annoclassname = 'MECH_LEVEL_1';
+UPDATE public.annotation_class SET networkcolor = '6,252,88' WHERE annoclassname = 'MECH_LEVEL_2';
+UPDATE public.annotation_class SET networkcolor = '15,248,131' WHERE annoclassname = 'MECH_LEVEL_3';
+UPDATE public.annotation_class SET networkcolor = '31,252,178' WHERE annoclassname = 'MECHANISM';
+UPDATE public.annotation_class SET networkcolor = '48,249,215' WHERE annoclassname = 'MESH';
+UPDATE public.annotation_class SET networkcolor = '26,137,247' WHERE annoclassname = 'MODE_CLASS';
+UPDATE public.annotation_class SET networkcolor = '8,88,248' WHERE annoclassname = 'MULTICASE_TOX_PREDICTION';
+UPDATE public.annotation_class SET networkcolor = '47,80,247' WHERE annoclassname = 'PHARMACTIONLIST';
+UPDATE public.annotation_class SET networkcolor = '31,31,244' WHERE annoclassname = 'PRODUCT_CLASS';
+UPDATE public.annotation_class SET networkcolor = '52,12,251' WHERE annoclassname = 'STRUCTURE_ACTIVITY';
+UPDATE public.annotation_class SET networkcolor = '98,20,254' WHERE annoclassname = 'TA_LEVEL_1';
+UPDATE public.annotation_class SET networkcolor = '140,31,249' WHERE annoclassname = 'TA_LEVEL_2';
+UPDATE public.annotation_class SET networkcolor = '170,17,247' WHERE annoclassname = 'TA_LEVEL_3';
+UPDATE public.annotation_class SET networkcolor = '212,34,248' WHERE annoclassname = 'THERAPEUTIC_CLASS';
+UPDATE public.annotation_class SET networkcolor = '254,48,254' WHERE annoclassname = 'TISSUE_TOXICITY';
+UPDATE public.annotation_class SET networkcolor = '244,30,209' WHERE annoclassname = 'TOXCAST_ACTIVE';
+UPDATE public.annotation_class SET networkcolor = '252,35,180' WHERE annoclassname = 'TOXINS_TARGETS';
+UPDATE public.annotation_class SET networkcolor = '249,24,137' WHERE annoclassname = 'TOXPRINT_STRUCTURE';
+UPDATE public.annotation_class SET networkcolor = '247,55,119' WHERE annoclassname = 'TOXREFDB';
