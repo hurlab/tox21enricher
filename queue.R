@@ -2470,9 +2470,9 @@ queue <- function(){
               upperBound <- 5
             }
             
-            #future({
-                #mclapply(seq_len(upperBound), mc.cores=CORES, mc.silent=FALSE, function(input){
-                lapply(seq_len(upperBound), function(input){
+            future({
+                mclapply(seq_len(upperBound), mc.cores=CORES, mc.silent=FALSE, function(input){
+                #lapply(seq_len(upperBound), function(input){
                     # Get data from queue table entry
                     queueFile <- inputSets[input, ]
                     mode <- queueFile[1, 1]
@@ -2557,7 +2557,7 @@ queue <- function(){
                     # Close pool
                     poolClose(poolFinished)
                 })
-            #}, seed=TRUE)
+            }, seed=TRUE)
         }
         # Wait
         Sys.sleep(2)
