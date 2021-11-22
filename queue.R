@@ -50,35 +50,20 @@ outpChemDetail <- dbGetQuery(pool, queryChemDetail)
 # Close DB connection
 poolClose(pool)
 
-# Base annotations
-DSSTox2name <- list()
-DSSTox2CASRN <- list()
-CASRN2DSSTox <- list()
-tmp_DSSTox2name <- list()
-tmp_DSSTox2CASRN <- list()
-tmp_CASRN2DSSTox <- list()
-
-# DrugMatrix annotations
-CASRN2funCatTerm <- list()
-funCatTerm2CASRN <- list()
-funCat2CASRN <- list()
-term2funCat <- list()
-
-#TODO: speed this up vvv
 # Load base Annotations
-baseAnnotations <- apply(outpChemDetail, 1, function(i){
-    if (i["testsubstance_chemname"] == "") {
-        DSSTox2name[[i["dtxrid"]]] <<- i["testsubstance_chemname"]
-    } else {
-        DSSTox2name[[i["dtxrid"]]] <<- "";
-    }
+CASRN2DSSTox <- apply(outpChemDetail, 1, function(i){
     if (i["casrn"] != "") {
-        DSSTox2CASRN[[i["dtxrid"]]] <<- i["casrn"]
-        CASRN2DSSTox[[i["casrn"]]] <<- list() # instantiate with list()
-        CASRN2DSSTox[[i["casrn"]]][i["dtxrid"]] <<- 1 # populate with 1
+        return(i["dtxrid"])
     }
+    return(NULL)
 })
-
+names(CASRN2DSSTox) <- apply(outpChemDetail, 1, function(i){
+    if (i["casrn"] != "") {
+        return(i["casrn"])
+    }
+    return(NULL)
+})
+CASRN2DSSTox <- CASRN2DSSTox[!vapply(CASRN2DSSTox, is.null, FUN.VALUE=logical(1))]
 print("! Finished loading base annotations.")
 
 # Load DrugMatrix Annotations
@@ -1762,7 +1747,6 @@ perform_CASRN_enrichment_analysis <- function(CASRNRef, outputBaseDir, outfileBa
     # TODO: Error checking/handling for the case the number of lines are different between @annoArray and @ROutputData
     # Remove empty elements in annoArray
     annoArray <- annoArray[lengths(annoArray) > 0L]
-    
     annoArrayIndex <- 1
     pvalueUpdateProcess <- lapply(annoArray, function(i){
         tmp <- c("p.value", "fdr")

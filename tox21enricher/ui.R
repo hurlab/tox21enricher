@@ -7,13 +7,6 @@
 #    http://shiny.rstudio.com/
 #
 
-# Define custom javascript to open manual in new tab
-js_code <- "
-    shinyjs.browseURL=function(url) {
-        window.open(url, '_blank');
-    }
-"
-
 # Custom javascript for checking/unchecking checkboxes
 js_cbx <- "
     shinyjs.check=function(cbx){
@@ -56,7 +49,7 @@ js_theme <-  "
         const toggle=document.getElementById('changeThemeToggle');
     
         // define extra css and add as default
-        const extraDarkThemeCSS='.dataTables_length label, .dataTables_filter label, .dataTables_info {       color: white!important;} .paginate_button { background: white!important;} thead { color: white;}'
+        const extraDarkThemeCSS='.dataTables_length label, .dataTables_filter label, .dataTables_info {color: white!important;} .paginate_button { background: white!important;} thead { color: white;}'
         const extraDarkThemeElement=document.createElement('style');
         extraDarkThemeElement.appendChild(document.createTextNode(extraDarkThemeCSS));
         head.appendChild(extraDarkThemeElement);
@@ -77,7 +70,7 @@ js_theme <-  "
         })
     }
     
-    shinyjs.initDarkTheme=function() {
+    shinyjs.initDarkTheme=function(params) {
         // detect user theme and change to dark theme if enabled
         // define css theme filepaths
         const themes={
@@ -107,23 +100,36 @@ js_theme <-  "
         const toggle=document.getElementById('changeThemeToggle');
       
         // define extra css and add as default
-        const extraDarkThemeCSS='.dataTables_length label, .dataTables_filter label, .dataTables_info {       color: white!important;} .paginate_button { background: white!important;} thead { color: white;}'
+        const extraDarkThemeCSS='.dataTables_length label, .dataTables_filter label, .dataTables_info {color: white!important;} .paginate_button { background: white!important;} thead { color: white;}'
         const extraDarkThemeElement=document.createElement('style');
         extraDarkThemeElement.appendChild(document.createTextNode(extraDarkThemeCSS));
         head.appendChild(extraDarkThemeElement);
-      
-        if (window.matchMedia('(prefers-color-scheme)').media !== 'not all') {
-            if (window.matchMedia('(prefers-color-scheme: dark)').matches === true) {
-                removeLink(themes.light);
-                head.appendChild(extraDarkThemeElement);
-                head.appendChild(darkTheme);
-                Shiny.onInputChange('initDarkTheme', 'TRUE');
-            } else {
-                removeLink(themes.dark);
-                head.removeChild(extraDarkThemeElement);
-                head.appendChild(lightTheme);
-                Shiny.onInputChange('initDarkTheme', 'FALSE');
+        
+        // default/grabbing from preference
+        if(params == 'default') {
+            if (window.matchMedia('(prefers-color-scheme)').media !== 'not all') {
+                if (window.matchMedia('(prefers-color-scheme: dark)').matches === true) {
+                    removeLink(themes.light);
+                    head.appendChild(extraDarkThemeElement);
+                    head.appendChild(darkTheme);
+                    Shiny.onInputChange('initDarkTheme', 'TRUE');
+                } else { // light theme
+                    removeLink(themes.dark);
+                    head.removeChild(extraDarkThemeElement);
+                    head.appendChild(lightTheme);
+                    Shiny.onInputChange('initDarkTheme', 'FALSE');
+                }
             }
+        } else if (params == 'dark') { // forced dark
+            removeLink(themes.light);
+            head.appendChild(extraDarkThemeElement);
+            head.appendChild(darkTheme);
+            Shiny.onInputChange('initDarkTheme', 'TRUE');
+        } else { // forced light
+            removeLink(themes.dark);
+            head.removeChild(extraDarkThemeElement);
+            head.appendChild(lightTheme);
+            Shiny.onInputChange('initDarkTheme', 'FALSE');
         }
     }
 "
@@ -132,7 +138,7 @@ js_theme <-  "
 shinyUI(function(){
     # Get theme to load on start
     themeInit <- "css/tox21enricher-light.css"
-    if(file.exists("./www/local/theme-dark")){
+    if(file.exists("./www/local/theme-dark") & !file.exists("./www/local/theme-light-override")){
         themeInit <- "css/tox21enricher-dark.css"
     }
     fluidPage(
@@ -153,7 +159,6 @@ shinyUI(function(){
                 width=2,
                 style="position:fixed; overflow:visible; width:15%; height:600px; z-index:9999; overflow-y:scroll;",
                 useShinyjs(),
-                extendShinyjs(text=js_code, functions='browseURL'),
                 extendShinyjs(text=js_theme, functions=c('init', 'initDarkTheme')),
                 extendShinyjs(text=js_cbx, functions=c('check', 'uncheck')),
                 p("Welcome to Tox21 Enricher! Please see this ", downloadLink(outputId="manualLink", label="link"), "for instructions on using this application and the descriptions about the chemical / biological categories. Other resources from the Tox21 toolbox can be viewed", tags$a(href="https://ntp.niehs.nih.gov/results/tox21/tbox/", "here."), "A sufficiently robust internet connection and JavaScript are required to use all of this application's features."),

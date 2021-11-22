@@ -563,11 +563,19 @@ shinyServer(function(input, output, session) {
         if(input$changeThemeToggle){ # dark
             theme$textcolor <- "#FFFFFF"
             file.create(paste0(tmpDir, "theme-dark"))
+            if(file.exists(paste0(tmpDir, "theme-light"))) {
+                unlink(paste0(tmpDir, "theme-light"))
+            }
         } else { # light
             theme$textcolor <- "#000000"
-            unlink(paste0(tmpDir, "theme-dark"))
+            if(file.exists(paste0(tmpDir, "theme-dark"))) {
+                file.create(paste0(tmpDir, "theme-light"))
+                if(file.exists(paste0(tmpDir, "theme-dark"))) {
+                    unlink(paste0(tmpDir, "theme-dark"))
+                }
+            }
         }
-        
+        # Fix for DT::DataTable labels showing up as the wrong color
         output[["themeStatus"]] <- renderUI({
             tags$style(HTML(paste0('
                 .dataTables_length label, .dataTables_filter label, .dataTables_info {
@@ -5166,11 +5174,17 @@ shinyServer(function(input, output, session) {
         performEnrichment(reenrichCASRNBox, reenrichFlag=TRUE, originalNamesToReturn=originalNamesToReturn)
     })
     
-    # Set dark theme as default if preferred by user's browser
-    js$initDarkTheme()
+    # Set initial theme
+    if(!file.exists(paste0(localDir, "theme-dark")) & !file.exists(paste0(localDir, "theme-light"))){
+        js$initDarkTheme("default") # Set dark theme as default if preferred by user's browser
+    } else if (file.exists(paste0(localDir, "theme-dark")) & !file.exists(paste0(localDir, "theme-light"))) {
+        js$initDarkTheme("dark") # Set theme to dark if last checked
+    } else {
+        js$initDarkTheme("light") # Set theme to light if last checked
+    }
     observeEvent(input$initDarkTheme, {
         if(!is.null(input$initDarkTheme)){
-            if(input$initDarkTheme == TRUE){
+            if(input$initDarkTheme == TRUE & !file.exists(paste0(localDir, "theme-light"))){
                 updateCheckboxInput(session, "changeThemeToggle", value=TRUE)
             } else {
                 updateCheckboxInput(session, "changeThemeToggle", value=FALSE)
