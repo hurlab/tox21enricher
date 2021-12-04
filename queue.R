@@ -12,7 +12,10 @@ library(RPostgreSQL)
 library(stringr)
 library(tidyverse)
 library(uuid)
-library(xlsx)
+
+# Set working directory
+# Uncomment this if the queue is having trouble finding the config.yml file when deployed through Docker.
+#setwd(paste0(path.expand('~'), '/tox21enricher/'))
 
 # Load params from config file
 tox21config <- config::get("tox21enricher")
@@ -122,9 +125,17 @@ performEnrichment <- function(enrichmentUUID="-1", annoSelectStr="MESH=checked,P
         idleTimeout=3600000
     )
     
+    # Get begin time for request
+    beginTime <- Sys.time()
+    
     # Add request to database
-    query <- sqlInterpolate(ANSI(), paste0("INSERT INTO enrichment_list(id, chemlist, type, node_cutoff, anno_select_str, timestamp_start, ip) VALUES('", enrichmentUUID, "','", "placeholder", "','", "placeholder", "','", nodeCutoff, "','", annoSelectStr, "','", Sys.time(), "','", "placeholder", "');"), id="addToDb")
+    query <- sqlInterpolate(ANSI(), paste0("INSERT INTO enrichment_list(id, chemlist, type, node_cutoff, anno_select_str, timestamp_start, ip) VALUES('", enrichmentUUID, "','", "placeholder", "','", "placeholder", "','", nodeCutoff, "','", annoSelectStr, "','", beginTime, "','", "placeholder", "');"), id="addToDb")
     outp <- dbGetQuery(poolInput, query)
+    
+    # Set begin time in transaction table
+    query <- sqlInterpolate(ANSI(), paste0("UPDATE transaction SET timestamp_started='", beginTime, "' WHERE uuid='", enrichmentUUID, "';"), id="updateTransactionStart")
+    outp <- dbGetQuery(poolInput, query)   
+    
     # Close pool
     poolClose(poolInput)
 
@@ -251,6 +262,7 @@ performEnrichment <- function(enrichmentUUID="-1", annoSelectStr="MESH=checked,P
         host=tox21queue$host,
         user=tox21queue$uid,
         password=tox21queue$pwd,
+        port=tox21queue$port,
         idleTimeout=3600000
     )
 
@@ -303,6 +315,7 @@ performEnrichment <- function(enrichmentUUID="-1", annoSelectStr="MESH=checked,P
         host=tox21queue$host,
         user=tox21queue$uid,
         password=tox21queue$pwd,
+        port=tox21queue$port,
         idleTimeout=3600000
     )
     # Get set names from database
@@ -359,9 +372,8 @@ performEnrichment <- function(enrichmentUUID="-1", annoSelectStr="MESH=checked,P
     }))
     setNames <- setNames[!vapply(setNames, is.null, FUN.VALUE=logical(1))]
     setNames <- unique(setNames) # Get only 1 copy of each set name
-
     # Create Excel spreadsheets of existing files
-    lapply(setNames, function(i){
+    xlsxFiles <- lapply(setNames, function(i){
         xlsxChart <- NULL
         if(file.exists(paste0(baseDirName, "/", i, "__Chart.txt"))){
               xlsxChart <- read.table(paste0(baseDirName, "/", i, "__Chart.txt"), header=TRUE, sep="\t", comment.char="", fill=FALSE)
@@ -374,9 +386,10 @@ performEnrichment <- function(enrichmentUUID="-1", annoSelectStr="MESH=checked,P
         if(file.exists(paste0(baseDirName, "/", i, "__Cluster.txt"))){
               xlsxCluster <- read.table(paste0(baseDirName, "/", i, "__Cluster.txt"), header=FALSE, sep="\t", comment.char="", col.names=seq_len(13), fill=TRUE ) #this needs to be treated differently due to having different # of columns
         }
-        write.xlsx2(xlsxChart, paste0(baseDirName, "/", i, "__Chart.xlsx"), sheetName=paste0(i), col.names=TRUE, row.names=TRUE, append=FALSE)
-        write.xlsx2(xlsxChartSimple, paste0(baseDirName, "/", i, "__ChartSimple.xlsx"), sheetName=paste0(i), col.names=TRUE, row.names=TRUE, append=FALSE)
-        write.xlsx2(xlsxCluster, paste0(baseDirName, "/", i, "__Cluster.xlsx"), sheetName=paste0(i), col.names=TRUE, row.names=TRUE, append=FALSE)
+        #write.xlsx2(xlsxChart, paste0(baseDirName, "/", i, "__Chart.xlsx"), sheetName=paste0(i), col.names=TRUE, row.names=TRUE, append=FALSE)
+        #write.xlsx2(xlsxChartSimple, paste0(baseDirName, "/", i, "__ChartSimple.xlsx"), sheetName=paste0(i), col.names=TRUE, row.names=TRUE, append=FALSE)
+        #write.xlsx2(xlsxCluster, paste0(baseDirName, "/", i, "__Cluster.xlsx"), sheetName=paste0(i), col.names=TRUE, row.names=TRUE, append=FALSE)
+        return(1)
     })
 
     # zip result files
@@ -396,11 +409,19 @@ performEnrichment <- function(enrichmentUUID="-1", annoSelectStr="MESH=checked,P
         host=tox21queue$host,
         user=tox21queue$uid,
         password=tox21queue$pwd,
+        port=tox21queue$port,
         idleTimeout=3600000
     )
+    
+    # Get ending time
+    finishTime <- Sys.time()
 
-    # update database with ending timestamp for enrichment
-    query <- sqlInterpolate(ANSI(), paste0("UPDATE enrichment_list SET timestamp_finish='", Sys.time(), "' WHERE id='", enrichmentUUID, "';"), id="addToDb")
+    # Update database with ending timestamp for enrichment
+    query <- sqlInterpolate(ANSI(), paste0("UPDATE enrichment_list SET timestamp_finish='", finishTime, "' WHERE id='", enrichmentUUID, "';"), id="addToDb")
+    outp <- dbGetQuery(poolStatus, query)
+    
+    # Set finish time in transaction table
+    query <- sqlInterpolate(ANSI(), paste0("UPDATE transaction SET timestamp_finished='", finishTime, "' WHERE uuid='", enrichmentUUID, "';"), id="transactionUpdateFinished")
     outp <- dbGetQuery(poolStatus, query)
 
     # Get set names from database
@@ -1889,6 +1910,7 @@ kappa_cluster <- function(x, deg=NULL, useTerm=FALSE, cutoff=0.5, overlap=0.5, m
         host=tox21queue$host,
         user=tox21queue$uid,
         password=tox21queue$pwd,
+        port=tox21queue$port,
         idleTimeout=3600000
     )
     # Set step flag for each set name
@@ -1994,6 +2016,7 @@ kappa_cluster <- function(x, deg=NULL, useTerm=FALSE, cutoff=0.5, overlap=0.5, m
         host=tox21queue$host,
         user=tox21queue$uid,
         password=tox21queue$pwd,
+        port=tox21queue$port,
         idleTimeout=3600000
     )
     # Set step flag for each set name
@@ -2041,6 +2064,7 @@ kappa_cluster <- function(x, deg=NULL, useTerm=FALSE, cutoff=0.5, overlap=0.5, m
         host=tox21queue$host,
         user=tox21queue$uid,
         password=tox21queue$pwd,
+        port=tox21queue$port,
         idleTimeout=3600000
     )
     # Set step flag for each set name
@@ -2091,6 +2115,7 @@ kappa_cluster <- function(x, deg=NULL, useTerm=FALSE, cutoff=0.5, overlap=0.5, m
         host=tox21queue$host,
         user=tox21queue$uid,
         password=tox21queue$pwd,
+        port=tox21queue$port,
         idleTimeout=3600000
     )
     # Set step flag for each set name
@@ -2228,9 +2253,19 @@ getAnnotations <- function(enrichmentUUID="-1", annoSelectStr="MESH=checked,PHAR
         port=tox21queue$port,
         idleTimeout=3600000
     )
+    
+    # Get begin time for request
+    beginTime <- Sys.time()
+    
     # Add request to database
-    query <- sqlInterpolate(ANSI(), paste0("INSERT INTO enrichment_list(id, chemlist, type, node_cutoff, anno_select_str, timestamp_start, ip) VALUES('", enrichmentUUID, "','", "placeholder", "','", "placeholder", "','", nodeCutoff, "','", annoSelectStr, "','", Sys.time(), "','", "placeholder", "');"), id="addToDb")
+    query <- sqlInterpolate(ANSI(), paste0("INSERT INTO enrichment_list(id, chemlist, type, node_cutoff, anno_select_str, timestamp_start, ip) VALUES('", enrichmentUUID, "','", "placeholder", "','", "placeholder", "','", nodeCutoff, "','", annoSelectStr, "','", beginTime, "','", "placeholder", "');"), id="addToDb")
     outp <- dbGetQuery(poolInput, query)
+    
+    # Set begin time in transaction table
+    query <- sqlInterpolate(ANSI(), paste0("UPDATE transaction SET timestamp_started='", beginTime, "' WHERE uuid='", enrichmentUUID, "';"), id="updateTransactionStart")
+    outp <- dbGetQuery(poolInput, query)
+    
+    # Close pool
     poolClose(poolInput)
     
     # Get list of selected annotations
@@ -2278,6 +2313,7 @@ getAnnotations <- function(enrichmentUUID="-1", annoSelectStr="MESH=checked,PHAR
             host=tox21queue$host,
             user=tox21queue$uid,
             password=tox21queue$pwd,
+            port=tox21queue$port,
             idleTimeout=3600000
         )
         # Set step flag for each set name
@@ -2315,6 +2351,7 @@ getAnnotations <- function(enrichmentUUID="-1", annoSelectStr="MESH=checked,PHAR
             host=tox21queue$host,
             user=tox21queue$uid,
             password=tox21queue$pwd,
+            port=tox21queue$port,
             idleTimeout=3600000
         )
         # Set step flag for each set name
@@ -2375,6 +2412,7 @@ getAnnotations <- function(enrichmentUUID="-1", annoSelectStr="MESH=checked,PHAR
             host=tox21queue$host,
             user=tox21queue$uid,
             password=tox21queue$pwd,
+            port=tox21queue$port,
             idleTimeout=3600000
         )
         # Set step flag for each set name
@@ -2433,9 +2471,18 @@ getAnnotations <- function(enrichmentUUID="-1", annoSelectStr="MESH=checked,PHAR
         port=tox21queue$port,
         idleTimeout=3600000
     )
-    # update database with ending timestamp for enrichment
-    query <- sqlInterpolate(ANSI(), paste0("UPDATE enrichment_list SET timestamp_finish='", Sys.time(), "' WHERE id='", enrichmentUUID, "';"), id="addToDb")
+    # Get ending time
+    finishTime <- Sys.time()
+    
+    # Update database with ending timestamp for enrichment
+    query <- sqlInterpolate(ANSI(), paste0("UPDATE enrichment_list SET timestamp_finish='", finishTime, "' WHERE id='", enrichmentUUID, "';"), id="addToDb")
     outp <- dbGetQuery(poolUpdate, query)
+    
+    # Set finish time in transaction table
+    query <- sqlInterpolate(ANSI(), paste0("UPDATE transaction SET timestamp_finished='", finishTime, "' WHERE uuid='", enrichmentUUID, "';"), id="transactionUpdateFinished")
+    outp <- dbGetQuery(poolUpdate, query)
+    
+    # Close pool
     poolClose(poolUpdate)
     return(200)
 } 
@@ -2450,11 +2497,12 @@ queue <- function(){
             host=tox21queue$host,
             user=tox21queue$uid,
             password=tox21queue$pwd,
+            port=tox21queue$port,
             idleTimeout=3600000
         )
         
         # Get only unfinished requests ("finished" flag is set to 0)
-        query <- sqlInterpolate(ANSI(), paste0("SELECT * FROM queue WHERE finished=0;"), id="createQueueEntry")
+        query <- sqlInterpolate(ANSI(), paste0("SELECT * FROM queue WHERE finished=0 AND error IS NULL;"), id="createQueueEntry")
         outp <- dbGetQuery(poolQueue, query)
         
         # Close pool
@@ -2467,7 +2515,7 @@ queue <- function(){
             # Only process first five requests in queue at a time
             upperBound <- nrow(inputSets)
             if(nrow(inputSets) > 5){
-              upperBound <- 5
+                upperBound <- 5
             }
             
             future({
@@ -2488,6 +2536,7 @@ queue <- function(){
                         host=tox21queue$host,
                         user=tox21queue$uid,
                         password=tox21queue$pwd,
+                        port=tox21queue$port,
                         idleTimeout=3600000
                     )
                       
@@ -2502,7 +2551,7 @@ queue <- function(){
                         query <- sqlInterpolate(ANSI(), paste0("UPDATE status SET step=1 WHERE uuid='", enrichmentUUID, "' AND setname='", tmpSetName, "';"), id="fetchStatus")
                         outp <- dbGetQuery(poolStatus, query)
                     })
-                        
+                    
                     # Close pool
                     poolClose(poolStatus)
                       
@@ -2512,7 +2561,7 @@ queue <- function(){
                     } else { # else query R API server 
                         status_code <- performEnrichment(enrichmentUUID=enrichmentUUID, annoSelectStr=annoSelectStr, nodeCutoff=nodeCutoff)
                     } 
-                      
+                    
                     # Connect to DB to set appropriate finishing flags
                     poolFinished <- dbPool(
                         drv=dbDriver("PostgreSQL", max.con=100),
@@ -2520,6 +2569,7 @@ queue <- function(){
                         host=tox21queue$host,
                         user=tox21queue$uid,
                         password=tox21queue$pwd,
+                        port=tox21queue$port,
                         idleTimeout=3600000
                     )
                     

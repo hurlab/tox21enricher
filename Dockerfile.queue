@@ -12,16 +12,16 @@ USER username
 ENV HOME /home/username/
 
 # Create directories for Tox21 Enricher application
-    # Base application directory
-    RUN mkdir $HOME/tox21enricher/
-    # Directory to store user input files
-    RUN mkdir $HOME/tox21enricher/Input/
-    # Directory to store enrichment results
-    RUN mkdir $HOME/tox21enricher/Output/
-    # R application paths
-    RUN mkdir $HOME/tox21enricher/src/
-    RUN mkdir $HOME/tox21enricher/src/main/
-    RUN mkdir $HOME/tox21enricher/docs/
+# Base application directory
+RUN mkdir $HOME/tox21enricher/
+# Directory to store user input files
+RUN mkdir $HOME/tox21enricher/Input/
+# Directory to store enrichment results
+RUN mkdir $HOME/tox21enricher/Output/
+# R application paths
+RUN mkdir $HOME/tox21enricher/src/
+RUN mkdir $HOME/tox21enricher/src/main/
+RUN mkdir $HOME/tox21enricher/docs/
         
 # Update package index and install necessary libraries/dependencies
 USER root
@@ -31,11 +31,14 @@ RUN apt-get update && \
     "libpq-dev" \
     # Install libz-dev, which is required to install the haven package, which is a dependency of the tidyverse package
     "libz-dev" \
-    # Install Java and some additional libraries, which are required to install rJava and xlsxjars, which are dependencies for the xlsx package
-    "openjdk-11-jdk" \
     "r-base-dev" \
     "libpcre2-dev" \
-    "libbz2-dev"
+    "libbz2-dev" \
+    # Install cURL and libssl-dev, which are required for the httr library.
+    "libssl-dev" \
+    "curl" \
+    "libcurl4-openssl-dev" \
+    "libxml2-dev"
 
 # Install necessary R packages from source
 # Set HOME environment variable again (this is required for COPY to work correctly)
@@ -58,12 +61,9 @@ USER username
     # Copy R configuration file from local filesystem to image
     COPY ./config.yml $HOME/tox21enricher/config.yml
     # Copy queue .R file from local filesystem to image
-    COPY ./plumber.R $HOME/tox21enricher/queue.R
+    COPY ./queue.R $HOME/tox21enricher/queue.R
     # Copy HClusterLibrary directory from local filesystem to image and set permissions on executables
     COPY ./HClusterLibrary/ $HOME/tox21enricher/HClusterLibrary/
-    # Copy Python script
-    COPY ./calcReactiveGroups.py $HOME/tox21enricher/calcReactiveGroups.py
-
     USER root
     RUN chmod +x $HOME/tox21enricher/HClusterLibrary/clusterLinux64
     RUN chmod +x $HOME/tox21enricher/HClusterLibrary/hclimage-o.jar

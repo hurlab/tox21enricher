@@ -166,8 +166,6 @@ shinyUI(function(){
                 uiOutput("apiConnection"),
                 # Display enrichment total count
                 uiOutput("totalEnrichments"),
-                # Settings button
-                #actionButton(inputId="settingsButton", label="Settings", icon=icon("cog")),
                 # Search enrichments button
                 actionButton(inputId="searchButton", label="View previous results", icon=icon("search")),
                 # Theme toggle
@@ -233,10 +231,9 @@ shinyUI(function(){
                     hr(),
                     fluidRow(
                         h3("Select Enrichment Cutoff"),
-                        bsTooltip(id="nodeCutoff", title="This will determine the maximum number of results per data set and may affect how many nodes are generated during network generation. (default=10). Higher values may cause the enrichment process to take longer (Not available when viewing annotations for Tox21 chemicals).", placement="bottom", trigger="hover"),
-                        sliderInput(inputId="nodeCutoff", label="Select enrichment cutoff", value=10, min=1, max=50, step=1, width="100%"),
+                        tipify(sliderInput(inputId="nodeCutoff", label="Select enrichment cutoff", value=10, min=1, max=50, step=1, width="100%"), "This will determine the maximum number of results per data set and may affect how many nodes are generated during network generation. (default=10). Higher values may cause the enrichment process to take longer (Not available when viewing annotations for Tox21 chemicals).", placement="bottom"),
                         hidden(
-                            sliderInput(inputId="tanimotoThreshold", label="Select Tanimoto similarity threshold (%)", value=50, min=1, max=100, step=1, width="100%")
+                            tipify(sliderInput(inputId="tanimotoThreshold", label="Select Tanimoto similarity threshold (%)", value=50, min=1, max=100, step=1, width="100%"), "This will set the threshold for how structurally similar to the input a chemical should be to be included in enrichment.", placement="bottom")
                         )
                     ),
                     hr(),

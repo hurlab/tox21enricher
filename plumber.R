@@ -23,7 +23,6 @@ library(RPostgreSQL)
 library(stringr)
 library(tidyverse)
 library(uuid)
-library(xlsx)
 
 ## Code to run on startup, not part of API endpoints
 
@@ -61,6 +60,7 @@ queue <- function(mode="", enrichmentUUID="-1", annoSelectStr="MESH=checked,PHAR
         host=tox21queue$host,
         user=tox21queue$uid,
         password=tox21queue$pwd,
+        port=tox21queue$port,
         idleTimeout=3600000
     )
     # Update database with "queue" entry
@@ -74,6 +74,109 @@ queue <- function(mode="", enrichmentUUID="-1", annoSelectStr="MESH=checked,PHAR
     })
     # Close pool
     poolClose(poolQueue)
+}
+
+#* Create entry for request in transaction table
+#* @param originalMode
+#* @param mode
+#* @param uuid
+#* @param annoSelectStr
+#* @param cutoff
+#* @param input
+#* @param originalNames
+#* @param reenrich
+#* @param color
+#* @param timestampPosted
+#* @param apikey
+#* @get /createTransaction
+createTransaction <- function(originalMode="", mode="", uuid="-1", annoSelectStr="MESH=checked,PHARMACTIONLIST=checked,ACTIVITY_CLASS=checked,ADVERSE_EFFECT=checked,INDICATION=checked,KNOWN_TOXICITY=checked,MECH_LEVEL_1=checked,MECH_LEVEL_2=checked,MECH_LEVEL_3=checked,MECHANISM=checked,MODE_CLASS=checked,PRODUCT_CLASS=checked,STRUCTURE_ACTIVITY=checked,TA_LEVEL_1=checked,TA_LEVEL_2=checked,TA_LEVEL_3=checked,THERAPEUTIC_CLASS=checked,TISSUE_TOXICITY=checked,DRUGBANK_ATC=checked,DRUGBANK_ATC_CODE=checked,DRUGBANK_CARRIERS=checked,DRUGBANK_ENZYMES=checked,DRUGBANK_TARGETS=checked,DRUGBANK_TRANSPORTERS=checked,CTD_CHEM2DISEASE=checked,CTD_CHEM2GENE_25=checked,CTD_CHEMICALS_DISEASES=checked,CTD_CHEMICALS_GENES=checked,CTD_CHEMICALS_GOENRICH_CELLCOMP=checked,CTD_CHEMICALS_GOENRICH_MOLFUNCT=checked,CTD_CHEMICALS_PATHWAYS=checked,CTD_GOSLIM_BIOPROCESS=checked,CTD_PATHWAY=checked,HTS_ACTIVE=checked,LEADSCOPE_TOXICITY=checked,MULTICASE_TOX_PREDICTION=checked,TOXCAST_ACTIVE=checked,TOXINS_TARGETS=checked,TOXPRINT_STRUCTURE=checked,TOXREFDB=checked,", cutoff=10, input, originalNames, reenrich="", color, timestampPosted, apikey){
+    # Connect to db
+    poolTransaction <- dbPool(
+        drv=dbDriver("PostgreSQL", max.con=100),
+        dbname=tox21queue$database,
+        host=tox21queue$host,
+        user=tox21queue$uid,
+        password=tox21queue$pwd,
+        port=tox21queue$port,
+        idleTimeout=3600000
+    )
+    # Update database with transaction entry
+    query <- sqlInterpolate(ANSI(), paste0("INSERT INTO transaction(original_mode, mode, uuid, annotation_selection_string, cutoff, input, original_names, reenrich, colors, timestamp_posted, delete, key) VALUES('", originalMode, "', '", mode, "', '", uuid, "', '", annoSelectStr, "', '", cutoff, "', '", input, "', '", originalNames, "', '", reenrich, "', '", color, "', '", timestampPosted, "', 0, '", apikey, "');"), id="createTransactionEntry")
+    outp <- dbGetQuery(poolTransaction, query)
+    # Close pool
+    poolClose(poolTransaction)
+    return(TRUE)
+}
+
+#* Get all transactions for a given key
+#* @param apikey
+#* @get /getTransactions
+getTransactions <- function(apikey){
+    # Connect to db
+    poolTransaction <- dbPool(
+        drv=dbDriver("PostgreSQL", max.con=100),
+        dbname=tox21queue$database,
+        host=tox21queue$host,
+        user=tox21queue$uid,
+        password=tox21queue$pwd,
+        port=tox21queue$port,
+        idleTimeout=3600000
+    )
+    # Update database with transaction entry
+    query <- sqlInterpolate(ANSI(), paste0("SELECT * FROM transaction WHERE key='", apikey, "' AND delete=0"), id="getTransactions")
+    outp <- dbGetQuery(poolTransaction, query)
+    # Close pool
+    poolClose(poolTransaction)
+    return(outp)
+}
+
+#* Load details for the selected transaction
+#* @param apikey
+#* @param uuid
+#* @get /loadTransaction
+loadTransaction <- function(apikey, uuid){
+    # Connect to db
+    poolTransaction <- dbPool(
+        drv=dbDriver("PostgreSQL", max.con=100),
+        dbname=tox21queue$database,
+        host=tox21queue$host,
+        user=tox21queue$uid,
+        password=tox21queue$pwd,
+        port=tox21queue$port,
+        idleTimeout=3600000
+    )
+    # Update database with transaction entry
+    query <- sqlInterpolate(ANSI(), paste0("SELECT * FROM transaction WHERE key='", apikey, "' AND uuid='", uuid, "'"), id="loadTransaction")
+    outp <- dbGetQuery(poolTransaction, query)
+    # Close pool
+    poolClose(poolTransaction)
+    return(outp)
+}
+
+#* Mark selected transactions for deletion
+#* @param selected
+#* @get /deleteTransactionSelected
+deleteTransactionSelected <- function(selected){
+    # Connect to db
+    poolTransaction <- dbPool(
+        drv=dbDriver("PostgreSQL", max.con=100),
+        dbname=tox21queue$database,
+        host=tox21queue$host,
+        user=tox21queue$uid,
+        password=tox21queue$pwd,
+        port=tox21queue$port,
+        idleTimeout=3600000
+    )
+    selectedSets <- unlist(str_split(selected, ","))
+    # Mark each set for deletion
+    lapply(selectedSets, function(x){
+        # Update database with transaction entry
+        query <- sqlInterpolate(ANSI(), paste0("UPDATE transaction SET delete=1 WHERE uuid='", x, "'"), id="markDelete")
+        outp <- dbGetQuery(poolTransaction, query)
+    })
+    # Close pool
+    poolClose(poolTransaction)
+    return(TRUE)
 }
 
 #* Get queue position for given enrichment request
@@ -228,6 +331,7 @@ cancelEnrichment <- function(res, req, transactionId){
         host=tox21queue$host,
         user=tox21queue$uid,
         password=tox21queue$pwd,
+        port=tox21queue$port,
         idleTimeout=3600000
     )
     # Update database to show that request was canceled
@@ -251,6 +355,7 @@ getTimestamp <- function(res, req, transactionId="-1"){
         host=tox21queue$host,
         user=tox21queue$uid,
         password=tox21queue$pwd,
+        port=tox21queue$port,
         idleTimeout=3600000
     )
     # update database with ending timestamp for enrichment
@@ -285,6 +390,7 @@ initAnnotations <- function(res, req){
         host=tox21config$host,
         user=tox21config$uid,
         password=tox21config$pwd,
+        port=tox21config$port,
         idleTimeout=3600000
     )
     annoClassQuery <- sqlInterpolate(ANSI(), "SELECT annoclassname, annotype, annodesc FROM annotation_class;", id="getAnnotationClasses")
@@ -308,6 +414,7 @@ total <- function(res, req){
         host=tox21queue$host,
         user=tox21queue$uid,
         password=tox21queue$pwd,
+        port=tox21queue$port,
         idleTimeout=3600000
     )
     totalQuery <- sqlInterpolate(ANSI(), "SELECT id, timestamp_start, timestamp_finish FROM enrichment_list;", id="getTotalEnrichment")
@@ -349,6 +456,7 @@ substructure <- function(res, req, input, reenrich=FALSE){
         host=tox21config$host,
         user=tox21config$uid,
         password=tox21config$pwd,
+        port=tox21config$port,
         idleTimeout=3600000
     )
     # Sanitize input, convert InChI strings to SMILES
@@ -379,12 +487,14 @@ similarity <- function(res, req, input="", threshold){
         host=tox21config$host,
         user=tox21config$uid,
         password=tox21config$pwd,
+        port=tox21config$port,
         idleTimeout=3600000
     )
     # Sanitize input, convert InChI strings to SMILES
     if (grepl("InChI=", input, fixed=TRUE)) {
         input <- convertInchi(inchi=input)
     }
+    # Set Tanimoto threshold for similarity cutoff
     queryTanimoto <- sqlInterpolate(ANSI(), paste0("set rdkit.tanimoto_threshold=", threshold, ";"), id="tanimotoResults")
     outpTanimoto <- dbGetQuery(poolSimilarity, queryTanimoto)
     similarityQuery <- sqlInterpolate(ANSI(), paste0("SELECT * FROM get_mfp2_neighbors('", input, "');"), id="similarityResults")
@@ -405,6 +515,7 @@ casrnData <- function(res, req, input){
         host=tox21config$host,
         user=tox21config$uid,
         password=tox21config$pwd,
+        port=tox21config$port,
         idleTimeout=3600000
     )
     casrnQuery <- sqlInterpolate(ANSI(), paste0("SELECT iupac_name, smiles, dtxsid, dtxrid, mol_formula, mol_weight, inchis, inchikey, cid, testsubstance_chemname FROM chemical_detail WHERE CASRN LIKE '", input, "';"), id="casrnResults")
@@ -432,6 +543,7 @@ inchiToSmiles <- function(res, req, inchi){
         host=tox21config$host,
         user=tox21config$uid,
         password=tox21config$pwd,
+        port=tox21config$port,
         idleTimeout=3600000
     )
     inchiQuery <- sqlInterpolate(ANSI(), paste0("SELECT smiles FROM chemical_detail WHERE inchis='", inchi, "';"), id="convertInchi")
@@ -450,6 +562,7 @@ convertInchi <- function(res, req, inchi){
         host=tox21config$host,
         user=tox21config$uid,
         password=tox21config$pwd,
+        port=tox21config$port,
         idleTimeout=3600000
     )
     inchiQuery <- sqlInterpolate(ANSI(), paste0("SELECT smiles FROM chemical_detail WHERE inchis='", inchi, "';"), id="convertInchi")
@@ -470,6 +583,7 @@ generateStructures <- function(res, req, input){
         host=tox21config$host,
         user=tox21config$uid,
         password=tox21config$pwd,
+        port=tox21config$port,
         idleTimeout=3600000
     )
     tmpSplit <- unlist(str_split(input, "\n"))
@@ -554,6 +668,7 @@ createInput <- function(res, req, transactionId, enrichmentSets, setNames, mode,
         host=tox21config$host,
         user=tox21config$uid,
         password=tox21config$pwd,
+        port=tox21config$port,
         idleTimeout=3600000
     )
     # Create input set txt for enrichment
@@ -736,6 +851,7 @@ generateNetwork <- function(res, req, transactionId="-1", cutoff, mode, input, q
         host=tox21config$host,
         user=tox21config$uid,
         password=tox21config$pwd,
+        port=tox21config$port,
         idleTimeout=3600000
     )
     # Query database
@@ -772,6 +888,7 @@ getNodeChemicals <- function(res, req, termFrom, termTo, classFrom, classTo){
         host=tox21config$host,
         user=tox21config$uid,
         password=tox21config$pwd,
+        port=tox21config$port,
         idleTimeout=3600000
     )
     # Get internal ID number of From annotation
@@ -807,6 +924,7 @@ getNodeDetails <- function(res, req, class){
         host=tox21config$host,
         user=tox21config$uid,
         password=tox21config$pwd,
+        port=tox21config$port,
         idleTimeout=3600000
     )
     # Get annotation detail link
@@ -828,6 +946,7 @@ getNodeColors <- function(res, req){
         host=tox21config$host,
         user=tox21config$uid,
         password=tox21config$pwd,
+        port=tox21config$port,
         idleTimeout=3600000
     )
     # Get annotation detail link
@@ -850,6 +969,7 @@ retrieveAnnotations <- function(){
         host=tox21config$host,
         user=tox21config$uid,
         password=tox21config$pwd,
+        port=tox21config$port,
         idleTimeout=3600000
     )
     query <- sqlInterpolate(ANSI(), paste0("SELECT annoclassname FROM annotation_class;"))
@@ -917,6 +1037,7 @@ submit <- function(mode="", input="", annotations="MESH,PHARMACTIONLIST,ACTIVITY
             host=tox21config$host,
             user=tox21config$uid,
             password=tox21config$pwd,
+            port=tox21config$port,
             idleTimeout=3600000
         )
         queryTanimoto <- sqlInterpolate(ANSI(), paste0("set rdkit.tanimoto_threshold=", tanimoto, ";"))
@@ -951,6 +1072,7 @@ submit <- function(mode="", input="", annotations="MESH,PHARMACTIONLIST,ACTIVITY
         host=tox21config$host,
         user=tox21config$uid,
         password=tox21config$pwd,
+        port=tox21config$port,
         idleTimeout=3600000
     )
     # Validate & prepare input
@@ -1148,5 +1270,46 @@ function(id="-1", res) {
             return(0)
         }
     })
+}
+
+## SECTION 7: HANDLING API KEYS FOR USERS
+#* Generate a unique key for authorizing API use.
+#* @param email The email address to associate with the given API key.
+#* @get /key
+function(email="public", res) {
+    key <- NULL
+    # Connect to db
+    pool <- dbPool(
+        drv=dbDriver("PostgreSQL", max.con=100),
+        dbname=tox21queue$database,
+        host=tox21queue$host,
+        user=tox21queue$uid,
+        password=tox21queue$pwd,
+        port=tox21queue$port,
+        idleTimeout=3600000
+    )
+    # Fetch existing pair if exists
+    query <- sqlInterpolate(ANSI(), paste0("SELECT * FROM key WHERE email='", email, "';"), id="getEmails")
+    outp <- dbGetQuery(pool, query)
+    # Get list of all keys
+    allKeysQuery <- sqlInterpolate(ANSI(), paste0("SELECT key FROM key;"), id="getKeys")
+    allKeysOutp <- dbGetQuery(pool, allKeysQuery)
+    returnMessage <- ""
+    # Generate new key if email does not exist in database
+    if(nrow(outp) < 1) {
+        newKey <- UUIDgenerate()
+        while(newKey %in% allKeysOutp$key) {
+            newKey <- UUIDgenerate()
+        }
+        returnMessage <- paste0("Your new API key is: ", newKey)
+        # Add new key/email to database
+        query <- sqlInterpolate(ANSI(), paste0("INSERT INTO key(key, email) VALUES('", newKey, "', '", email, "');"), id="addKey")
+        outp <- dbGetQuery(pool, query)
+    } else { # else return existing key
+        returnMessage <- paste0("An existing API key was found: ", outp$key[1])
+    }
+    # Close pool
+    poolClose(pool)
+    return(returnMessage)
 }
 

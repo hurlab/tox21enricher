@@ -15,13 +15,17 @@ RUN mkdir $HOME/tox21enricher-database/ && initdb $HOME/tox21enricher-database/
 # Copy database backup from local machine
 # (***) Replace "username" with the name of the user you want to own and run the database in the Docker Container.
 ENV HOME /home/username/
-COPY ./tox21enricher-database.sql $HOME/tox21enricher-database/tox21enricher-database.sql
+COPY ./tox21db_tox21enricher.bak $HOME/tox21enricher-database/tox21db_tox21enricher.bak
+COPY ./tox21db_tox21queue.bak $HOME/tox21enricher-database/tox21db_tox21queue.bak
 
 # Start PostgreSQL server, create tox21enricher database, and restore database content from backup file
 # (***) Replace "username" with the name of the user you want to own and run the database in the Docker Container.
 RUN pg_ctl -D $HOME/tox21enricher-database/ -l $HOME/tox21enricher-database/logfile start && \
+    psql -c "CREATE USER tox21enricher WITH PASSWORD 'password1'; CREATE USER tox21enricher_queuemanager WITH PASSWORD 'password2';" postgres && \
     createdb tox21enricher -O username && \
-    psql tox21enricher < $HOME/tox21enricher-database/tox21enricher-database.sql
+    psql tox21enricher < $HOME/tox21enricher-database/tox21db_tox21enricher.bak && \
+    createdb tox21queue -O username && \
+    psql tox21queue < $HOME/tox21enricher-database/tox21db_tox21queue.bak
 
 # Copy entrypoint script from local machine
 # (***) Replace "username" with the name of the user you want to own and run the database in the Docker Container.
@@ -34,8 +38,9 @@ USER username
 # Edit PostgreSQL configuration to allow connections
 # (***) Replace "username" with the name of the user you want to own and run the database in the Docker Container.
 RUN ls $HOME/tox21enricher-database/
-RUN echo "host\ttox21enricher\tusername\t\t0.0.0.0/0\t\ttrust" >> $HOME/tox21enricher-database/pg_hba.conf
+RUN echo "host\ttox21enricher\ttox21enricher\t\t0.0.0.0/0\t\ttrust\nhost\ttox21queue\ttox21enricher_queuemanager\t\t0.0.0.0/0\t\ttrust" >> $HOME/tox21enricher-database/pg_hba.conf
 
 # Entrypoint
 # (***) Replace "username" with the name of the user you want to own and run the database in the Docker Container.
 ENTRYPOINT ["/home/username/tox21enricher-database/entrypoint.sh"]
+

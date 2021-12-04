@@ -40,6 +40,7 @@ shinyServer(function(input, output, session) {
     tox21config <- config::get("tox21enricher-client")
     API_HOST <- tox21config$host
     API_PORT <- tox21config$port
+    API_KEY <- tox21config$key
 
     # Display enrichment type on title
     titleStatus <- reactiveValues(option=character())
@@ -119,7 +120,7 @@ shinyServer(function(input, output, session) {
             # Next, check if we have previously downloaded the manual (Tox21 Enricher will cache previously-downloaded manuals). If yes, do nothing. If no, download the manual from the Plumber server
             # This should always get the most recent manual revision
             dir.create(paste0(tempdir(), "/docs/"))
-            tryManualDL <- NULL
+            tryManualDL <- TRUE
             if(!file.exists(paste0(tempdir(), "/docs/Tox21Enricher_Manual_v", appVersion, ".pdf"))){
                 # TODO: error check if download fails
                 tryManualDL <- tryCatch({
@@ -164,18 +165,31 @@ shinyServer(function(input, output, session) {
             output[["error_box"]] <- renderUI(
                 paste0()
             )
-          
             updateActionButton(session, "searchButton", label="Perform enrichment", icon=icon("undo"))  
             searchStatus$option <- "enrich"
             
-            # Load search previous enrichment menu
-            tmpDir <- paste0("./www/tmp/transaction/")
-            enrichmentList <- Sys.glob("./www/tmp/transaction/*")
-          
-            if(length(enrichmentList) < 1) { # No previous enrichment
+            # Fetch list of transactions for given key
+            resp <- NULL
+            transactionTable <- NULL
+            tryPrevious <- tryCatch({
+                resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="getTransactions", query=list(apikey=API_KEY))
+                TRUE
+            }, error=function(cond){
+                return(FALSE)
+            })
+            if(!tryPrevious){
+                showNotification("Error: The application cannot connect to the Tox21 Enricher server. Please try again later.", type="error")
+                return(FALSE)
+            } else {
+                transactionTable <- data.frame(do.call(rbind, content(resp)), stringsAsFactors=FALSE)
+            }
+
+            if(nrow(transactionTable) < 1) { # No previous enrichment
                 shinyjs::disable(id="searchPrevButton")
                 shinyjs::disable(id="searchDeleteAll")
                 shinyjs::disable(id="searchDeleteSelected")
+                shinyjs::disable(id="selectAllPrevOnPage")
+                shinyjs::disable(id="searchDeleteAllIncomplete")
                 output[["enrichmentTable"]] <- renderUI(
                     column(12,
                         h4("No previous enrichment records!")
@@ -185,55 +199,18 @@ shinyServer(function(input, output, session) {
                 shinyjs::enable(id="searchPrevButton")
                 shinyjs::enable(id="searchDeleteAll")
                 shinyjs::enable(id="searchDeleteSelected")
-                enrichmentListDisplay <- lapply(enrichmentList, function(x){
-                    enrichDataRaw <- read.table(x, sep="\t", comment.char="", stringsAsFactors=FALSE, fill=TRUE)
-                    originalMode <- enrichDataRaw[1, 1]
-                    mode <- enrichDataRaw[1, 2]
-                    transactionId <- enrichDataRaw[1, 3]
-                    annoSelectStr <- enrichDataRaw[1, 4]
-                    nodeCutoff <- enrichDataRaw[1, 5]
-                    enrichmentSets <- enrichDataRaw[1, 6]
-                    submitTime <- enrichDataRaw[1, 10]
-                    beginTime <- "not started"
-                    endTime <- "incomplete"
-                    tmpContent <- NULL
-                    resp <- NULL
-                    if(ncol(enrichDataRaw) < 12){
-                        # Get timestamps for missing entries
-                        # Get ending timestamp to put in file
-                        tryTimestamp <- tryCatch({
-                            resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="getTimestamp", query=list(transactionId=transactionId))
-                            # TODO: error check
-                            if(resp$status_code != 200){
-                                tmpContent <- NULL
-                            }    
-                            TRUE
-                        }, error=function(cond){
-                              return(FALSE)
-                        })
-                        if(!tryTimestamp){
-                            tmpContent <- NULL
-                        } else {
-                            tmpContent <- unlist(content(resp))
-                        }
-                  
-                        #Placeholder if hasn't started yet
-                        if(is.null(tmpContent)) {
-                            beginTime <- "not started"
-                            endTime <- "incomplete"
-                        } else {
-                            if("timestamp_start" %in% names(tmpContent["timestamp_start"])){
-                                beginTime <- tmpContent[["timestamp_start"]]
-                            }
-                            if("timestamp_finish" %in% names(tmpContent["timestamp_finish"])){
-                                endTime <- tmpContent[["timestamp_finish"]]
-                            }
-                        }
-                    } else {
-                        beginTime <- enrichDataRaw[1, 11]
-                        endTime <- enrichDataRaw[1, 12]  
-                    }
-                    
+                shinyjs::enable(id="selectAllPrevOnPage")
+                shinyjs::enable(id="searchDeleteAllIncomplete")
+                enrichmentListDisplay <- lapply(seq_len(nrow(transactionTable)), function(x){
+                    originalMode <- transactionTable[x, "original_mode"]
+                    mode <- transactionTable[x, "mode"]
+                    transactionId <- transactionTable[x, "uuid"]
+                    annoSelectStr <- transactionTable[x, "annotation_selection_string"]
+                    nodeCutoff <- transactionTable[x, "cutoff"]
+                    enrichmentSets <- transactionTable[x, "input"]
+                    submitTime <- transactionTable[x, "timestamp_posted"]
+                    beginTime <- transactionTable[x, "timestamp_started"]
+                    endTime <- transactionTable[x, "timestamp_finished"]
                     cleanedMode <- ""
                     if(originalMode == "similarity"){
                         if(mode == "similarity") {
@@ -252,14 +229,12 @@ shinyServer(function(input, output, session) {
                     } else { #annotation
                         cleanedMode <- "View Annotations for Tox21 Chemicals"
                     }
-                    
                     # Clean up enrichment sets for display in the DataTable
                     cleanedEnrichmentSets <- unlist(str_split(enrichmentSets, "\\|"))
                     cleanedEnrichmentSetsDisplayNames <- unlist(lapply(cleanedEnrichmentSets, function(x){
                         return(unlist(str_split(x, "__"))[2])
                     }))
                     cleanedEnrichmentSetsDisplayNames <- unique(cleanedEnrichmentSetsDisplayNames)
-                    
                     cleanedEnrichmentSetsDisplay <- lapply(cleanedEnrichmentSetsDisplayNames, function(x){
                         innerList <- unlist(lapply(cleanedEnrichmentSets, function(y){
                             casrnNoSet <- unlist(str_split(y, "__"))
@@ -271,7 +246,6 @@ shinyServer(function(input, output, session) {
                         innerList <- innerList[!vapply(innerList, is.null, FUN.VALUE=logical(1))]
                         return(paste0(x, ": ", paste0(innerList, collapse=", ")))
                     })
-                    
                     # Clean up annoSelectStr
                     annoSelectStr <- unlist(str_split(annoSelectStr, ","))
                     annoSelectStr <- paste0(annoSelectStr, collapse=", ")
@@ -279,23 +253,16 @@ shinyServer(function(input, output, session) {
                     searchCheckbox <- paste0(checkboxInput(inputId=paste0("cb_search__", transactionId), label=NULL, width="4px"))
                     enrichData <- data.frame("Mode"=cleanedMode, "UUID"=transactionId, "Annotation Selection String"=annoSelectStr, "Node Cutoff"=nodeCutoff, "Enrichment Sets"=paste0(cleanedEnrichmentSetsDisplay, collapse="\n"), "Time Submitted"=submitTime, "Time Started"=beginTime, "Time Completed"=endTime, stringsAsFactors=FALSE)
                     enrichData <- data.frame("Select"=searchCheckbox, enrichData, stringsAsFactors=FALSE)
+                    colnames(enrichData) <- c("Select", "Mode", "UUID", "Annotation Selection String", "Node Cutoff", "Enrichment Sets", "Time Submitted", "Time Started", "Time Completed")
+                    return(enrichData)
                 })
-              
-                # Save checkbox names so we can reference later
-                searchCheckboxNames <- unlist(lapply(enrichmentList, function(x){
-                    enrichDataRaw <- read.table(x, sep="\t", comment.char="", stringsAsFactors=FALSE)
-                    transactionId <- enrichDataRaw[1, 3]
+                searchCheckboxNames <- unlist(lapply(seq_len(nrow(transactionTable)), function(x){
+                    transactionId <- transactionTable[x, "uuid"]
                     searchCheckboxName <- paste0("cb_search__", transactionId)
                 }))
                 enrichmentListDisplay <- bind_rows(enrichmentListDisplay)
                 enrichmentListDisplayReactive$enrichmentListDisplay <- enrichmentListDisplay
                 searchCheckboxes$checkboxes <- searchCheckboxNames
-                
-                # Fix table header for display
-                colnames(enrichmentListDisplay) <- unlist(lapply(colnames(enrichmentListDisplay), function(x){
-                    return(gsub("\\.", " ", x))
-                }))
-              
                 output[["enrichmentTable"]] <- renderUI(
                     column(12,
                         DT::datatable({enrichmentListDisplay}, 
@@ -363,20 +330,36 @@ shinyServer(function(input, output, session) {
             })
         } else {
             setToFetch <- selectedSets[1]
-            params <- read.table(paste0("./www/tmp/transaction/", setToFetch), sep="\t", comment.char="", stringsAsFactors=FALSE)
-            originalMode <- params[1, 1]
-            mode <- params[1, 2]
-            transactionId <- params[1, 3]
-            annoSelectStr <- params[1, 4]
-            nodeCutoff <- params[1, 5]
-            colorsList <- params[1, 9]
+            
+            # Fetch selected transaction
+            resp <- NULL
+            tryPrevious <- tryCatch({
+                resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="loadTransaction", query=list(apikey=API_KEY, uuid=setToFetch))
+                TRUE
+            }, error=function(cond){
+                return(FALSE)
+            })
+            if(!tryPrevious){
+                showNotification("Error: The application cannot connect to the Tox21 Enricher server. Please try again later.", type="error")
+                return(FALSE)
+            } else {
+                transactionTable <- data.frame(do.call(rbind, content(resp)), stringsAsFactors=FALSE)
+            }
+            
+            transactionTable <- data.frame(do.call(rbind, content(resp)), stringsAsFactors=FALSE)
+            originalMode <- transactionTable[1, "original_mode"]
+            mode <- transactionTable[1, "mode"]
+            transactionId <- transactionTable[1, "uuid"]
+            annoSelectStr <- transactionTable[1, "annotation_selection_string"]
+            nodeCutoff <- transactionTable[1, "cutoff"]
+            colorsList <- transactionTable[1, "colors"]
           
             # Set enrichmentType$enrichType here to original mode of the request
             enrichmentType$enrichType <- mode
             originalEnrichModeList$originalEnrichMode <- originalMode
             
             # Set originalNamesList$originalNames if similarity/substructure so reenrichment will work correctly
-            originalNamesList$originalNames <- unlist(str_split(params[1, 7], "\\|"))
+            originalNamesList$originalNames <- unlist(str_split(transactionTable[1, "original_names"], "\\|"))
             
             # Check if result (Input/Output) files exist on the server
             resp <- NULL
@@ -414,44 +397,14 @@ shinyServer(function(input, output, session) {
                 }
             }
             
-            # Check if request has actually finished yet
-            if(length(params) < 12){
-                beginTime <- NULL
-                endTime <- NULL
-                # Get timestamps for missing entries - check if enrichment has completed
-                resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="getTimestamp", query=list(transactionId=transactionId))
-                # TODO: error check
-                if(resp$status_code != 200){
-                    return(NULL)
-                }
-                tmpContent <- unlist(content(resp))
-                if(is.null(tmpContent)) {
-                    beginTime <- NULL
-                    endTime <- NULL
-                } else {
-                    if("timestamp_start" %in% names(tmpContent["timestamp_start"])){
-                        beginTime <- tmpContent[["timestamp_start"]]
-                    }
-                    if("timestamp_finish" %in% names(tmpContent["timestamp_finish"])){
-                        endTime <- tmpContent[["timestamp_finish"]]
-                    }
-                }
-                if(is.null(endTime) | is.null(beginTime)){
-                    shinyjs::show(id="warningSearchColumn")
-                    output$searchWarning <- renderUI({
-                        HTML(paste0("<div class=\"text-danger\">Error: Request has not completed.</div>"))
-                    })
-                    return() 
-                }
-            }
             # reconstruct enrichment sets
-            setNames <- unlist(str_split(params[1, 6], "\\|"))
+            setNames <- unlist(str_split(transactionTable[1, "input"], "\\|"))
             setNames <- unlist(lapply(setNames, function(x){
                 return(unlist(str_split(x, "__"))[2])
             }))
             setNames <- unique(setNames)
             enrichmentSets <- lapply(setNames, function(x){
-                innerSet <- unlist(lapply(unlist(str_split(params[1, 6], "\\|")), function(y){
+                innerSet <- unlist(lapply(unlist(str_split(transactionTable[1, "input"], "\\|")), function(y){
                     tmpSplit <- unlist(str_split(y, "__"))
                     if(tmpSplit[2] == x){
                         return(tmpSplit[1])
@@ -461,10 +414,10 @@ shinyServer(function(input, output, session) {
                 innerSet <- innerSet[!vapply(innerSet, is.null, FUN.VALUE=logical(1))]
             })
             names(enrichmentSets) <- setNames
-            originalNames <- unlist(str_split(params[1, 7], "\\|"))
+            originalNames <- unlist(str_split(transactionTable[1, "original_names"], "\\|"))
             reenrichResults <- NULL
-            if(!is.na(params[1, 8])){
-                reenrichResultsSets <- unlist(str_split(params[1, 8], "\\|"))
+            if(!is.na(transactionTable[1, "reenrich"])){
+                reenrichResultsSets <- unlist(str_split(transactionTable[1, "reenrich"], "\\|"))
                 reenrichResultsCols <- lapply(reenrichResultsSets, function(x){
                     return(unlist(str_split(x, "__")))
                 })
@@ -509,7 +462,6 @@ shinyServer(function(input, output, session) {
             enrichmentSetsList$enrichmentSets <- enrichmentSets
             # Set setColors$color - necessary for preserving color for bargraph generation
             setColors$color <- colorsList
-            
             future({
                 enrichmentResults(mode, transactionId, annoSelectStr, nodeCutoff, enrichmentSets, originalNames, reenrichResults, originalMode, colorsList)
             }, seed=TRUE)
@@ -681,9 +633,18 @@ shinyServer(function(input, output, session) {
     
     # Clear local cache on confirmation of above ^^
     observeEvent(input$searchDeleteAllConfirm, {
-        cacheDir <- paste0(getwd(), "/www/tmp/")
-        # Clear transaction dir
-        unlink(paste0(cacheDir, "transaction/*"), recursive=TRUE)
+        deleteAllTransactions <- enrichmentListDisplayReactive$enrichmentListDisplay[, "UUID"]
+        resp <- NULL
+        tryPrevious <- tryCatch({
+            resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="deleteTransactionSelected", query=list(selected=paste0(deleteAllTransactions, collapse=",")))
+            TRUE
+        }, error=function(cond){
+            return(FALSE)
+        })
+        if(!tryPrevious){
+            showNotification("Error: The application cannot connect to the Tox21 Enricher server. Please try again later.", type="error")
+            return(FALSE)
+        }
         
         # Render confirmation text
         output$searchDeleteAllConfirmation <- renderUI({
@@ -705,8 +666,6 @@ shinyServer(function(input, output, session) {
         # Close modal
         removeModal()
     })
-    
-    ### PICK UP HERE ###
     
     selectedSetsReactive <- reactiveValues(sets=NULL)
     # Delete records for selected requests
@@ -751,11 +710,18 @@ shinyServer(function(input, output, session) {
     
     # Clear local cache on confirmation of above ^^
     observeEvent(input$searchDeleteSelectedConfirm, {
-        cacheDir <- paste0(getwd(), "/www/tmp/")
         # Clear transaction dir
-        lapply (selectedSetsReactive$sets, function(x){
-            unlink(paste0(cacheDir, "transaction/", x), recursive=TRUE)  
+        resp <- NULL
+        tryPrevious <- tryCatch({
+            resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="deleteTransactionSelected", query=list(selected=paste0(selectedSetsReactive$sets, collapse=",")))
+            TRUE
+        }, error=function(cond){
+            return(FALSE)
         })
+        if(!tryPrevious){
+            showNotification("Error: The application cannot connect to the Tox21 Enricher server. Please try again later.", type="error")
+            return(FALSE)
+        }
         # Render confirmation text
         output$searchDeleteSelectedConfirmation <- renderUI({
             HTML(paste0("<div class=\"text-danger\">Selected records deleted.</div>"))
@@ -780,9 +746,8 @@ shinyServer(function(input, output, session) {
     # Clear previous incomplete enrichment requests when button is pressed
     observeEvent(input$searchDeleteAllIncomplete, {
         prevTable <- enrichmentListDisplayReactive$enrichmentListDisplay
-        incompleteSets <- prevTable %>% filter(Time.Completed == "incomplete")
-  
-        if(length(incompleteSets[, "Time.Completed"]) < 1){
+        incompleteSets <- prevTable %>% filter(`Time Completed` == "incomplete")
+        if(length(incompleteSets[, "Time Completed"]) < 1){
             shinyjs::show(id="warningSearchColumn")
             output$searchWarning <- renderUI({
                 HTML(paste0("<div class=\"text-danger\">Error: No incomplete requests.</div>"))
@@ -812,14 +777,19 @@ shinyServer(function(input, output, session) {
     
     # Clear local cache on confirmation of above ^^
     observeEvent(input$searchDeleteIncompleteConfirm, {
-        cacheDir <- paste0(getwd(), "/www/tmp/")
         prevTable <- enrichmentListDisplayReactive$enrichmentListDisplay
-        incompleteSets <- prevTable %>% filter(Time.Completed == "incomplete")
-        # Clear transaction dir
-        lapply (incompleteSets[, "UUID"], function(x){
-            unlink(paste0(cacheDir, "transaction/", x), recursive=TRUE)  
+        incompleteSets <- prevTable %>% filter(`Time Completed` == "incomplete")
+        resp <- NULL
+        tryPrevious <- tryCatch({
+            resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="deleteTransactionSelected", query=list(selected=paste0(incompleteSets[, "UUID"], collapse=",")))
+            TRUE
+        }, error=function(cond){
+            return(FALSE)
         })
-        
+        if(!tryPrevious){
+            showNotification("Error: The application cannot connect to the Tox21 Enricher server. Please try again later.", type="error")
+            return(FALSE)
+        }
         # Render confirmation text
         output$searchDeleteIncompleteConfirmation <- renderUI({
             HTML(paste0("<div class=\"text-danger\">Incomplete records deleted.</div>"))
@@ -935,7 +905,7 @@ shinyServer(function(input, output, session) {
             tipify(bsButtonRight(paste0("tt_", classOther[x]), icon("question-circle"), style="inverse", size="extra-small"), descOther[x], placement="right")
         })
       
-        annoClassList=list()
+        annoClassList <- list()
         annoClassList[[1]] <- classPubChem
         annoClassList[[2]] <- classDrugMatrix
         annoClassList[[3]] <- classDrugBank
@@ -1087,7 +1057,6 @@ shinyServer(function(input, output, session) {
     #Create tooltip buttons for annotations (solution from https://stackoverflow.com/questions/36670065/tooltip-in-shiny-ui-for-help-text)
     bsButtonRight <- function(...) {
         btn <- bsButton(...)
-        # Directly inject the style into the shiny element.
         btn$attribs$style <- "float: right;"
         btn
     }
@@ -1222,7 +1191,18 @@ shinyServer(function(input, output, session) {
         splitAnnotationsString <- waitingData[1, "Selected.Annotations"]
         cutoff <- waitingData[1, "Node.Cutoff"]
         casrnBox <- waitingData[1, "Input"]
-        resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="getQueuePos", query=list(transactionId=transactionId, mode=enrichmentDisplayType))
+        resp <- NULL
+        tryRefresh <- tryCatch({
+            resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="getQueuePos", query=list(transactionId=transactionId, mode=enrichmentDisplayType))
+            TRUE
+        }, error=function(cond){
+            return(FALSE)
+        })
+        if(!tryRefresh){
+            showNotification("Error: The application cannot connect to the Tox21 Enricher server. Please try again later.", type="error")
+            return(FALSE)
+        }
+        
         if(resp$status_code != 200) {
             output$results_error_box <- renderUI({
                 paste0("<div class=\"text-danger\">Error: Could not fetch queue position for this request.</div>")
@@ -1556,9 +1536,14 @@ shinyServer(function(input, output, session) {
                                 if(resp$status_code != 200){
                                     return(FALSE)
                                 }
+                                TRUE
                             }, error=function(cond){
                                 return(FALSE)
                             })
+                            if(!trySubstructure){
+                                showNotification("Error: The application cannot connect to the Tox21 Enricher server. Please try again later.", type="error")
+                                return(FALSE)
+                            }
                             outputSubCasrns <- unlist(lapply(content(resp), function(x){
                                 return(x$casrn)
                             }))
@@ -1582,7 +1567,18 @@ shinyServer(function(input, output, session) {
                         } else if(originalEnrichModeList$originalEnrichMode == "similarity"){
                             # Set Tanimoto threshold for similarity search
                             threshold <- as.numeric(input$tanimotoThreshold)/100
-                            resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="similarity", query=list(input=originalNamesToReturn[[names(enrichmentSets)[casrnSet]]], threshold=threshold))
+                            resp <- NULL
+                            trySimilarity <- tryCatch({
+                                resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="similarity", query=list(input=originalNamesToReturn[[names(enrichmentSets)[casrnSet]]], threshold=threshold))
+                                TRUE
+                            }, error=function(cond){
+                                return(FALSE)
+                            })
+                            if(!trySimilarity){
+                                showNotification("Error: The application cannot connect to the Tox21 Enricher server. Please try again later.", type="error")
+                                return(FALSE)
+                            }
+                            
                             if(resp$status_code != 200){
                                 return(NULL)
                             }
@@ -1640,6 +1636,7 @@ shinyServer(function(input, output, session) {
                             if(resp$status_code != 200){
                                 return(FALSE)
                             }
+                            TRUE
                         }, error=function(cond){
                               return(FALSE)
                         })
@@ -1679,7 +1676,8 @@ shinyServer(function(input, output, session) {
                             resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="similarity", query=list(input=setName, threshold=threshold))
                             if(resp$status_code != 200){
                                 return(FALSE)
-                            }    
+                            }  
+                            TRUE
                         }, error=function(cond){
                             return(FALSE)
                         })
@@ -1811,10 +1809,15 @@ shinyServer(function(input, output, session) {
         resp <- NULL
         tryGenerateUUID <- tryCatch({
             resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="checkId")
+            TRUE
         }, error=function(cond){
-            return(NULL)
+            return(FALSE)
         })
-        
+        if(!tryGenerateUUID)
+        {
+            showNotification("Error: The application cannot connect to the Tox21 Enricher server. Please try again later.", type="error")
+            return(FALSE)
+        }        
         if(is.null(tryGenerateUUID)){
             # Hide original form when done with enrichment
             shinyjs::show(id="enrichmentForm")
@@ -1933,9 +1936,6 @@ shinyServer(function(input, output, session) {
                 return(paste0(rr_setname, "__", rr_casrn, "__", rr_m, "__", rr_sim, "__", rr_cyanide, "__", rr_isocyanate, "__", rr_aldehyde, "__", rr_epoxide))
             }))
         }
-
-        # Create local file so we can reference later
-        tmpDir <- paste0("./www/tmp/transaction/")
         
         # Get submission timestamp to put in file
         beginTime <- Sys.time()
@@ -1945,16 +1945,32 @@ shinyServer(function(input, output, session) {
             paste0(names(colorsAllSets)[i], "__", colorsAllSets[i])
         })
         colorsToPrint <- paste0(colorsToPrint, collapse="|")
-
-        # Write local info file so we can reference this request later
-        file.create(paste0(tmpDir, transactionId))
-        tmpLocalFile <- file(paste0(tmpDir, transactionId), open="wb")
-        fileContents <- paste0(originalEnrichModeList$originalEnrichMode, "\t", enrichmentType$enrichType, "\t", transactionId, "\t", annoSelectStr, "\t", cutoff, "\t", enrichmentSetsSanitizedLocal, "\t", paste0(originalNamesList$originalNames, collapse="|"), "\t", paste0(reenrichResultsSanitized, collapse="|"), "\t", colorsToPrint, "\t", beginTime)
-        cat(fileContents, file=tmpLocalFile)
-        close(tmpLocalFile)
+        
+        # Send query to create transaction entry in database
+        resp <- NULL
+        tryTransaction <- tryCatch({
+            resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="createTransaction", query=list(originalMode=originalEnrichModeList$originalEnrichMode, mode=enrichmentType$enrichType, uuid=transactionId, annoSelectStr=annoSelectStr, cutoff=cutoff, input=enrichmentSetsSanitizedLocal, originalNames=paste0(originalNamesList$originalNames, collapse="|"), reenrich=paste0(reenrichResultsSanitized, collapse="|"), color=colorsToPrint, timestampPosted=beginTime, apikey=API_KEY))
+            TRUE
+        }, error=function(cond){
+            return(FALSE)
+        })
+        if(!tryTransaction){
+            showNotification("Error: The application cannot connect to the Tox21 Enricher server. Please try again later.", type="error")
+            return(FALSE)
+        }
         
         # Send query to create input file
-        resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="createInput", query=list(transactionId=transactionId, enrichmentSets=enrichmentSetsSanitized, setNames=paste0(names(enrichmentSets), collapse="\n"), mode=enrichmentType$enrichType, nodeCutoff=cutoff, annoSelectStr=annoSelectStr))
+        resp <- NULL
+        tryInput <- tryCatch({
+            resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="createInput", query=list(transactionId=transactionId, enrichmentSets=enrichmentSetsSanitized, setNames=paste0(names(enrichmentSets), collapse="\n"), mode=enrichmentType$enrichType, nodeCutoff=cutoff, annoSelectStr=annoSelectStr))
+            TRUE
+        }, error=function(cond){
+            return(FALSE)
+        })
+        if(!tryInput){
+            showNotification("Error: The application cannot connect to the Tox21 Enricher server. Please try again later.", type="error")
+            return(FALSE)
+        }
         
         if(resp$status_code != 200){
             # Hide original form when done with enrichment
@@ -2013,7 +2029,17 @@ shinyServer(function(input, output, session) {
         }
 
         # Query API to put request in queue
-        resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="queue", query=list(mode=enrichmentType$enrichType, enrichmentUUID=transactionId, annoSelectStr=annoSelectStr, nodeCutoff=cutoff, setNames=paste0(names(enrichmentSets), collapse="\n")))
+        resp <- NULL
+        tryQueue <- tryCatch({
+            resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="queue", query=list(mode=enrichmentType$enrichType, enrichmentUUID=transactionId, annoSelectStr=annoSelectStr, nodeCutoff=cutoff, setNames=paste0(names(enrichmentSets), collapse="\n")))
+            TRUE
+        }, error=function(cond){
+            return(FALSE)
+        })
+        if(!tryQueue){
+            showNotification("Error: The application cannot connect to the Tox21 Enricher server. Please try again later.", type="error")
+            return(FALSE)
+        }
         
         # if enrichment runs into an error on the API side, cancel and show error on main UI
         if (resp$status_code != 200){
@@ -2171,7 +2197,17 @@ shinyServer(function(input, output, session) {
         # If no errors
         # First, check if process is done
         # Query the API to see if process is done
-        resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="finishedRequest", query=list(transactionId=transactionId))
+        resp <- NULL
+        tryQueue <- tryCatch({
+            resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="finishedRequest", query=list(transactionId=transactionId))
+            TRUE
+        }, error=function(cond){
+            return(FALSE)
+        })
+        if(!tryQueue){
+            showNotification("Error: The application cannot connect to the Tox21 Enricher server. Please try again later.", type="error")
+            return(FALSE)
+        }
         
         # Show warning message if request fails
         if(resp$status_code != 200){
@@ -2208,8 +2244,16 @@ shinyServer(function(input, output, session) {
         # Go back to main page
         # Delete from local cache
         transactionId <- reactiveTransactionId$id
-        tmpPath <- paste0("./www/tmp/transaction/")
-        unlink(paste0(tmpPath, transactionId))
+        tryPrevious <- tryCatch({
+            resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="deleteTransactionSelected", query=list(selected=transactionId))
+            TRUE
+        }, error=function(cond){
+            return(FALSE)
+        })
+        if(!tryPrevious){
+            showNotification("Error: The application cannot connect to the Tox21 Enricher server. Please try again later.", type="error")
+            return(FALSE)
+        }
         
         # Remove modal
         removeModal()
@@ -2241,7 +2285,17 @@ shinyServer(function(input, output, session) {
         })
         
         # Query the API to cancel enrichment
-        resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="cancelEnrichment", query=list(transactionId=reactiveTransactionId$id))
+        resp <- NULL
+        tryCancel <- tryCatch({
+            resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="cancelEnrichment", query=list(transactionId=reactiveTransactionId$id))
+            TRUE
+        }, error=function(cond){
+            return(FALSE)
+        })
+        if(!tryCancel){
+            showNotification("Error: The application cannot connect to the Tox21 Enricher server. Please try again later.", type="error")
+            return(FALSE)
+        }
         return(FALSE)
     })
     
@@ -2251,50 +2305,6 @@ shinyServer(function(input, output, session) {
         
         # Set reactive transactionId value 
         reactiveTransactionId$id <- transactionId
-
-        # Update cache file for completed enrichment
-        # Create local file so we can reference later
-        tmpDir <- paste0("./www/tmp/transaction/")
-        tmpLocalFile <- file(paste0(tmpDir, transactionId), open="a")
-        tmpLocalFilePath <- paste0(tmpDir, transactionId)
-        tmpLocalFileRead <- read.table(tmpLocalFilePath, stringsAsFactors=FALSE, sep="\t")
-
-        if(length(tmpLocalFileRead) < 12){
-            # Get ending timestamp to put in file
-            resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="getTimestamp", query=list(transactionId=transactionId))
-            # TODO: error check
-            beginTime <- "not started"
-            endTime <- "incomplete"
-            if(resp$status_code != 200){
-                return(NULL)
-            }
-            tmpContent <- unlist(content(resp))
-            
-            if(is.null(tmpContent)) {
-                beginTime <- "not started"
-                endTime <- "incomplete"
-            } else {
-                if("timestamp_start" %in% names(tmpContent["timestamp_start"])){
-                    beginTime <- tmpContent[["timestamp_start"]]
-                } else {
-                    beginTime <- "not started"
-                }
-                if("timestamp_finish" %in% names(tmpContent["timestamp_finish"])){
-                    endTime <- tmpContent[["timestamp_finish"]]
-                } else {
-                    endTime <- "incomplete"
-                }
-            }
-            if(beginTime != "not started" & length(tmpLocalFileRead) == 10){
-                # Write local info file so we can reference this request later
-                cat(paste0("\t", beginTime), file=tmpLocalFile)
-            }
-            if(endTime != "incomplete" & length(tmpLocalFileRead) == 11){
-                # Write local info file so we can reference this request later
-                cat(paste0("\t", endTime, "\r"), file=tmpLocalFile)
-            }
-            close(tmpLocalFile) 
-        }
         
         # Hide waiting page
         shinyjs::hide(id="waitingPage")
@@ -2312,7 +2322,17 @@ shinyServer(function(input, output, session) {
         }
 
         # Check which enrichment sets are good
-        resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="checkSets", query=list(transactionId=transactionId))
+        resp <- NULL
+        tryCheck <- tryCatch({
+            resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="checkSets", query=list(transactionId=transactionId))
+            TRUE
+        }, error=function(cond){
+            return(FALSE)
+        })
+        if(!tryCheck){
+            showNotification("Error: The application cannot connect to the Tox21 Enricher server. Please try again later.", type="error")
+            return(FALSE)
+        }
         #TODO: error check
         if(resp$status_code != 200){
             return(NULL)
@@ -2379,7 +2399,18 @@ shinyServer(function(input, output, session) {
             })
             
             # Fetch setFiles from server via API
-            resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="getResults", query=list(transactionId=transactionId))
+            resp <- NULL
+            tryResults <- tryCatch({
+                resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="getResults", query=list(transactionId=transactionId))
+                TRUE
+            }, error=function(cond){
+                return(FALSE)
+            })
+            if(!tryResults){
+                showNotification("Error: The application cannot connect to the Tox21 Enricher server. Please try again later.", type="error")
+                return(FALSE)
+            }
+            
             # TODO: error check
             if(resp$status_code != 200){
                 return(NULL)
@@ -2406,7 +2437,7 @@ shinyServer(function(input, output, session) {
                             # Create directory for request
                             dir.create(paste0(tempdir(), "/output/"))
                             dir.create(paste0(tempdir(), "/output/", transactionId, "/"))
-                            tryAnnotationDL <- NULL
+                            tryAnnotationDL <- TRUE
                             if(!file.exists(paste0(tempdir(), "/output/", transactionId, "/", setFilesSplit[setFile]))){
                                 tryAnnotationDL <- tryCatch({
                                     download.file(paste0("http://", API_HOST, ":", API_PORT, "/serveFileText?transactionId=", transactionId, "&filename=", setFilesSplit[setFile], "&subDir=Output"), destfile=paste0(tempdir(), "/output/", transactionId, "/", setFilesSplit[setFile]))
@@ -2462,7 +2493,7 @@ shinyServer(function(input, output, session) {
                         # Create directory for request
                         dir.create(paste0(tempdir(), "/input/"))
                         dir.create(paste0(tempdir(), "/input/", transactionId, "/"))
-                        tryInputDL <- NULL
+                        tryInputDL <- TRUE
                         if(!file.exists(paste0(tempdir(), "/input/", transactionId, "/", i, ".txt"))){
                             tryInputDL <- tryCatch({
                                 download.file(paste0("http://", API_HOST, ":", API_PORT, "/serveFileText?transactionId=", transactionId, "&filename=", i, ".txt&subDir=Input"), destfile=paste0(tempdir(), "/input/", transactionId, "/", i, ".txt"))
@@ -2514,7 +2545,7 @@ shinyServer(function(input, output, session) {
                         # Create directory for request
                         dir.create(paste0(tempdir(), "/output/"))
                         dir.create(paste0(tempdir(), "/output/", transactionId, "/"))
-                        tryErrorDL <- NULL
+                        tryErrorDL <- TRUE
                         if(!file.exists(paste0(tempdir(), "/output/", transactionId, "/", i, "__ErrorCASRNs.txt"))){
                             tryErrorDL <- tryCatch({
                                 download.file(paste0("http://", API_HOST, ":", API_PORT, "/serveFileText?transactionId=", transactionId, "&filename=", i, "__ErrorCASRNs.txt&subDir=Output"), destfile=paste0(tempdir(), "/output/", transactionId, "/", i, "__ErrorCASRNs.txt"))
@@ -2568,7 +2599,7 @@ shinyServer(function(input, output, session) {
                         # Create directory for request
                         dir.create(paste0(tempdir(), "/output/"))
                         dir.create(paste0(tempdir(), "/output/", transactionId, "/"))
-                        tryFullMatrixDL <- NULL
+                        tryFullMatrixDL <- TRUE
                         if(!file.exists(paste0(tempdir(), "/output/", transactionId, "/", i, "__FullMatrix.txt"))){
                             tryFullMatrixDL <- tryCatch({
                                 download.file(paste0("http://", API_HOST, ":", API_PORT, "/serveFileText?transactionId=", transactionId, "&filename=", i, "__FullMatrix.txt&subDir=Output"), destfile=paste0(tempdir(), "/output/", transactionId, "/", i, "__FullMatrix.txt"))
@@ -2626,13 +2657,13 @@ shinyServer(function(input, output, session) {
                                     fluidRow(
                                         column(id=paste0(setFilesSplit[setFile]), 3, 
                                             if(unlist(str_split(setFilesSplit[setFile], "__"))[2] == "FullMatrix.txt"){
-                                                tipify( div(actionLink(inputId=paste0(i, "__FullMatrix.txt__link"), label=gsub("__FullMatrix.txt", " Full Matrix", setFilesSplit[setFile]))), "A matrix displaying all of the annotations and their corresponding chemicals for this set (.txt format).", placement="bottom")
+                                                tipify( div(actionLink(inputId=paste0(i, "__FullMatrix.txt__link"), label=gsub("__FullMatrix.txt", " Full Matrix", setFilesSplit[setFile]))), "A matrix displaying all of the annotations and their corresponding chemicals for this set (.txt format).", placement="right")
                                             } else if (unlist(str_split(setFilesSplit[setFile], "__"))[2] == "ErrorCASRNs.txt") { 
-                                                tipify( div(actionLink(inputId=paste0(setFilesSplit[setFile], "__link"), label=paste0(i, " Error CASRNs"))), "A list of submitted CASRNs that were not found in the Tox21 Enricher database (.txt format).", placement="bottom")
+                                                tipify( div(actionLink(inputId=paste0(setFilesSplit[setFile], "__link"), label=paste0(i, " Error CASRNs"))), "A list of submitted CASRNs that were not found in the Tox21 Enricher database (.txt format).", placement="right")
                                             } else if (unlist(str_split(setFilesSplit[setFile], "__"))[2] == "Input.txt") { # Input file
-                                                tipify( div(actionLink(inputId=paste0(gsub("__Input", "", setFilesSplit[setFile]), "__link"), label=gsub("__Input.txt", " Input", setFilesSplit[setFile]))), "A list of input chemicals for this set (.txt format).", placement="bottom")
+                                                tipify( div(actionLink(inputId=paste0(gsub("__Input", "", setFilesSplit[setFile]), "__link"), label=gsub("__Input.txt", " Input", setFilesSplit[setFile]))), "A list of input chemicals for this set (.txt format).", placement="right")
                                             } else { # CASRN file
-                                                tipify( div(actionLink(inputId=paste0(setFilesSplit[setFile], "__link"), label=gsub(".txt", "", gsub(paste0(i, "__"), "", setFilesSplit[setFile])))), "A list of annotations in the Tox21 Enricher database for this chemical with respect to the given annotation classes (.txt format).", placement="bottom")
+                                                tipify( div(actionLink(inputId=paste0(setFilesSplit[setFile], "__link"), label=gsub(".txt", "", gsub(paste0(i, "__"), "", setFilesSplit[setFile])))), "A list of annotations in the Tox21 Enricher database for this chemical with respect to the given annotation classes (.txt format).", placement="right")
                                             }
                                         )
                                     )
@@ -2653,7 +2684,7 @@ shinyServer(function(input, output, session) {
                     # Create directory for request
                     dir.create(paste0(tempdir(), "/output/"))
                     dir.create(paste0(tempdir(), "/output/", transactionId, "/"))
-                    tryZipDL <- NULL
+                    tryZipDL <- TRUE
                     if(!file.exists(paste0(tempdir(), "/output/", transactionId, "/tox21enricher_", transactionId, ".zip"))){
                         tryZipDL <- tryCatch({
                             download.file(paste0("http://", API_HOST, ":", API_PORT, "/serveFileText?transactionId=", transactionId, "&filename=tox21enricher_", transactionId, ".zip&subDir=Output"), destfile=paste0(tempdir(), "/output/", transactionId, "/tox21enricher_", transactionId, ".zip"))
@@ -2680,7 +2711,7 @@ shinyServer(function(input, output, session) {
                     # Create directory for request
                     dir.create(paste0(tempdir(), "/output/"))
                     dir.create(paste0(tempdir(), "/output/", transactionId, "/"))
-                    tryZipDL <- NULL
+                    tryZipDL <- TRUE
                     if(!file.exists(paste0(tempdir(), "/output/", transactionId, "/tox21enricher_", transactionId, ".zip"))){
                         tryZipDL <- tryCatch({
                             download.file(paste0("http://", API_HOST, ":", API_PORT, "/serveFileText?transactionId=", transactionId, "&filename=tox21enricher_", transactionId, ".zip&subDir=Output"), destfile=paste0(tempdir(), "/output/", transactionId, "/tox21enricher_", transactionId, ".zip"))
@@ -2760,7 +2791,18 @@ shinyServer(function(input, output, session) {
             })
             lapply(names(enrichmentSets), function(i) {
                 # Fetch setFiles from server via API
-                resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="readGct", query=list(transactionId=transactionId, cutoff=cutoff, mode="set", set=i))
+                resp <- NULL
+                tryGCT <- tryCatch({
+                    resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="readGct", query=list(transactionId=transactionId, cutoff=cutoff, mode="set", set=i))
+                    TRUE
+                }, error=function(cond){
+                    return(FALSE)
+                })
+                if(!tryGCT){
+                    showNotification("Error: The application cannot connect to the Tox21 Enricher server. Please try again later.", type="error")
+                    return(FALSE)
+                }
+                
                 #TODO: error check
                 if(resp$status_code != 200){
                     return(NULL)
@@ -2821,9 +2863,19 @@ shinyServer(function(input, output, session) {
                     gctCASRNNames <- rownames(gctFile)
                     gctAnnoNames <- colnames(gctFile)
                     # Get list of paths to result files for each set
-                    #TODO: Error check this
                     # Fetch setFiles from server via API
-                    resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="getResults", query=list(transactionId=transactionId, setName=i))
+                    resp <- NULL
+                    tryResults <- tryCatch({
+                        resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="getResults", query=list(transactionId=transactionId, setName=i))
+                        TRUE
+                    }, error=function(cond){
+                        return(FALSE)
+                    })
+                    if(!tryResults){
+                        showNotification("Error: The application cannot connect to the Tox21 Enricher server. Please try again later.", type="error")
+                        return(FALSE)
+                    }
+                    
                     #TODO: error check
                     if(resp$status_code != 200){
                         return(NULL)
@@ -2851,7 +2903,7 @@ shinyServer(function(input, output, session) {
                             # Create directory for request
                             dir.create(paste0(tempdir(), "/input/"))
                             dir.create(paste0(tempdir(), "/input/", transactionId, "/"))
-                            tryInputDL <- NULL
+                            tryInputDL <- TRUE
                             if(!file.exists(paste0(tempdir(), "/input/", transactionId, "/", i, ".txt"))){
                                 tryInputDL <- tryCatch({
                                     download.file(paste0("http://", API_HOST, ":", API_PORT, "/serveFileText?transactionId=", transactionId, "&filename=", i, ".txt&subDir=Input"), destfile=paste0(tempdir(), "/input/", transactionId, "/", i, ".txt"))
@@ -2903,7 +2955,7 @@ shinyServer(function(input, output, session) {
                             # Create directory for request
                             dir.create(paste0(tempdir(), "/output/"))
                             dir.create(paste0(tempdir(), "/output/", transactionId, "/"))
-                            tryChartDL <- NULL
+                            tryChartDL <- TRUE
                             if(!file.exists(paste0(tempdir(), "/output/", transactionId, "/", i, "__Chart.txt"))){
                                 tryChartDL <- tryCatch({
                                     download.file(paste0("http://", API_HOST, ":", API_PORT, "/serveFileText?transactionId=", transactionId, "&filename=", i, "__Chart.txt&subDir=Output"), destfile=paste0(tempdir(), "/output/", transactionId, "/", i, "__Chart.txt"))
@@ -2949,21 +3001,6 @@ shinyServer(function(input, output, session) {
                             }
                         }, ignoreInit=TRUE)
                     }
-
-                    ## Chart.xlsx
-                    #if(is.null(setFilesObservers$observers[[paste0("chartXlsxObserver__", i)]])){
-                    #    setFilesObservers$observers[[paste0("chartXlsxObserver__", i)]] <- observeEvent(input[[paste0(i, "__Chart.xlsx__link")]], {
-                    #        # Create directory for request
-                    #        dir.create(paste0(tempdir(), "/output/"))
-                    #        dir.create(paste0(tempdir(), "/output/", transactionId, "/"))
-                    #        if(!file.exists(paste0(tempdir(), "/output/", transactionId, "/", i, "__Chart.xlsx"))){
-                    #            # TODO: error check if download fails
-                    #            download.file(paste0("http://", API_HOST, ":", API_PORT, "/serveFileText?transactionId=", transactionId, "&filename=", i, "__Chart.xlsx&subDir=Output"), destfile=paste0(tempdir(), "/output/", transactionId, "/", i, "__Chart.xlsx"))
-                    #        }
-                    #        # Next, use custom JavaScript to open manual from disk in new tab
-                    #        js$browseURL(paste0(tempdir(), "/output/", transactionId, "/", i, "__Chart.xlsx"))
-                    #    }, ignoreInit=TRUE)
-                    #}
                     
                     # ChartSimple.txt
                     if(is.null(setFilesObservers$observers[[paste0("chartSimpleTxtObserver__", i)]])){
@@ -2971,7 +3008,7 @@ shinyServer(function(input, output, session) {
                             # Create directory for request
                             dir.create(paste0(tempdir(), "/output/"))
                             dir.create(paste0(tempdir(), "/output/", transactionId, "/"))
-                            tryChartSimpleDL <- NULL
+                            tryChartSimpleDL <- TRUE
                             if(!file.exists(paste0(tempdir(), "/output/", transactionId, "/", i, "__ChartSimple.txt"))){
                                 tryChartSimpleDL <- tryCatch({
                                     download.file(paste0("http://", API_HOST, ":", API_PORT, "/serveFileText?transactionId=", transactionId, "&filename=", i, "__ChartSimple.txt&subDir=Output"), destfile=paste0(tempdir(), "/output/", transactionId, "/", i, "__ChartSimple.txt"))
@@ -2979,6 +3016,7 @@ shinyServer(function(input, output, session) {
                                     return(NULL)
                                 })
                             }
+                            
                             if(is.null(tryChartSimpleDL)){
                                 showNotification("Error: The application cannot connect to the Tox21 Enricher server. Please try again later.", type="error")
                             } else {
@@ -3018,28 +3056,13 @@ shinyServer(function(input, output, session) {
                         }, ignoreInit=TRUE)
                     }
                     
-                    ## ChartSimple.xlsx
-                    #if(is.null(setFilesObservers$observers[[paste0("chartSimpleXlsxObserver__", i)]])){
-                    #    setFilesObservers$observers[[paste0("chartSimpleXlsxObserver__", i)]] <- observeEvent(input[[paste0(i, "__ChartSimple.xlsx__link")]], {
-                    #        # Create directory for request
-                    #        dir.create(paste0(tempdir(), "/output/"))
-                    #        dir.create(paste0(tempdir(), "/output/", transactionId, "/"))
-                    #        if(!file.exists(paste0(tempdir(), "/output/", transactionId, "/", i, "__ChartSimple.xlsx"))){
-                    #            # TODO: error check if download fails
-                    #            download.file(paste0("http://", API_HOST, ":", API_PORT, "/serveFileText?transactionId=", transactionId, "&filename=", i, "__ChartSimple.xlsx&subDir=Output"), destfile=paste0(tempdir(), "/output/", transactionId, "/", i, "__ChartSimple.xlsx"))
-                    #        }
-                    #        # Next, use custom JavaScript to open manual from disk in new tab
-                    #        js$browseURL(paste0(tempdir(), "/output/", transactionId, "/", i, "__ChartSimple.xlsx"))
-                    #    }, ignoreInit=TRUE)
-                    #}
-                    
                     # Cluster.txt
                     if(is.null(setFilesObservers$observers[[paste0("clusterTxtObserver__", i)]])){
                         setFilesObservers$observers[[paste0("clusterTxtObserver__", i)]] <- observeEvent(input[[paste0(i, "__Cluster.txt__link")]], {
                             # Create directory for request
                             dir.create(paste0(tempdir(), "/output/"))
                             dir.create(paste0(tempdir(), "/output/", transactionId, "/"))
-                            tryClusterDL <- NULL
+                            tryClusterDL <- TRUE
                             if(!file.exists(paste0(tempdir(), "/output/", transactionId, "/", i, "__Cluster.txt"))){
                                 tryClusterDL <- tryCatch({
                                     download.file(paste0("http://", API_HOST, ":", API_PORT, "/serveFileText?transactionId=", transactionId, "&filename=", i, "__Cluster.txt&subDir=Output"), destfile=paste0(tempdir(), "/output/", transactionId, "/", i, "__Cluster.txt"))
@@ -3145,29 +3168,14 @@ shinyServer(function(input, output, session) {
                             }
                         }, ignoreInit=TRUE)
                     }
-                    
-                    ## Cluster.xlsx
-                    #if(is.null(setFilesObservers$observers[[paste0("clusterXlsxObserver__", i)]])){
-                    #    setFilesObservers$observers[[paste0("clusterXlsxObserver__", i)]] <- observeEvent(input[[paste0(i, "__Cluster.xlsx__link")]], {
-                    #        # Create directory for request
-                    #        dir.create(paste0(tempdir(), "/output/"))
-                    #        dir.create(paste0(tempdir(), "/output/", transactionId, "/"))
-                    #        if(!file.exists(paste0(tempdir(), "/output/", transactionId, "/", i, "__Cluster.xlsx"))){
-                    #            # TODO: error check if download fails
-                    #            download.file(paste0("http://", API_HOST, ":", API_PORT, "/serveFileText?transactionId=", transactionId, "&filename=", i, "__Cluster.xlsx&subDir=Output"), destfile=paste0(tempdir(), "/output/", transactionId, "/", i, "__Cluster.xlsx"))
-                    #        }
-                    #        # Next, use custom JavaScript to open manual from disk in new tab
-                    #        js$browseURL(paste0(tempdir(), "/output/", transactionId, "/", i, "__Cluster.xlsx"))
-                    #    }, ignoreInit=TRUE)
-                    #}
-                    
+
                     # Matrix.txt
                     if(is.null(setFilesObservers$observers[[paste0("matrixObserver__", i)]])){
                         setFilesObservers$observers[[paste0("matrixObserver__", i)]] <- observeEvent(input[[paste0(i, "__Matrix.txt__link")]], {
                             # Create directory for request
                             dir.create(paste0(tempdir(), "/output/"))
                             dir.create(paste0(tempdir(), "/output/", transactionId, "/"))
-                            tryMatrixDL <- NULL
+                            tryMatrixDL <- TRUE
                             if(!file.exists(paste0(tempdir(), "/output/", transactionId, "/", i, "__Matrix.txt"))){
                                 tryMatrixDL <- tryCatch({
                                     download.file(paste0("http://", API_HOST, ":", API_PORT, "/serveFileText?transactionId=", transactionId, "&filename=", i, "__Matrix.txt&subDir=Output"), destfile=paste0(tempdir(), "/output/", transactionId, "/", i, "__Matrix.txt"))
@@ -3222,7 +3230,7 @@ shinyServer(function(input, output, session) {
                             # Create directory for request
                             dir.create(paste0(tempdir(), "/output/"))
                             dir.create(paste0(tempdir(), "/output/", transactionId, "/"))
-                            tryErrorDL <- NULL
+                            tryErrorDL <- TRUE
                             if(!file.exists(paste0(tempdir(), "/output/", transactionId, "/", i, "__ErrorCASRNs.txt"))){
                                 tryErrorDL <- tryCatch({
                                     download.file(paste0("http://", API_HOST, ":", API_PORT, "/serveFileText?transactionId=", transactionId, "&filename=", i, "__ErrorCASRNs.txt&subDir=Output"), destfile=paste0(tempdir(), "/output/", transactionId, "/", i, "__ErrorCASRNs.txt"))
@@ -3284,47 +3292,35 @@ shinyServer(function(input, output, session) {
                                         # If input file
                                         tooltipToUse <- ""
                                         if(resultFile == paste0(inDirWeb, i, ".txt")) {
-                                            column(12, id=paste0(unlist(str_split(resultFile, inDirWeb))[2]),
+                                            fluidRow(
                                                 # Add tooltips
                                                 # Input
                                                 if(paste0(unlist(str_split(resultFile, inDirWeb))[2]) == paste0(i, ".txt")){
-                                                    tipify( div(actionLink(inputId=paste0(i, "__", i, ".txt__link"), label=paste0(unlist(str_split(unlist(str_split(resultFile, inDirWeb))[2], ".txt"))[1], " Input"))), "A list of input chemicals for this set (.txt format).", placement="bottom")
+                                                    column(3, id=paste0(unlist(str_split(resultFile, inDirWeb))[2]), tipify( div(actionLink(inputId=paste0(i, "__", i, ".txt__link"), label=paste0(unlist(str_split(unlist(str_split(resultFile, inDirWeb))[2], ".txt"))[1], " Input"))), "A list of input chemicals for this set (.txt format).", placement="right") )
                                                 }
                                             )
                                         } else {
-                                            column(12, id=paste0(unlist(str_split(resultFile, outDirWeb))[2]), 
+                                            fluidRow(
                                                 # Add links to result files with corresponding tooltips
                                                 # Chart.txt
                                                 if(paste0(unlist(str_split(resultFile, outDirWeb))[2]) == paste0(i, "__Chart.txt")){
-                                                    tipify( div(actionLink(inputId=paste0(i, "__Chart.txt__link"), label=paste0(gsub(".txt", "", gsub("__", " ", unlist(str_split(resultFile, outDirWeb))[2]))))), "A list of all significant annotations (.txt format).", placement="bottom")
+                                                    column(3, id=paste0(unlist(str_split(resultFile, outDirWeb))[2]), tipify( div(actionLink(inputId=paste0(i, "__Chart.txt__link"), label=paste0(gsub(".txt", "", gsub("__", " ", unlist(str_split(resultFile, outDirWeb))[2]))))), "A list of all significant annotations (.txt format).", placement="right") )
                                                 },
-                                                # Chart.xlsx
-                                                #if(paste0(unlist(str_split(resultFile, outDirWeb))[2]) == paste0(i, "__Chart.xlsx")){
-                                                #    tipify( div(actionLink(inputId=paste0(i, "__Chart.xlsx__link"), label=paste0(unlist(str_split(resultFile, outDirWeb))[2]))), "A list of all significant annotations (.xlsx format).", placement="bottom")
-                                                #},
                                                 # ChartSimple.txt
                                                 if(paste0(unlist(str_split(resultFile, outDirWeb))[2]) == paste0(i, "__ChartSimple.txt")){
-                                                    tipify( div(actionLink(inputId=paste0(i, "__ChartSimple.txt__link"), label=paste0(gsub("ChartSimple", "Chart Simple", gsub(".txt", "", gsub("__", " ", unlist(str_split(resultFile, outDirWeb))[2])))))), "A list of the top N most significant annotations for each annotation class, where N is the specified cutoff value (.txt format).", placement="bottom")
+                                                    column(3, id=paste0(unlist(str_split(resultFile, outDirWeb))[2]), tipify( div(actionLink(inputId=paste0(i, "__ChartSimple.txt__link"), label=paste0(gsub("ChartSimple", "Chart Simple", gsub(".txt", "", gsub("__", " ", unlist(str_split(resultFile, outDirWeb))[2])))))), "A list of the top N most significant annotations for each annotation class, where N is the specified cutoff value (.txt format).", placement="right") )
                                                 },
-                                                # ChartSimple.xlsx
-                                                #if(paste0(unlist(str_split(resultFile, outDirWeb))[2]) == paste0(i, "__ChartSimple.xlsx")){
-                                                #    tipify( div(actionLink(inputId=paste0(i, "__ChartSimple.xlsx__link"), label=paste0(unlist(str_split(resultFile, outDirWeb))[2]))), "A list of the top N most significant annotations for each annotation class, where N is the specified cutoff value (.xlsx format).", placement="bottom")
-                                                #},
                                                 # Cluster.txt
                                                 if(paste0(unlist(str_split(resultFile, outDirWeb))[2]) == paste0(i, "__Cluster.txt")){
-                                                    tipify( div(actionLink(inputId=paste0(i, "__Cluster.txt__link"), label=paste0(gsub(".txt", "", gsub("__", " ", unlist(str_split(resultFile, outDirWeb))[2]))))), "A list of significant terms in which functionally similar annotations are grouped together to remove redundancy. This is performed with respect to the whole annotation set rather than to individual annotation classes (.txt format).", placement="bottom")
+                                                    column(3, id=paste0(unlist(str_split(resultFile, outDirWeb))[2]), tipify( div(actionLink(inputId=paste0(i, "__Cluster.txt__link"), label=paste0(gsub(".txt", "", gsub("__", " ", unlist(str_split(resultFile, outDirWeb))[2]))))), "A list of significant terms in which functionally similar annotations are grouped together to remove redundancy. This is performed with respect to the whole annotation set rather than to individual annotation classes (.txt format).", placement="right") )
                                                 },
-                                                # Cluster.xlsx
-                                                #if(paste0(unlist(str_split(resultFile, outDirWeb))[2]) == paste0(i, "__Cluster.xlsx")){
-                                                #    tipify( div(actionLink(inputId=paste0(i, "__Cluster.xlsx__link"), label=paste0(unlist(str_split(resultFile, outDirWeb))[2]))), "A list of significant terms in which functionally similar annotations are grouped together to remove redundancy. This is performed with respect to the whole annotation set rather than to individual annotation classes (.xlsx format).", placement="bottom")
-                                                #},
                                                 # Matrix
                                                 if(paste0(unlist(str_split(resultFile, outDirWeb))[2]) == paste0(i, "__Matrix.txt")){
-                                                    tipify( div(actionLink(inputId=paste0(i, "__Matrix.txt__link"), label=paste0(gsub(".txt", "", gsub("__", " ", unlist(str_split(resultFile, outDirWeb))[2]))))), "A text representation of the heatmap (.txt format).", placement="bottom")
+                                                    column(3, id=paste0(unlist(str_split(resultFile, outDirWeb))[2]), tipify( div(actionLink(inputId=paste0(i, "__Matrix.txt__link"), label=paste0(gsub(".txt", "", gsub("__", " ", unlist(str_split(resultFile, outDirWeb))[2]))))), "A text representation of the heatmap (.txt format).", placement="right") )
                                                 },
                                                 # Error CASRNs list
                                                 if(paste0(unlist(str_split(resultFile, outDirWeb))[2]) == paste0(i, "__ErrorCASRNs.txt")){
-                                                    tipify( div(actionLink(inputId=paste0(i, "__ErrorCASRNs.txt__link"), label=paste0(gsub("ErrorCASRNs", "Error CASRNs", gsub(".txt", "", gsub("__", " ", unlist(str_split(resultFile, outDirWeb))[2])))))), "A list of submitted CASRNs that were not found in the Tox21 Enricher database (.txt format).", placement="bottom")
+                                                    column(3, id=paste0(unlist(str_split(resultFile, outDirWeb))[2]), tipify( div(actionLink(inputId=paste0(i, "__ErrorCASRNs.txt__link"), label=paste0(gsub("ErrorCASRNs", "Error CASRNs", gsub(".txt", "", gsub("__", " ", unlist(str_split(resultFile, outDirWeb))[2])))))), "A list of submitted CASRNs that were not found in the Tox21 Enricher database (.txt format).", placement="right") )
                                                 }
                                             )
                                         }
@@ -3418,7 +3414,19 @@ shinyServer(function(input, output, session) {
                         return(paste0(reenrichResults[[i]][x, "casrn"], "__", reenrichResults[[i]][x, "m"]))
                     }))
                     resultImagesSVG <- paste0(resultImagesSVG, collapse="\n")
-                    resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="generateStructures", query=list(input=resultImagesSVG))
+                    # Get SVG images from server
+                    resp <- NULL
+                    trySVG <- tryCatch({
+                        resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="generateStructures", query=list(input=resultImagesSVG))
+                        TRUE
+                    }, error=function(cond){
+                        return(FALSE)
+                    })
+                    if(!trySVG){
+                        showNotification("Error: The application cannot connect to the Tox21 Enricher server. Please try again later.", type="error")
+                        return(FALSE)
+                    }
+                    
                     structuresSvg <- content(resp)
                     resultImages <- lapply(reenrichResults[[i]][, "casrn"], function(casrnName) {
                         # Note: this is kind of a hacky way to resize the SVG images generated by rdkit, but it works...
@@ -3445,7 +3453,17 @@ shinyServer(function(input, output, session) {
 
                     # Get additional information for each CASRN from database and add to table
                     expandedInfo <- t(vapply(reenrichResults[[i]][, "casrn"], function(casrn){
-                        resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="casrnData", query=list(input=casrn))
+                        resp <- NULL
+                        tryCasrn <- tryCatch({
+                            resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="casrnData", query=list(input=casrn))
+                            TRUE
+                        }, error=function(cond){
+                            return(FALSE)
+                        })
+                        if(!tryCasrn){
+                            showNotification("Error: The application cannot connect to the Tox21 Enricher server. Please try again later.", type="error")
+                            return(FALSE)
+                        }
                         if(resp$status_code != 200){
                             return(NULL)
                         }
@@ -3592,8 +3610,18 @@ shinyServer(function(input, output, session) {
                         return(NULL)
                     }))
                     originalInputStr <- originalInputStr[!vapply(originalInputStr, is.null, FUN.VALUE=logical(1))]
+                    resp <- NULL
+                    tryReactive <- tryCatch({
+                        resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="reactiveGroups", query=list(input=originalInputStr))
+                        TRUE
+                    }, error=function(cond){
+                        return(FALSE)
+                    })
+                    if(!tryReactive){
+                        showNotification("Error: The application cannot connect to the Tox21 Enricher server. Please try again later.", type="error")
+                        return(FALSE)
+                    }
                     
-                    resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="reactiveGroups", query=list(input=originalInputStr))
                     if(resp$status_code != 200){
                         return(NULL)
                     }
@@ -3767,8 +3795,7 @@ shinyServer(function(input, output, session) {
                     # Re-enrichment cutoff slider
                     column(12,
                         h3("Adjust Network Node Cutoff"),
-                        bsTooltip(id="nodeCutoffRe", title="This will determine the maximum number of results per data set and may affect how many nodes are generated during network generation. (default=10). Higher values may cause the enrichment process to take longer (Not available when viewing annotations for Tox21 chemicals).", placement="bottom", trigger="hover"),
-                        sliderInput(inputId="nodeCutoffRe", label="Re-enrichment Cutoff", value=10, min=1, max=50, step=1, width="100%")
+                        tipify(sliderInput(inputId="nodeCutoffRe", label="Re-enrichment Cutoff", value=10, min=1, max=50, step=1, width="100%"), "This will determine the maximum number of results per data set and may affect how many nodes are generated during network generation. (default=10). Higher values may cause the enrichment process to take longer (Not available when viewing annotations for Tox21 chemicals).", placement="bottom")
                     ),
                     hr()
                 )
@@ -3825,7 +3852,18 @@ shinyServer(function(input, output, session) {
             
             # Query API to read in gct file
             # Fetch setFiles from server via API
-            resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="readGct", query=list(transactionId=transactionId, cutoff=cutoff, mode="chart"))
+            resp <- NULL
+            tryGCT <- tryCatch({
+                resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="readGct", query=list(transactionId=transactionId, cutoff=cutoff, mode="chart"))
+                TRUE
+            }, error=function(cond){
+                return(FALSE)
+            })
+            if(!tryGCT){
+                showNotification("Error: The application cannot connect to the Tox21 Enricher server. Please try again later.", type="error")
+                return(FALSE)
+            }
+            
             #TODO: error check
             if(resp$status_code != 200){
                 # Hide results container
@@ -3892,7 +3930,18 @@ shinyServer(function(input, output, session) {
           
             # Query API to read in gct file
             # Fetch setFiles from server via API
-            resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="readGct", query=list(transactionId=transactionId, cutoff=cutoff, mode="cluster"))
+            resp <- NULL
+            tryGCT <- tryCatch({
+                resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="readGct", query=list(transactionId=transactionId, cutoff=cutoff, mode="cluster"))
+                TRUE
+            }, error=function(cond){
+                return(FALSE)
+            })
+            if(!tryGCT){
+                showNotification("Error: The application cannot connect to the Tox21 Enricher server. Please try again later.", type="error")
+                return(FALSE)
+            }
+            
             #TODO: error check
             if(resp$status_code != 200){
                 #return(NULL)
@@ -4003,7 +4052,7 @@ shinyServer(function(input, output, session) {
                                 hidden(
                                     fluidRow(id="nodeLinkChartMenu",
                                         column(12, 
-                                            uiOutput("nodeLinkChart")       
+                                            uiOutput("nodeLinkChart")
                                         )
                                     )
                                 ),
@@ -4057,7 +4106,7 @@ shinyServer(function(input, output, session) {
                                 hidden(
                                     fluidRow(id="nodeLinkClusterMenu",
                                         column(12, 
-                                            uiOutput("nodeLinkCluster")       
+                                            uiOutput("nodeLinkCluster")
                                         )
                                     )
                                 ),
@@ -4069,7 +4118,7 @@ shinyServer(function(input, output, session) {
                                         column(8,
                                             plotOutput(
                                                 outputId="vennCluster"
-                                            ) %>% withSpinner()       
+                                            ) %>% withSpinner()
                                         )
                                     )
                                 )
@@ -4092,7 +4141,18 @@ shinyServer(function(input, output, session) {
 
             # Create bar graph 
             # Query API to get chart simple
-            resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="bargraph", query=list(transactionId=transactionId))
+            resp <- NULL
+            tryBargraph <- tryCatch({
+                resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="bargraph", query=list(transactionId=transactionId))
+                TRUE
+            }, error=function(cond){
+                return(FALSE)
+            })
+            if(!tryBargraph){
+                showNotification("Error: The application cannot connect to the Tox21 Enricher server. Please try again later.", type="error")
+                return(FALSE)
+            }
+            
             #TODO: error check
             if(resp$status_code != 200){
                 #return(NULL)
@@ -4385,7 +4445,17 @@ shinyServer(function(input, output, session) {
     generateNetwork <- function(transactionId, cutoff, networkMode, inputNetwork, qval, physicsEnabled=FALSE, smoothCurve=TRUE, keep=list()){
         inputNetwork <- paste0(inputNetwork, collapse="#")
         # Error handling
-        resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="generateNetwork", query=list(transactionId=transactionId, cutoff=cutoff, mode=networkMode, input=inputNetwork, qval=qval))
+        resp <- NULL
+        tryNetwork <- tryCatch({
+            resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="generateNetwork", query=list(transactionId=transactionId, cutoff=cutoff, mode=networkMode, input=inputNetwork, qval=qval))
+            TRUE
+        }, error=function(cond){
+            return(FALSE)
+        })
+        if(!tryNetwork){
+            showNotification("Error: The application cannot connect to the Tox21 Enricher server. Please try again later.", type="error")
+            return(FALSE)
+        }
         #TODO: error check
         if(resp$status_code != 200){
             return(HTML("<p class=\"text-danger\"><b>Error:</b> An error occurred while generating the network.</p>"))
@@ -4514,7 +4584,18 @@ shinyServer(function(input, output, session) {
         networkMode <- unlist(str_split(input$selectNode$nodes[[1]], "_@_"))[3]
       
         # Get link for node annotation details
-        resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="getNodeDetails", query=list(class=selectedNodeClass))
+        resp <- NULL
+        tryNode <- tryCatch({
+            resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="getNodeDetails", query=list(class=selectedNodeClass))
+            TRUE
+        }, error=function(cond){
+            return(FALSE)
+        })
+        if(!tryNode){
+            showNotification("Error: The application cannot connect to the Tox21 Enricher server. Please try again later.", type="error")
+            return(FALSE)
+        }
+        
         if(resp$status_code != 200){
             if(networkMode == "chart") {
                 output[["nodeLinkChart"]] <- renderUI({
@@ -4582,7 +4663,18 @@ shinyServer(function(input, output, session) {
             classTo <- tmpTo[2]
     
             # Get overlapping chemicals
-            resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="getNodeChemicals", query=list( termFrom=termFrom, termTo=termTo, classFrom=classFrom, classTo=classTo ))
+            resp <- NULL
+            tryNode <- tryCatch({
+                resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="getNodeChemicals", query=list( termFrom=termFrom, termTo=termTo, classFrom=classFrom, classTo=classTo ))
+                TRUE
+            }, error=function(cond){
+                return(FALSE)
+            })
+            if(!tryNode){
+                showNotification("Error: The application cannot connect to the Tox21 Enricher server. Please try again later.", type="error")
+                return(FALSE)
+            }
+            
             if(resp$status_code != 200){
                 output[["vennChart"]] <- renderPlot({
                     #  HTML("<p class=\"text-danger\"><b>Error:</b> An error occurred while fetching the chemicals.</p>")
@@ -4692,7 +4784,6 @@ shinyServer(function(input, output, session) {
                         )
                     )
                 })
-              
                 # Create observers for Venn Diagram buttons
                 observeEvent(input$vennFromButtonChart, {
                     showModal(
@@ -4728,7 +4819,6 @@ shinyServer(function(input, output, session) {
                 observeEvent(input$vennToButtonCloseChart, {
                     removeModal()
                 })
-              
                 observeEvent(input$vennSharedButtonChart, {
                     showModal(
                         modalDialog(
@@ -4746,7 +4836,6 @@ shinyServer(function(input, output, session) {
                 observeEvent(input$vennSharedButtonCloseChart, {
                     removeModal()
                 })
-              
                 output$vennChartDownloadImg <- downloadHandler(
                     filename=paste0("venndiagram.png"),
                     content=function(file){
@@ -4807,7 +4896,6 @@ shinyServer(function(input, output, session) {
                 observeEvent(input$vennFromButtonCloseCluster, {
                     removeModal()
                 })
-            
                 observeEvent(input$vennToButtonCluster, {
                     showModal(
                         modalDialog(
@@ -4825,7 +4913,6 @@ shinyServer(function(input, output, session) {
                 observeEvent(input$vennToButtonCloseCluster, {
                   removeModal()
                 })
-            
                 observeEvent(input$vennSharedButtonCluster, {
                     showModal(
                         modalDialog(
@@ -4843,14 +4930,12 @@ shinyServer(function(input, output, session) {
                 observeEvent(input$vennSharedButtonCloseCluster, {
                     removeModal()
                 })
-            
                 output$vennClusterDownloadImg <- downloadHandler(
                     filename=paste0("venndiagram.png"),
                     content=function(file){
                         ggsave(file, plot=vennDiagramPlot)
                     }
                 )
-                
                 output$vennClusterDownloadPdf <- downloadHandler(
                     filename=paste0("venndiagram.pdf"),
                     content=function(file){
@@ -4922,7 +5007,18 @@ shinyServer(function(input, output, session) {
     
     # Generate specific colors for annotation classes in network
     generateAnnoClassColors <- function() {
-        resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="getNodeColors")
+        resp <- NULL
+        tryColor <- tryCatch({
+            resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="getNodeColors")
+            TRUE
+        }, error=function(cond){
+            return(FALSE)
+        })
+        if(!tryColor){
+            showNotification("Error: The application cannot connect to the Tox21 Enricher server. Please try again later.", type="error")
+            return(FALSE)
+        }
+        
         if(resp$status_code != 200){
             return(list())
         } else {

@@ -44,11 +44,13 @@ services:
      - "9000"
      #network_mode: host
 
-    # Tox21 Enricher queue
-    queue:
-      image: tox21enricher/queue
-      volumes:
-       - /home/parker/tox21enricher/Input/:/home/parker/tox21enricher/Input/
-       - /home/parker/tox21enricher/Output/:/home/parker/tox21enricher/Output/
-       - /home/parker/anaconda3/:/home/parker/anaconda3/
-      restart: always
+  # Tox21 Enricher queue
+  queue:
+    image: tox21enricher/queue
+    # (***) Replace "username" and "project_root" in the paths of the three shared volumes with the correct paths to Tox21 Enricher's Input/ and Output/ directories, as well as your Andaconda installation.
+    # (***) The path to the left of the colon is the host path; the path to the right of the colon is the quest path
+    volumes:
+     - /home/username/project_root/Input/:/home/username/project_root/Input/
+     - /home/username/project_root/Output/:/home/username/project_root/Output/
+     - /home/username/anaconda3/:/home/username/anaconda3/
+    restart: always

@@ -31,11 +31,14 @@ RUN apt-get update && \
     "libpq-dev" \
     # Install libz-dev, which is required to install the haven package, which is a dependency of the tidyverse package
     "libz-dev" \
-    # Install Java and some additional libraries, which are required to install rJava and xlsxjars, which are dependencies for the xlsx package
-    "openjdk-11-jdk" \
     "r-base-dev" \
     "libpcre2-dev" \
-    "libbz2-dev"
+    "libbz2-dev" \
+    # Install cURL and libssl-dev, which are required for the httr library.
+    "libssl-dev" \
+    "curl" \
+    "libcurl4-openssl-dev" \
+    "libxml2-dev"
 
 # Install necessary R packages from source
 # Set HOME environment variable again (this is required for COPY to work correctly)
@@ -59,14 +62,8 @@ USER username
     COPY ./config.yml $HOME/tox21enricher/config.yml
     # Copy API .R file from local filesystem to image
     COPY ./plumber.R $HOME/tox21enricher/plumber.R
-    # Copy HClusterLibrary directory from local filesystem to image and set permissions on executables
-    COPY ./HClusterLibrary/ $HOME/tox21enricher/HClusterLibrary/
     # Copy Python script
     COPY ./calcReactiveGroups.py $HOME/tox21enricher/calcReactiveGroups.py
-
-    USER root
-    RUN chmod +x $HOME/tox21enricher/HClusterLibrary/clusterLinux64
-    RUN chmod +x $HOME/tox21enricher/HClusterLibrary/hclimage-o.jar
 
     # (***) Replace "username" with the name of the user you want to run the API in the Docker Container.
     USER username
