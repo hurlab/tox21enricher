@@ -87,9 +87,8 @@ queue <- function(mode="", enrichmentUUID="-1", annoSelectStr="MESH=checked,PHAR
 #* @param reenrich
 #* @param color
 #* @param timestampPosted
-#* @param apikey
 #* @get /createTransaction
-createTransaction <- function(originalMode="", mode="", uuid="-1", annoSelectStr="MESH=checked,PHARMACTIONLIST=checked,ACTIVITY_CLASS=checked,ADVERSE_EFFECT=checked,INDICATION=checked,KNOWN_TOXICITY=checked,MECH_LEVEL_1=checked,MECH_LEVEL_2=checked,MECH_LEVEL_3=checked,MECHANISM=checked,MODE_CLASS=checked,PRODUCT_CLASS=checked,STRUCTURE_ACTIVITY=checked,TA_LEVEL_1=checked,TA_LEVEL_2=checked,TA_LEVEL_3=checked,THERAPEUTIC_CLASS=checked,TISSUE_TOXICITY=checked,DRUGBANK_ATC=checked,DRUGBANK_ATC_CODE=checked,DRUGBANK_CARRIERS=checked,DRUGBANK_ENZYMES=checked,DRUGBANK_TARGETS=checked,DRUGBANK_TRANSPORTERS=checked,CTD_CHEM2DISEASE=checked,CTD_CHEM2GENE_25=checked,CTD_CHEMICALS_DISEASES=checked,CTD_CHEMICALS_GENES=checked,CTD_CHEMICALS_GOENRICH_CELLCOMP=checked,CTD_CHEMICALS_GOENRICH_MOLFUNCT=checked,CTD_CHEMICALS_PATHWAYS=checked,CTD_GOSLIM_BIOPROCESS=checked,CTD_PATHWAY=checked,HTS_ACTIVE=checked,LEADSCOPE_TOXICITY=checked,MULTICASE_TOX_PREDICTION=checked,TOXCAST_ACTIVE=checked,TOXINS_TARGETS=checked,TOXPRINT_STRUCTURE=checked,TOXREFDB=checked,", cutoff=10, input, originalNames, reenrich="", color, timestampPosted, apikey){
+createTransaction <- function(originalMode="", mode="", uuid="-1", annoSelectStr="MESH=checked,PHARMACTIONLIST=checked,ACTIVITY_CLASS=checked,ADVERSE_EFFECT=checked,INDICATION=checked,KNOWN_TOXICITY=checked,MECH_LEVEL_1=checked,MECH_LEVEL_2=checked,MECH_LEVEL_3=checked,MECHANISM=checked,MODE_CLASS=checked,PRODUCT_CLASS=checked,STRUCTURE_ACTIVITY=checked,TA_LEVEL_1=checked,TA_LEVEL_2=checked,TA_LEVEL_3=checked,THERAPEUTIC_CLASS=checked,TISSUE_TOXICITY=checked,DRUGBANK_ATC=checked,DRUGBANK_ATC_CODE=checked,DRUGBANK_CARRIERS=checked,DRUGBANK_ENZYMES=checked,DRUGBANK_TARGETS=checked,DRUGBANK_TRANSPORTERS=checked,CTD_CHEM2DISEASE=checked,CTD_CHEM2GENE_25=checked,CTD_CHEMICALS_DISEASES=checked,CTD_CHEMICALS_GENES=checked,CTD_CHEMICALS_GOENRICH_CELLCOMP=checked,CTD_CHEMICALS_GOENRICH_MOLFUNCT=checked,CTD_CHEMICALS_PATHWAYS=checked,CTD_GOSLIM_BIOPROCESS=checked,CTD_PATHWAY=checked,HTS_ACTIVE=checked,LEADSCOPE_TOXICITY=checked,MULTICASE_TOX_PREDICTION=checked,TOXCAST_ACTIVE=checked,TOXINS_TARGETS=checked,TOXPRINT_STRUCTURE=checked,TOXREFDB=checked,", cutoff=10, input, originalNames, reenrich="", color, timestampPosted){
     # Connect to db
     poolTransaction <- dbPool(
         drv=dbDriver("PostgreSQL", max.con=100),
@@ -101,40 +100,17 @@ createTransaction <- function(originalMode="", mode="", uuid="-1", annoSelectStr
         idleTimeout=3600000
     )
     # Update database with transaction entry
-    query <- sqlInterpolate(ANSI(), paste0("INSERT INTO transaction(original_mode, mode, uuid, annotation_selection_string, cutoff, input, original_names, reenrich, colors, timestamp_posted, delete, key) VALUES('", originalMode, "', '", mode, "', '", uuid, "', '", annoSelectStr, "', '", cutoff, "', '", input, "', '", originalNames, "', '", reenrich, "', '", color, "', '", timestampPosted, "', 0, '", apikey, "');"), id="createTransactionEntry")
+    query <- sqlInterpolate(ANSI(), paste0("INSERT INTO transaction(original_mode, mode, uuid, annotation_selection_string, cutoff, input, original_names, reenrich, colors, timestamp_posted) VALUES('", originalMode, "', '", mode, "', '", uuid, "', '", annoSelectStr, "', '", cutoff, "', '", input, "', '", originalNames, "', '", reenrich, "', '", color, "', '", timestampPosted, "');"), id="createTransactionEntry")
     outp <- dbGetQuery(poolTransaction, query)
     # Close pool
     poolClose(poolTransaction)
     return(TRUE)
-}
-
-#* Get all transactions for a given key
-#* @param apikey
-#* @get /getTransactions
-getTransactions <- function(apikey){
-    # Connect to db
-    poolTransaction <- dbPool(
-        drv=dbDriver("PostgreSQL", max.con=100),
-        dbname=tox21queue$database,
-        host=tox21queue$host,
-        user=tox21queue$uid,
-        password=tox21queue$pwd,
-        port=tox21queue$port,
-        idleTimeout=3600000
-    )
-    # Update database with transaction entry
-    query <- sqlInterpolate(ANSI(), paste0("SELECT * FROM transaction WHERE key='", apikey, "' AND delete=0"), id="getTransactions")
-    outp <- dbGetQuery(poolTransaction, query)
-    # Close pool
-    poolClose(poolTransaction)
-    return(outp)
 }
 
 #* Load details for the selected transaction
-#* @param apikey
 #* @param uuid
 #* @get /loadTransaction
-loadTransaction <- function(apikey, uuid){
+loadTransaction <- function(uuid){
     # Connect to db
     poolTransaction <- dbPool(
         drv=dbDriver("PostgreSQL", max.con=100),
@@ -146,37 +122,11 @@ loadTransaction <- function(apikey, uuid){
         idleTimeout=3600000
     )
     # Update database with transaction entry
-    query <- sqlInterpolate(ANSI(), paste0("SELECT * FROM transaction WHERE key='", apikey, "' AND uuid='", uuid, "'"), id="loadTransaction")
+    query <- sqlInterpolate(ANSI(), paste0("SELECT * FROM transaction WHERE uuid='", uuid, "';"), id="loadTransaction")
     outp <- dbGetQuery(poolTransaction, query)
     # Close pool
     poolClose(poolTransaction)
     return(outp)
-}
-
-#* Mark selected transactions for deletion
-#* @param selected
-#* @get /deleteTransactionSelected
-deleteTransactionSelected <- function(selected){
-    # Connect to db
-    poolTransaction <- dbPool(
-        drv=dbDriver("PostgreSQL", max.con=100),
-        dbname=tox21queue$database,
-        host=tox21queue$host,
-        user=tox21queue$uid,
-        password=tox21queue$pwd,
-        port=tox21queue$port,
-        idleTimeout=3600000
-    )
-    selectedSets <- unlist(str_split(selected, ","))
-    # Mark each set for deletion
-    lapply(selectedSets, function(x){
-        # Update database with transaction entry
-        query <- sqlInterpolate(ANSI(), paste0("UPDATE transaction SET delete=1 WHERE uuid='", x, "'"), id="markDelete")
-        outp <- dbGetQuery(poolTransaction, query)
-    })
-    # Close pool
-    poolClose(poolTransaction)
-    return(TRUE)
 }
 
 #* Get queue position for given enrichment request
@@ -335,35 +285,13 @@ cancelEnrichment <- function(res, req, transactionId){
         idleTimeout=3600000
     )
     # Update database to show that request was canceled
-    query <- sqlInterpolate(ANSI(), paste0("UPDATE enrichment_list SET timestamp_finish='cancelled' WHERE id='", transactionId, "';"), id="cancelEnrichment")
-    outp <- dbGetQuery(poolCancel, query)
     query <- sqlInterpolate(ANSI(), paste0("UPDATE queue SET cancel=1 WHERE uuid='", transactionId, "';"), id="cancelEnrichment")
+    outp <- dbGetQuery(poolCancel, query)
+    query <- sqlInterpolate(ANSI(), paste0("UPDATE transaction SET cancel=1 WHERE uuid='", transactionId, "';"), id="cancelEnrichment")
     outp <- dbGetQuery(poolCancel, query)
     # Close pool
     poolClose(poolCancel)
     return(TRUE)
-}
-
-#* Get timestamps for given enrichment
-#* @param transactionId
-#* @get /getTimestamp
-getTimestamp <- function(res, req, transactionId="-1"){
-    # Connect to db
-    poolUpdate <- dbPool(
-        drv=dbDriver("PostgreSQL", max.con=100),
-        dbname=tox21queue$database,
-        host=tox21queue$host,
-        user=tox21queue$uid,
-        password=tox21queue$pwd,
-        port=tox21queue$port,
-        idleTimeout=3600000
-    )
-    # update database with ending timestamp for enrichment
-    query <- sqlInterpolate(ANSI(), paste0("SELECT timestamp_start, timestamp_finish FROM enrichment_list WHERE id='", transactionId, "';"), id="getFromDb")
-    outp <- dbGetQuery(poolUpdate, query)
-    # Close pool
-    poolClose(poolUpdate)
-    return(outp)
 }
 
 ## SECTION 2: REQUIRED BY CLIENT APPLICATION INITIALIZATION
@@ -417,16 +345,16 @@ total <- function(res, req){
         port=tox21queue$port,
         idleTimeout=3600000
     )
-    totalQuery <- sqlInterpolate(ANSI(), "SELECT id, timestamp_start, timestamp_finish FROM enrichment_list;", id="getTotalEnrichment")
+    totalQuery <- sqlInterpolate(ANSI(), "SELECT uuid, timestamp_started, timestamp_finished FROM transaction WHERE cancel=0;", id="getTotalEnrichment")
     totalOutp <- dbGetQuery(poolTotal, totalQuery)
 
     # Extract current month
     currentDate <- unlist(str_split(Sys.time(), " "))[1]
     currentMonth <- unlist(str_split(currentDate, "-"))[2]
     # Get all finished requests for the month
-    finishedRequests <- totalOutp[, "timestamp_finish"]
-    finishedRequests<- unlist(lapply(finishedRequests, function(x){
-        if(!is.na(x) & x != "canceled"){
+    finishedRequests <- totalOutp[, "timestamp_finished"]
+    finishedRequests <- unlist(lapply(finishedRequests, function(x){
+        if(!is.na(x)){
             xDate <- unlist(str_split(x, " "))[1]
             xMonth <- unlist(str_split(xDate, "-"))[2]
             if(!is.na(xMonth) & xMonth == currentMonth){
@@ -631,7 +559,17 @@ serveManual <- function(res, req){
 checkId <- function(res, req){
     outDir <- paste0(APP_DIR, "/Output/")
     transactions <- Sys.glob(paste0(outDir, "*"))
-    return(transactions)
+    transactionId <- UUIDgenerate()
+    fullIDs <- unlist(transactions, recursive=FALSE)
+    fullIDs <- unlist(lapply(fullIDs, function(x){
+        # Get just the ID
+        return(unlist(str_split(x, "Output/"))[2])
+    }))
+    while(transactionId %in% fullIDs){
+        # Regenerate UUID
+        transactionId <- UUIDgenerate()
+    }
+    return(transactionId)
 }
 
 #* Create input files on filesystem
@@ -739,11 +677,9 @@ checkSets <- function(res, req, transactionId){
 #* @param transactionId UUID of the request
 #* @get /exists
 exists <- function(res, req, transactionId){
-    inDir <- paste0(APP_DIR, "Input/")
     outDir <- paste0(APP_DIR, "Output/")
-    checkIfInFile <- Sys.glob(paste0(inDir, transactionId, "/*"))
-    checkIfOutFile <- Sys.glob(paste0(inDir, transactionId, "/*"))
-    if(length(checkIfInFile) > 0 & length(checkIfOutFile) > 0){
+    checkIfOutFile <- paste0(outDir, transactionId, "/tox21enricher_", transactionId, ".zip")
+    if(file.exists(checkIfOutFile)){
         return(TRUE)
     } else {
         return(FALSE)
@@ -1270,46 +1206,5 @@ function(id="-1", res) {
             return(0)
         }
     })
-}
-
-## SECTION 7: HANDLING API KEYS FOR USERS
-#* Generate a unique key for authorizing API use.
-#* @param email The email address to associate with the given API key.
-#* @get /key
-function(email="public", res) {
-    key <- NULL
-    # Connect to db
-    pool <- dbPool(
-        drv=dbDriver("PostgreSQL", max.con=100),
-        dbname=tox21queue$database,
-        host=tox21queue$host,
-        user=tox21queue$uid,
-        password=tox21queue$pwd,
-        port=tox21queue$port,
-        idleTimeout=3600000
-    )
-    # Fetch existing pair if exists
-    query <- sqlInterpolate(ANSI(), paste0("SELECT * FROM key WHERE email='", email, "';"), id="getEmails")
-    outp <- dbGetQuery(pool, query)
-    # Get list of all keys
-    allKeysQuery <- sqlInterpolate(ANSI(), paste0("SELECT key FROM key;"), id="getKeys")
-    allKeysOutp <- dbGetQuery(pool, allKeysQuery)
-    returnMessage <- ""
-    # Generate new key if email does not exist in database
-    if(nrow(outp) < 1) {
-        newKey <- UUIDgenerate()
-        while(newKey %in% allKeysOutp$key) {
-            newKey <- UUIDgenerate()
-        }
-        returnMessage <- paste0("Your new API key is: ", newKey)
-        # Add new key/email to database
-        query <- sqlInterpolate(ANSI(), paste0("INSERT INTO key(key, email) VALUES('", newKey, "', '", email, "');"), id="addKey")
-        outp <- dbGetQuery(pool, query)
-    } else { # else return existing key
-        returnMessage <- paste0("An existing API key was found: ", outp$key[1])
-    }
-    # Close pool
-    poolClose(pool)
-    return(returnMessage)
 }
 

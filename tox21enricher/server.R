@@ -40,7 +40,6 @@ shinyServer(function(input, output, session) {
     tox21config <- config::get("tox21enricher-client")
     API_HOST <- tox21config$host
     API_PORT <- tox21config$port
-    API_KEY <- tox21config$key
 
     # Display enrichment type on title
     titleStatus <- reactiveValues(option=character())
@@ -156,6 +155,7 @@ shinyServer(function(input, output, session) {
             shinyjs::enable(id="searchForm")
             shinyjs::disable(id="enrichmentForm")
             shinyjs::disable(id="enrich_from")
+            shinyjs::enable(id="searchPrevButton")
             
             # Hide Select enrichment type selector and show buttons
             shinyjs::hide(id="enrich_from")
@@ -167,123 +167,11 @@ shinyServer(function(input, output, session) {
             )
             updateActionButton(session, "searchButton", label="Perform enrichment", icon=icon("undo"))  
             searchStatus$option <- "enrich"
-            
-            # Fetch list of transactions for given key
-            resp <- NULL
-            transactionTable <- NULL
-            tryPrevious <- tryCatch({
-                resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="getTransactions", query=list(apikey=API_KEY))
-                TRUE
-            }, error=function(cond){
-                return(FALSE)
-            })
-            if(!tryPrevious){
-                showNotification("Error: The application cannot connect to the Tox21 Enricher server. Please try again later.", type="error")
-                return(FALSE)
-            } else {
-                transactionTable <- data.frame(do.call(rbind, content(resp)), stringsAsFactors=FALSE)
-            }
-
-            if(nrow(transactionTable) < 1) { # No previous enrichment
-                shinyjs::disable(id="searchPrevButton")
-                shinyjs::disable(id="searchDeleteAll")
-                shinyjs::disable(id="searchDeleteSelected")
-                shinyjs::disable(id="selectAllPrevOnPage")
-                shinyjs::disable(id="searchDeleteAllIncomplete")
-                output[["enrichmentTable"]] <- renderUI(
-                    column(12,
-                        h4("No previous enrichment records!")
-                    )
+            output[["enrichmentTable"]] <- renderUI(
+                column(12,
+                    textInput(inputId="searchPreviousID", label="Input the UUID of a previous request", placeholder="i.e., XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX")
                 )
-            } else {
-                shinyjs::enable(id="searchPrevButton")
-                shinyjs::enable(id="searchDeleteAll")
-                shinyjs::enable(id="searchDeleteSelected")
-                shinyjs::enable(id="selectAllPrevOnPage")
-                shinyjs::enable(id="searchDeleteAllIncomplete")
-                enrichmentListDisplay <- lapply(seq_len(nrow(transactionTable)), function(x){
-                    originalMode <- transactionTable[x, "original_mode"]
-                    mode <- transactionTable[x, "mode"]
-                    transactionId <- transactionTable[x, "uuid"]
-                    annoSelectStr <- transactionTable[x, "annotation_selection_string"]
-                    nodeCutoff <- transactionTable[x, "cutoff"]
-                    enrichmentSets <- transactionTable[x, "input"]
-                    submitTime <- transactionTable[x, "timestamp_posted"]
-                    beginTime <- transactionTable[x, "timestamp_started"]
-                    endTime <- transactionTable[x, "timestamp_finished"]
-                    cleanedMode <- ""
-                    if(originalMode == "similarity"){
-                        if(mode == "similarity") {
-                            cleanedMode <- "Enrich from Chemicals with Structural Similarity"
-                        } else { # re-enrichment
-                            cleanedMode <- "Re-enrich from Chemicals with Structural Similarity"
-                        }
-                    } else if (originalMode == "substructure"){
-                        if(mode == "substructure") {
-                            cleanedMode <- "Enrich from Chemicals with Shared Substructures"
-                        } else { # re-enrichment
-                            cleanedMode <- "Re-enrich from Chemicals with Shared Substructures"
-                        }
-                    } else if (originalMode == "casrn"){
-                        cleanedMode <- "Enrich from User-Provided CASRN List"
-                    } else { #annotation
-                        cleanedMode <- "View Annotations for Tox21 Chemicals"
-                    }
-                    # Clean up enrichment sets for display in the DataTable
-                    cleanedEnrichmentSets <- unlist(str_split(enrichmentSets, "\\|"))
-                    cleanedEnrichmentSetsDisplayNames <- unlist(lapply(cleanedEnrichmentSets, function(x){
-                        return(unlist(str_split(x, "__"))[2])
-                    }))
-                    cleanedEnrichmentSetsDisplayNames <- unique(cleanedEnrichmentSetsDisplayNames)
-                    cleanedEnrichmentSetsDisplay <- lapply(cleanedEnrichmentSetsDisplayNames, function(x){
-                        innerList <- unlist(lapply(cleanedEnrichmentSets, function(y){
-                            casrnNoSet <- unlist(str_split(y, "__"))
-                            if(casrnNoSet[2] == x) {
-                                return(casrnNoSet[1])
-                            }
-                            return(NULL)
-                        }))
-                        innerList <- innerList[!vapply(innerList, is.null, FUN.VALUE=logical(1))]
-                        return(paste0(x, ": ", paste0(innerList, collapse=", ")))
-                    })
-                    # Clean up annoSelectStr
-                    annoSelectStr <- unlist(str_split(annoSelectStr, ","))
-                    annoSelectStr <- paste0(annoSelectStr, collapse=", ")
-                    annoSelectStr <- gsub("=checked", "", annoSelectStr, fixed=TRUE)
-                    searchCheckbox <- paste0(checkboxInput(inputId=paste0("cb_search__", transactionId), label=NULL, width="4px"))
-                    enrichData <- data.frame("Mode"=cleanedMode, "UUID"=transactionId, "Annotation Selection String"=annoSelectStr, "Node Cutoff"=nodeCutoff, "Enrichment Sets"=paste0(cleanedEnrichmentSetsDisplay, collapse="\n"), "Time Submitted"=submitTime, "Time Started"=beginTime, "Time Completed"=endTime, stringsAsFactors=FALSE)
-                    enrichData <- data.frame("Select"=searchCheckbox, enrichData, stringsAsFactors=FALSE)
-                    colnames(enrichData) <- c("Select", "Mode", "UUID", "Annotation Selection String", "Node Cutoff", "Enrichment Sets", "Time Submitted", "Time Started", "Time Completed")
-                    return(enrichData)
-                })
-                searchCheckboxNames <- unlist(lapply(seq_len(nrow(transactionTable)), function(x){
-                    transactionId <- transactionTable[x, "uuid"]
-                    searchCheckboxName <- paste0("cb_search__", transactionId)
-                }))
-                enrichmentListDisplay <- bind_rows(enrichmentListDisplay)
-                enrichmentListDisplayReactive$enrichmentListDisplay <- enrichmentListDisplay
-                searchCheckboxes$checkboxes <- searchCheckboxNames
-                output[["enrichmentTable"]] <- renderUI(
-                    column(12,
-                        DT::datatable({enrichmentListDisplay}, 
-                            escape=FALSE,
-                            rownames=FALSE,
-                            class="row-border stripe compact",
-                            style="bootstrap",
-                            select="none",
-                            options=list( 
-                                paging=FALSE,
-                                preDrawCallback=JS('function() { Shiny.unbindAll(this.api().table().node()); }'), 
-                                drawCallback=JS('function() { Shiny.bindAll(this.api().table().node()); } '),
-                                dom="Bfrtip",
-                                buttons=list(list(extend="colvis", columns=as.vector(seq_len((ncol(enrichmentListDisplay)-1)))))  
-                                #                                                           ^^ this is so we always keep the select checkboxes in the table (user can't hide them)
-                            ),
-                            extensions="Buttons"
-                        )
-                    )
-                )
-            }
+            )
         } else {
             # Show main page and hide search page
             shinyjs::hide(id="searchForm")
@@ -304,195 +192,138 @@ shinyServer(function(input, output, session) {
     
     # Search for selected request
     observeEvent(input$searchPrevButton, {
-        setToFetch <- ""
-        selectedSets <- lapply(searchCheckboxes$checkboxes, function(i){
-            if(!is.null(input[[i]])) {
-                if(input[[i]]) {
-                    return(unlist(str_split(i, "__"))[2])
-                } else {
-                    return(NULL)
-                }
-            } else {
-                return(NULL)
-            }
+        setToFetch <- input$searchPreviousID
+        # Fetch selected transaction
+        resp <- NULL
+        tryPrevious <- tryCatch({
+            resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="loadTransaction", query=list(uuid=setToFetch))
+            TRUE
+        }, error=function(cond){
+            return(FALSE)
         })
-        selectedSets <- selectedSets[!vapply(selectedSets, is.null, FUN.VALUE=logical(1))]
-
-        if(length(selectedSets) > 1){ # too many sets selected
-            shinyjs::show(id="warningSearchColumn")
-            output$searchWarning <- renderUI({
-                HTML(paste0("<div class=\"text-danger\">Error: Only one request may be selected.</div>"))
-            })
-        } else if(length(selectedSets) < 1){ # no sets selected
-            shinyjs::show(id="warningSearchColumn")
-            output$searchWarning <- renderUI({
-                HTML(paste0("<div class=\"text-danger\">Error: No requests selected.</div>"))
-            })
+        if(!tryPrevious){
+            showNotification("Error: The application cannot connect to the Tox21 Enricher server. Please try again later.", type="error")
+            return(FALSE)
         } else {
-            setToFetch <- selectedSets[1]
-            
-            # Fetch selected transaction
-            resp <- NULL
-            tryPrevious <- tryCatch({
-                resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="loadTransaction", query=list(apikey=API_KEY, uuid=setToFetch))
-                TRUE
-            }, error=function(cond){
-                return(FALSE)
-            })
-            if(!tryPrevious){
-                showNotification("Error: The application cannot connect to the Tox21 Enricher server. Please try again later.", type="error")
-                return(FALSE)
-            } else {
-                transactionTable <- data.frame(do.call(rbind, content(resp)), stringsAsFactors=FALSE)
-            }
-            
             transactionTable <- data.frame(do.call(rbind, content(resp)), stringsAsFactors=FALSE)
-            originalMode <- transactionTable[1, "original_mode"]
-            mode <- transactionTable[1, "mode"]
-            transactionId <- transactionTable[1, "uuid"]
-            annoSelectStr <- transactionTable[1, "annotation_selection_string"]
-            nodeCutoff <- transactionTable[1, "cutoff"]
-            colorsList <- transactionTable[1, "colors"]
-          
-            # Set enrichmentType$enrichType here to original mode of the request
-            enrichmentType$enrichType <- mode
-            originalEnrichModeList$originalEnrichMode <- originalMode
-            
-            # Set originalNamesList$originalNames if similarity/substructure so reenrichment will work correctly
-            originalNamesList$originalNames <- unlist(str_split(transactionTable[1, "original_names"], "\\|"))
-            
-            # Check if result (Input/Output) files exist on the server
-            resp <- NULL
-            tryPrevious <- tryCatch({
-                resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="exists", query=list(transactionId=transactionId))
-                TRUE
-            }, error=function(cond){
-                return(FALSE)
-            })
-            if(!tryPrevious){
-                # error here
-                shinyjs::show(id="warningSearchColumn")
-                output$searchWarning <- renderUI({
-                    HTML(paste0("<div class=\"text-danger\">Error: Cannot connect to Tox21 Enricher server.</div>"))
-                })
-                return(FALSE)
-            }
-          
-            # TODO: error check
-            if(resp$status_code != 200){
-                # error here
-                shinyjs::show(id="warningSearchColumn")
-                output$searchWarning <- renderUI({
-                    HTML(paste0("<div class=\"text-danger\">Error: Problem fetching results from server.</div>"))
-                })
-                return(FALSE)
-            } else {
-                if(content(resp) == FALSE){
-                    #error here
-                    shinyjs::show(id="warningSearchColumn")
-                    output$searchWarning <- renderUI({
-                        HTML(paste0("<div class=\"text-danger\">Error: The results for this request are missing on the Tox21 Enricher server. The files may have been deleted, or the request may have failed. Please try again.</div>"))
-                    })
-                    return(FALSE)
-                }
-            }
-            
-            # reconstruct enrichment sets
-            setNames <- unlist(str_split(transactionTable[1, "input"], "\\|"))
-            setNames <- unlist(lapply(setNames, function(x){
-                return(unlist(str_split(x, "__"))[2])
-            }))
-            setNames <- unique(setNames)
-            enrichmentSets <- lapply(setNames, function(x){
-                innerSet <- unlist(lapply(unlist(str_split(transactionTable[1, "input"], "\\|")), function(y){
-                    tmpSplit <- unlist(str_split(y, "__"))
-                    if(tmpSplit[2] == x){
-                        return(tmpSplit[1])
-                    }
-                    return(NULL)
-                }))
-                innerSet <- innerSet[!vapply(innerSet, is.null, FUN.VALUE=logical(1))]
-            })
-            names(enrichmentSets) <- setNames
-            originalNames <- unlist(str_split(transactionTable[1, "original_names"], "\\|"))
-            reenrichResults <- NULL
-            if(!is.na(transactionTable[1, "reenrich"])){
-                reenrichResultsSets <- unlist(str_split(transactionTable[1, "reenrich"], "\\|"))
-                reenrichResultsCols <- lapply(reenrichResultsSets, function(x){
-                    return(unlist(str_split(x, "__")))
-                })
-                reenrichResultsMats <- lapply(reenrichResultsCols, function(x){
-                    innerList <- lapply(seq(2, length(x)), function(y){ # start at 2 to skip set name
-                        return(unlist(str_split(x[y], ";")))
-                    })
-                    # if similarity
-                    if(length(innerList) == 7){
-                        return(data.frame("casrn"=innerList[[1]], "m"=innerList[[2]], "similarity"=innerList[[3]], "cyanide"=innerList[[4]], "isocyanate"=innerList[[5]], "aldehyde"=innerList[[6]], "epoxide"=innerList[[7]], stringsAsFactors=FALSE))
-                    }
-                    # if anything else
-                    else {
-                        return(data.frame("casrn"=innerList[[1]], "m"=innerList[[2]], "cyanide"=innerList[[3]], "isocyanate"=innerList[[4]], "aldehyde"=innerList[[5]], "epoxide"=innerList[[6]], stringsAsFactors=FALSE))
-                    }
-                })
-                reenrichResultsNames <- lapply(reenrichResultsCols, function(x){
-                    return(x[1])
-                })
-                reenrichResults <- reenrichResultsMats
-                names(reenrichResults) <- reenrichResultsNames
-            }
-            
-            # Get colors list
-            colorsList <- unlist(str_split(colorsList, "\\|"))
-            colorsListSetNames <- lapply(colorsList, function(x){
-                unlist(str_split(x, "__"))[1]
-            })
-            colorsListSetItems <- lapply(colorsList, function(x){
-                unlist(str_split(x, "__"))[2]
-            })
-            colorsList <- colorsListSetItems
-            names(colorsList) <- colorsListSetNames
-            colorsList <- unlist(colorsList)
-            
-            shinyjs::hide(id="searchForm")
-            shinyjs::disable(id="searchForm")
-            shinyjs::hide(id="searchButtonsMenu")
-            shinyjs::disable(id="searchButtonsMenu")
-            
-            # Set enrichmentSetsList$enrichmentSets - necessary for being able to regenerate network
-            enrichmentSetsList$enrichmentSets <- enrichmentSets
-            # Set setColors$color - necessary for preserving color for bargraph generation
-            setColors$color <- colorsList
-            future({
-                enrichmentResults(mode, transactionId, annoSelectStr, nodeCutoff, enrichmentSets, originalNames, reenrichResults, originalMode, colorsList)
-            }, seed=TRUE)
         }
-    })
-    
-    # Open settings modal menu
-    observeEvent(input$settingsButton, {
-        shinyjs::disable(id="sidebar")
-        showModal(
-            modalDialog(
-                title="Settings",
-                footer=actionButton(inputId="closeSettingsButton", label="Save & Exit"),
-                size="l",
-                fluidRow(
-                    column(12, 
-                        h4("Clear Local Cache"),
-                        actionButton(inputId="clearCacheButton", label="Clear local cache", icon=icon("trash")),
-                        br(),
-                        p("This will clear the Tox21 Enricher client application's local storage and delete files like enrichment results and the manual. These files will have to be redownloaded in the future. This cannot be undone.")       
-                    )
-                ),
-                br(),
-                br(),
-            )
-        )
-    })
-    
-    observeEvent(input$closeSettingsButton, {
-        removeModal()
-        shinyjs::enable(id="sidebar")
+        transactionTable <- data.frame(do.call(rbind, content(resp)), stringsAsFactors=FALSE)
+        originalMode <- transactionTable[1, "original_mode"]
+        mode <- transactionTable[1, "mode"]
+        transactionId <- transactionTable[1, "uuid"]
+        annoSelectStr <- transactionTable[1, "annotation_selection_string"]
+        nodeCutoff <- transactionTable[1, "cutoff"]
+        colorsList <- transactionTable[1, "colors"]
+      
+        # Set enrichmentType$enrichType here to original mode of the request
+        enrichmentType$enrichType <- mode
+        originalEnrichModeList$originalEnrichMode <- originalMode
+        
+        # Set originalNamesList$originalNames if similarity/substructure so reenrichment will work correctly
+        originalNamesList$originalNames <- unlist(str_split(transactionTable[1, "original_names"], "\\|"))
+        
+        # Check if result (Input/Output) files exist on the server
+        resp <- NULL
+        tryPrevious <- tryCatch({
+            resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="exists", query=list(transactionId=transactionId))
+            TRUE
+        }, error=function(cond){
+            return(FALSE)
+        })
+        if(!tryPrevious){
+            # error here
+            shinyjs::show(id="warningSearchColumn")
+            output$searchWarning <- renderUI({
+                HTML(paste0("<div class=\"text-danger\">Error: Cannot connect to Tox21 Enricher server.</div>"))
+            })
+            return(FALSE)
+        }
+        if(resp$status_code != 200){
+            # error here
+            shinyjs::show(id="warningSearchColumn")
+            output$searchWarning <- renderUI({
+                HTML(paste0("<div class=\"text-danger\">Error: No such records exist for the provided request.</div>"))
+            })
+            return(FALSE)
+        } else {
+            if(content(resp) == FALSE){
+                #error here
+                shinyjs::show(id="warningSearchColumn")
+                output$searchWarning <- renderUI({
+                    HTML(paste0("<div class=\"text-danger\">Error: The results for this request are missing on the Tox21 Enricher server. The request may not have completed yet. Please try again later.</div>"))
+                })
+                return(FALSE)
+            }
+        }
+        
+        # reconstruct enrichment sets
+        setNames <- unlist(str_split(transactionTable[1, "input"], "\\|"))
+        setNames <- unlist(lapply(setNames, function(x){
+            return(unlist(str_split(x, "__"))[2])
+        }))
+        setNames <- unique(setNames)
+        enrichmentSets <- lapply(setNames, function(x){
+            innerSet <- unlist(lapply(unlist(str_split(transactionTable[1, "input"], "\\|")), function(y){
+                tmpSplit <- unlist(str_split(y, "__"))
+                if(tmpSplit[2] == x){
+                    return(tmpSplit[1])
+                }
+                return(NULL)
+            }))
+            innerSet <- innerSet[!vapply(innerSet, is.null, FUN.VALUE=logical(1))]
+        })
+        names(enrichmentSets) <- setNames
+        originalNames <- unlist(str_split(transactionTable[1, "original_names"], "\\|"))
+        reenrichResults <- NULL
+        if(!is.na(transactionTable[1, "reenrich"])){
+            reenrichResultsSets <- unlist(str_split(transactionTable[1, "reenrich"], "\\|"))
+            reenrichResultsCols <- lapply(reenrichResultsSets, function(x){
+                return(unlist(str_split(x, "__")))
+            })
+            reenrichResultsMats <- lapply(reenrichResultsCols, function(x){
+                innerList <- lapply(seq(2, length(x)), function(y){ # start at 2 to skip set name
+                    return(unlist(str_split(x[y], ";")))
+                })
+                # if similarity
+                if(length(innerList) == 7){
+                    return(data.frame("casrn"=innerList[[1]], "m"=innerList[[2]], "similarity"=innerList[[3]], "cyanide"=innerList[[4]], "isocyanate"=innerList[[5]], "aldehyde"=innerList[[6]], "epoxide"=innerList[[7]], stringsAsFactors=FALSE))
+                }
+                # if anything else
+                else {
+                    return(data.frame("casrn"=innerList[[1]], "m"=innerList[[2]], "cyanide"=innerList[[3]], "isocyanate"=innerList[[4]], "aldehyde"=innerList[[5]], "epoxide"=innerList[[6]], stringsAsFactors=FALSE))
+                }
+            })
+            reenrichResultsNames <- lapply(reenrichResultsCols, function(x){
+                return(x[1])
+            })
+            reenrichResults <- reenrichResultsMats
+            names(reenrichResults) <- reenrichResultsNames
+        }
+        
+        # Get colors list
+        colorsList <- unlist(str_split(colorsList, "\\|"))
+        colorsListSetNames <- lapply(colorsList, function(x){
+            unlist(str_split(x, "__"))[1]
+        })
+        colorsListSetItems <- lapply(colorsList, function(x){
+            unlist(str_split(x, "__"))[2]
+        })
+        colorsList <- colorsListSetItems
+        names(colorsList) <- colorsListSetNames
+        colorsList <- unlist(colorsList)
+        
+        shinyjs::hide(id="searchForm")
+        shinyjs::disable(id="searchForm")
+        shinyjs::hide(id="searchButtonsMenu")
+        shinyjs::disable(id="searchButtonsMenu")
+        
+        # Set enrichmentSetsList$enrichmentSets - necessary for being able to regenerate network
+        enrichmentSetsList$enrichmentSets <- enrichmentSets
+        # Set setColors$color - necessary for preserving color for bargraph generation
+        setColors$color <- colorsList
+        future({
+            enrichmentResults(mode, transactionId, annoSelectStr, nodeCutoff, enrichmentSets, originalNames, reenrichResults, originalMode, colorsList)
+        }, seed=TRUE)
     })
     
     # update theme data when checkbox is clicked
@@ -536,281 +367,6 @@ shinyServer(function(input, output, session) {
             ')))
         })
     }, ignoreInit=TRUE, ignoreNULL=TRUE)
-    
-    # Clear cache when button is pressed
-    observeEvent(input$clearCacheButton, {
-        showModal(
-            modalDialog(
-                title="Warning",
-                footer=NULL,
-                size="l",
-                fluidRow(
-                    column(12, 
-                        HTML(paste0("<p>You are about to clear the application's local storage at: <p class=\"text-danger\">", getwd(), "/www/tmp/</p>This action cannot be undone. Continue?</p>")),
-                        column(6, actionButton(inputId="clearCacheButtonConfirm", label="Yes, clear the cache.")),
-                        column(6, actionButton(inputId="clearCacheButtonCancel", label="Close"))
-                    )
-                ),
-                fluidRow(
-                    column(12,
-                        uiOutput("cacheConfirmation")
-                    )
-                )
-            )
-        )
-    })
-    
-    # Clear local cache on confirmation of above ^^
-    observeEvent(input$clearCacheButtonConfirm, {
-        cacheDir <- paste0(getwd(), "/www/tmp/")
-        # Clear input dir
-        unlink(paste0(cacheDir, "input/*"), recursive=TRUE)
-        # Clear output dir
-        unlink(paste0(cacheDir, "output/*"), recursive=TRUE)
-        # Clear docs dir
-        unlink(paste0(cacheDir, "docs/*"), recursive=TRUE)
-        
-        # Render confirmation text
-        output$cacheConfirmation <- renderUI({
-            HTML(paste0("<div class=\"text-danger\">Cache cleared.</div>"))
-        })
-    })
-    
-    # Close modal on cancellation of above ^^
-    observeEvent(input$clearCacheButtonCancel, {
-        # Clear previous message (if applicable)
-        output$cacheConfirmation <- renderUI({
-            paste0()
-        })
-        
-        # Re-enable sidebar buttons
-        shinyjs::enable(id="sidebar")
-        
-        # Close modal
-        removeModal()
-    })
-    
-    # Select all enrichment requests on page
-    selectAllPrevOnPageValue <- reactiveValues(select=TRUE)
-    observeEvent(input$selectAllPrevOnPage, {
-        if(!selectAllPrevOnPageValue$select){
-            lapply(enrichmentListDisplayReactive$enrichmentListDisplay[, "UUID"], function(x){
-                updateCheckboxInput(session, inputId=paste0("cb_search__", x), value=FALSE)
-            })  
-            updateActionButton(session, inputId="selectAllPrevOnPage", label="Select all displayed requests")
-            selectAllPrevOnPageValue$select <- TRUE
-        } else {
-            lapply(enrichmentListDisplayReactive$enrichmentListDisplay[, "UUID"], function(x){
-                updateCheckboxInput(session, inputId=paste0("cb_search__", x), value=TRUE)
-            })  
-            updateActionButton(session, inputId="selectAllPrevOnPage", label="Deselect all displayed requests")
-            selectAllPrevOnPageValue$select <- FALSE
-        }
-    })
-    
-    # Clear previous enrichment requests when button is pressed
-    observeEvent(input$searchDeleteAll, {
-        showModal(
-            modalDialog(
-                title="Warning",
-                footer=NULL,
-                size="l",
-                fluidRow(
-                    column(12, 
-                        HTML(paste0("<p>You are about to delete all records of your previous requests. This action cannot be undone. Continue?</p>")),
-                        column(6, actionButton(inputId="searchDeleteAllConfirm", label="Yes, delete all records.") ),
-                        column(6, actionButton(inputId="searchDeleteAllCancel", label="Close") )
-                    )
-                ),
-                fluidRow(
-                    column(12,
-                        uiOutput("searchDeleteAllConfirmation")
-                    )
-                )
-            )
-        )
-    })
-    
-    # Clear local cache on confirmation of above ^^
-    observeEvent(input$searchDeleteAllConfirm, {
-        deleteAllTransactions <- enrichmentListDisplayReactive$enrichmentListDisplay[, "UUID"]
-        resp <- NULL
-        tryPrevious <- tryCatch({
-            resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="deleteTransactionSelected", query=list(selected=paste0(deleteAllTransactions, collapse=",")))
-            TRUE
-        }, error=function(cond){
-            return(FALSE)
-        })
-        if(!tryPrevious){
-            showNotification("Error: The application cannot connect to the Tox21 Enricher server. Please try again later.", type="error")
-            return(FALSE)
-        }
-        
-        # Render confirmation text
-        output$searchDeleteAllConfirmation <- renderUI({
-            HTML(paste0("<div class=\"text-danger\">All records deleted.</div>"))
-        })
-    })
-    
-    # Close modal on cancellation of above ^^
-    observeEvent(input$searchDeleteAllCancel, {
-        # Clear previous message (if applicable)
-        output$searchDeleteAllConfirmation <- renderUI({
-            paste0()
-        })
-        
-        # Refresh page
-        searchStatus$option <- "search"
-        loadEnrichList()
-        
-        # Close modal
-        removeModal()
-    })
-    
-    selectedSetsReactive <- reactiveValues(sets=NULL)
-    # Delete records for selected requests
-    observeEvent(input$searchDeleteSelected, {
-        selectedSets <- lapply(searchCheckboxes$checkboxes, function(i){
-            if(input[[i]]) {
-                return(unlist(str_split(i, "__"))[2])
-            } else {
-                return(NULL)
-            }
-        })
-        selectedSets <- selectedSets[!vapply(selectedSets, is.null, FUN.VALUE=logical(1))]
-        selectedSetsReactive$sets <- selectedSets
-        
-        if(length(selectedSets) < 1){
-            shinyjs::show(id="warningSearchColumn")
-            output$searchWarning <- renderUI({
-                HTML(paste0("<div class=\"text-danger\">Error: No requests selected.</div>"))
-            })
-        } else {
-            showModal(
-                modalDialog(
-                    title="Warning",
-                    footer=NULL,
-                    size="l",
-                    fluidRow(
-                        column(12, 
-                            HTML(paste0("<p>You are about to delete the records of the following requests:<br><div class=\"text-danger\">", paste0(selectedSets, collapse="<br>"), "</div><br>This action cannot be undone. Continue?</p>")),
-                            column(6, actionButton(inputId="searchDeleteSelectedConfirm", label="Yes, delete the selected records.") ),
-                            column(6, actionButton(inputId="searchDeleteSelectedCancel", label="Close") )
-                        )
-                    ),
-                    fluidRow(
-                        column(12,
-                            uiOutput("searchDeleteSelectedConfirmation")
-                        )
-                    )
-                )
-            )
-        }
-    })
-    
-    # Clear local cache on confirmation of above ^^
-    observeEvent(input$searchDeleteSelectedConfirm, {
-        # Clear transaction dir
-        resp <- NULL
-        tryPrevious <- tryCatch({
-            resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="deleteTransactionSelected", query=list(selected=paste0(selectedSetsReactive$sets, collapse=",")))
-            TRUE
-        }, error=function(cond){
-            return(FALSE)
-        })
-        if(!tryPrevious){
-            showNotification("Error: The application cannot connect to the Tox21 Enricher server. Please try again later.", type="error")
-            return(FALSE)
-        }
-        # Render confirmation text
-        output$searchDeleteSelectedConfirmation <- renderUI({
-            HTML(paste0("<div class=\"text-danger\">Selected records deleted.</div>"))
-        })
-    })
-    
-    # Close modal on cancellation of above ^^
-    observeEvent(input$searchDeleteSelectedCancel, {
-        # Clear previous message (if applicable)
-        output$searchDeleteSelectedConfirmation <- renderUI({
-            paste0()
-        })
-        
-        # Refresh page
-        searchStatus$option <- "search"
-        loadEnrichList()
-        
-        # Close modal
-        removeModal()
-    })
-    
-    # Clear previous incomplete enrichment requests when button is pressed
-    observeEvent(input$searchDeleteAllIncomplete, {
-        prevTable <- enrichmentListDisplayReactive$enrichmentListDisplay
-        incompleteSets <- prevTable %>% filter(`Time Completed` == "incomplete")
-        if(length(incompleteSets[, "Time Completed"]) < 1){
-            shinyjs::show(id="warningSearchColumn")
-            output$searchWarning <- renderUI({
-                HTML(paste0("<div class=\"text-danger\">Error: No incomplete requests.</div>"))
-            })
-        } else {
-            showModal(
-                modalDialog(
-                    title="Warning",
-                    footer=NULL,
-                    size="l",
-                    fluidRow(
-                        column(12, 
-                            HTML(paste0("<p>You are about to delete the records of the following incomplete requests:<br><div class=\"text-danger\">", paste0(incompleteSets[, "UUID"], collapse="<br>"), "</div><br>This action cannot be undone. Continue?</p>")),
-                            column(6, actionButton(inputId="searchDeleteIncompleteConfirm", label="Yes, delete the selected records.") ),
-                            column(6, actionButton(inputId="searchDeleteIncompleteCancel", label="Close") )
-                        )
-                    ),
-                    fluidRow(
-                        column(12,
-                            uiOutput("searchDeleteIncompleteConfirmation")
-                        )
-                    )
-                )
-            )
-        }
-    })
-    
-    # Clear local cache on confirmation of above ^^
-    observeEvent(input$searchDeleteIncompleteConfirm, {
-        prevTable <- enrichmentListDisplayReactive$enrichmentListDisplay
-        incompleteSets <- prevTable %>% filter(`Time Completed` == "incomplete")
-        resp <- NULL
-        tryPrevious <- tryCatch({
-            resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="deleteTransactionSelected", query=list(selected=paste0(incompleteSets[, "UUID"], collapse=",")))
-            TRUE
-        }, error=function(cond){
-            return(FALSE)
-        })
-        if(!tryPrevious){
-            showNotification("Error: The application cannot connect to the Tox21 Enricher server. Please try again later.", type="error")
-            return(FALSE)
-        }
-        # Render confirmation text
-        output$searchDeleteIncompleteConfirmation <- renderUI({
-            HTML(paste0("<div class=\"text-danger\">Incomplete records deleted.</div>"))
-        })
-    })
-    
-    # Close modal on cancellation of above ^^
-    observeEvent(input$searchDeleteIncompleteCancel, {
-        # Clear previous message (if applicable)
-        output$searchDeleteIncompleteConfirmation <- renderUI({
-            paste0()
-        })
-        
-        # Refresh page
-        searchStatus$option <- "search"
-        loadEnrichList()
-        
-        # Close modal
-        removeModal()
-    })
-    
     
     # Display API connection status
     pingAPI <- tryCatch({
@@ -1803,76 +1359,25 @@ shinyServer(function(input, output, session) {
             originalNamesList$originalNames <- originalNames
         }
 
-        # Generate UUID for this query
-        transactionId <- UUIDgenerate()
-        # Access API to see if UUID already exists
+        # Generate UUID for this query and access API to see if UUID already exists
+        transactionId <- NULL
         resp <- NULL
         tryGenerateUUID <- tryCatch({
             resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="checkId")
+            if(resp$status_code != 200){
+                return(FALSE)
+            }
             TRUE
         }, error=function(cond){
             return(FALSE)
         })
-        if(!tryGenerateUUID)
-        {
+        if(!tryGenerateUUID) {
             showNotification("Error: The application cannot connect to the Tox21 Enricher server. Please try again later.", type="error")
             return(FALSE)
-        }        
-        if(is.null(tryGenerateUUID)){
-            # Hide original form when done with enrichment
-            shinyjs::show(id="enrichmentForm")
-            # Disable changing input type when button is clicked
-            shinyjs::enable(id="enrich_from")
-            # Show 'Restart' button, disable by default so user can't interfere with enrichment process
-            shinyjs::hide(id="refresh")
-            shinyjs::enable(id="refresh")
-            # Hide loading spinner
-            shinyjs::hide(id="resultsContainer")
-            # Show error message on main page
-            shinyjs::show(id="errorBox")
-            # Hide waiting page
-            shinyjs::hide(id="waitingPage")
-            # Re-enable view previous button
-            shinyjs::enable(id="searchButton")
-            output$error_box <- renderUI({
-                HTML(paste0("<div class=\"text-danger\">Error: Cannot connect to Tox21 Enricher server.</div>"))
-            })
-            return(FALSE)
-        }
-        
-        if(resp$status_code != 200){
-            # Hide original form when done with enrichment
-            shinyjs::show(id="enrichmentForm")
-            # Disable changing input type when button is clicked
-            shinyjs::enable(id="enrich_from")
-            # Show 'Restart' button, disable by default so user can't interfere with enrichment process
-            shinyjs::hide(id="refresh")
-            shinyjs::enable(id="refresh")
-            # Hide loading spinner
-            shinyjs::hide(id="resultsContainer")
-            # Hide waiting page
-            shinyjs::hide(id="waitingPage")
-            # Re-enable view previous button
-            shinyjs::enable(id="searchButton")
-            # Show error message on main page
-            shinyjs::show(id="errorBox")
-            output$error_box <- renderUI({
-                HTML(paste0("<div class=\"text-danger\">Error: Problem generating input UUID for enrichment.</div>"))
-            })
-            return(FALSE)
         } else {
-            fullIDs <- unlist(content(resp), recursive=FALSE)
-            fullIDs <- unlist(lapply(fullIDs, function(x){
-                # Get just the ID
-                return(unlist(str_split(x, "Output/"))[2])
-            }))
-            
-            while(transactionId %in% fullIDs){
-                # Regenerate UUID
-                transactionId <- UUIDgenerate()
-            }
+            transactionId <- unlist(content(resp))
         }
-        
+
         # If UUID is good, assign to reactiveValue
         reactiveTransactionId$id <- transactionId
 
@@ -1949,7 +1454,7 @@ shinyServer(function(input, output, session) {
         # Send query to create transaction entry in database
         resp <- NULL
         tryTransaction <- tryCatch({
-            resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="createTransaction", query=list(originalMode=originalEnrichModeList$originalEnrichMode, mode=enrichmentType$enrichType, uuid=transactionId, annoSelectStr=annoSelectStr, cutoff=cutoff, input=enrichmentSetsSanitizedLocal, originalNames=paste0(originalNamesList$originalNames, collapse="|"), reenrich=paste0(reenrichResultsSanitized, collapse="|"), color=colorsToPrint, timestampPosted=beginTime, apikey=API_KEY))
+            resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="createTransaction", query=list(originalMode=originalEnrichModeList$originalEnrichMode, mode=enrichmentType$enrichType, uuid=transactionId, annoSelectStr=annoSelectStr, cutoff=cutoff, input=enrichmentSetsSanitizedLocal, originalNames=paste0(originalNamesList$originalNames, collapse="|"), reenrich=paste0(reenrichResultsSanitized, collapse="|"), color=colorsToPrint, timestampPosted=beginTime))
             TRUE
         }, error=function(cond){
             return(FALSE)

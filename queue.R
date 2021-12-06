@@ -128,10 +128,6 @@ performEnrichment <- function(enrichmentUUID="-1", annoSelectStr="MESH=checked,P
     # Get begin time for request
     beginTime <- Sys.time()
     
-    # Add request to database
-    query <- sqlInterpolate(ANSI(), paste0("INSERT INTO enrichment_list(id, chemlist, type, node_cutoff, anno_select_str, timestamp_start, ip) VALUES('", enrichmentUUID, "','", "placeholder", "','", "placeholder", "','", nodeCutoff, "','", annoSelectStr, "','", beginTime, "','", "placeholder", "');"), id="addToDb")
-    outp <- dbGetQuery(poolInput, query)
-    
     # Set begin time in transaction table
     query <- sqlInterpolate(ANSI(), paste0("UPDATE transaction SET timestamp_started='", beginTime, "' WHERE uuid='", enrichmentUUID, "';"), id="updateTransactionStart")
     outp <- dbGetQuery(poolInput, query)   
@@ -416,10 +412,6 @@ performEnrichment <- function(enrichmentUUID="-1", annoSelectStr="MESH=checked,P
     # Get ending time
     finishTime <- Sys.time()
 
-    # Update database with ending timestamp for enrichment
-    query <- sqlInterpolate(ANSI(), paste0("UPDATE enrichment_list SET timestamp_finish='", finishTime, "' WHERE id='", enrichmentUUID, "';"), id="addToDb")
-    outp <- dbGetQuery(poolStatus, query)
-    
     # Set finish time in transaction table
     query <- sqlInterpolate(ANSI(), paste0("UPDATE transaction SET timestamp_finished='", finishTime, "' WHERE uuid='", enrichmentUUID, "';"), id="transactionUpdateFinished")
     outp <- dbGetQuery(poolStatus, query)
@@ -2257,10 +2249,6 @@ getAnnotations <- function(enrichmentUUID="-1", annoSelectStr="MESH=checked,PHAR
     # Get begin time for request
     beginTime <- Sys.time()
     
-    # Add request to database
-    query <- sqlInterpolate(ANSI(), paste0("INSERT INTO enrichment_list(id, chemlist, type, node_cutoff, anno_select_str, timestamp_start, ip) VALUES('", enrichmentUUID, "','", "placeholder", "','", "placeholder", "','", nodeCutoff, "','", annoSelectStr, "','", beginTime, "','", "placeholder", "');"), id="addToDb")
-    outp <- dbGetQuery(poolInput, query)
-    
     # Set begin time in transaction table
     query <- sqlInterpolate(ANSI(), paste0("UPDATE transaction SET timestamp_started='", beginTime, "' WHERE uuid='", enrichmentUUID, "';"), id="updateTransactionStart")
     outp <- dbGetQuery(poolInput, query)
@@ -2474,10 +2462,6 @@ getAnnotations <- function(enrichmentUUID="-1", annoSelectStr="MESH=checked,PHAR
     # Get ending time
     finishTime <- Sys.time()
     
-    # Update database with ending timestamp for enrichment
-    query <- sqlInterpolate(ANSI(), paste0("UPDATE enrichment_list SET timestamp_finish='", finishTime, "' WHERE id='", enrichmentUUID, "';"), id="addToDb")
-    outp <- dbGetQuery(poolUpdate, query)
-    
     # Set finish time in transaction table
     query <- sqlInterpolate(ANSI(), paste0("UPDATE transaction SET timestamp_finished='", finishTime, "' WHERE uuid='", enrichmentUUID, "';"), id="transactionUpdateFinished")
     outp <- dbGetQuery(poolUpdate, query)
@@ -2591,9 +2575,6 @@ queue <- function(){
                         print(paste0("Request cancelled for ", enrichmentUUID, ". Deleting..."))
                         # Set flag for queue
                         query <- sqlInterpolate(ANSI(), paste0("UPDATE queue SET finished=1 WHERE uuid='", enrichmentUUID, "';"), id="deleteEntries")
-                        outp <- dbGetQuery(poolFinished, query)
-                        # Delete from enrichment_list
-                        query <- sqlInterpolate(ANSI(), paste0("DELETE FROM enrichment_list WHERE id='", enrichmentUUID, "';"), id="deleteEntries")
                         outp <- dbGetQuery(poolFinished, query)
                     } else { # Else, generate error file for reference
                         print(paste0("Error performing enrichment: ", status_code, " : "))

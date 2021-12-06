@@ -182,10 +182,7 @@ shinyUI(function(){
                 # Hidden buttons for View previous enrichment menu
                 hidden(
                     fluidRow(id="searchButtonsMenu",
-                        column(12, actionButton("searchPrevButton", label="View results", icon=icon("search"))),
-                        column(12, actionButton("searchDeleteSelected", label="Delete selected", icon=icon("trash"))),
-                        column(12, actionButton("searchDeleteAllIncomplete", label="Delete all incomplete", icon=icon("trash"))),
-                        column(12, actionButton("searchDeleteAll", label="Delete all", icon=icon("dumpster")))
+                        column(12, actionButton("searchPrevButton", label="View results", icon=icon("search")))
                     )
                 ),
                 hidden(
@@ -199,8 +196,6 @@ shinyUI(function(){
                     column(id="searchForm", 12,
                         h1("View Results from Previous Request"),
                         fluidRow(
-                            h3("Select Request to View Results for"),
-                            actionButton(inputId="selectAllPrevOnPage", label="Select all displayed requests"),
                             hidden(
                               column(id="warningSearchColumn", 12,
                                   uiOutput("searchWarning")
@@ -297,7 +292,7 @@ shinyUI(function(){
                 hidden(
                     fluidRow(id="waitingPage",
                         column(12,
-                            p("Your request has been submitted and placed in the queue. After your request is processed and completed, the results can be accessed by clicking the \"Results\" button."),
+                            HTML("<p>Your request has been submitted and placed in the queue. After your request is processed and completed, the results can be accessed by clicking the \"Results\" button. <b>Please make sure to save the request's UUID for future reference and access to the results.</b></p>"),
                             column(3, 
                                 actionButton("fetchResults", "Results", icon=icon("arrow-alt-circle-right"))
                             ),
