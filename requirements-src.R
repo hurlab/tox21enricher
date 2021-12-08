@@ -1,4 +1,4 @@
 pkgs <- c(
-    'config', 'future', 'ggplot2', 'httr', 'parallel', 'plyr', 'pool', 'promises', 'purrr', 'reticulate' ,'rjson', 'RPostgreSQL', 'stringr', 'tidyverse', 'uuid', 'xlsx'
+    'config', 'DBI', 'future', 'ggplot2', 'httr', 'parallel', 'plyr', 'pool', 'promises', 'rjson', 'RPostgres', 'stringr', 'tidyverse', 'uuid'
 )
 install.packages(pkgs, dependencies=TRUE, repos='https://cran.rstudio.com/')

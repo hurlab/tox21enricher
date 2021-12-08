@@ -1,5 +1,6 @@
 # Queue for Tox21 Enricher
 library(config)
+library(DBI)
 library(future)
 library(ggplot2)
 library(parallel)
@@ -8,7 +9,7 @@ library(pool)
 library(promises)
 library(purrr)
 library(rjson)
-library(RPostgreSQL)
+library(RPostgres)
 library(stringr)
 library(tidyverse)
 library(uuid)
@@ -29,7 +30,7 @@ while(TRUE){
     currentDate <- Sys.time()
     # Connect to DB
     pool <- dbPool(
-        drv=dbDriver("PostgreSQL", max.con=100),
+        drv=RPostgres::Postgres(),
         dbname=tox21queue$database,
         host=tox21queue$host,
         user=tox21queue$uid,
@@ -53,7 +54,7 @@ while(TRUE){
         print("clearing the following transactions...") 
         print(badTransactions)
         pool <- dbPool(
-            drv=dbDriver("PostgreSQL", max.con=100),
+            drv=RPostgres::Postgres(),
             dbname=tox21queue$database,
             host=tox21queue$host,
             user=tox21queue$uid,

@@ -10,6 +10,7 @@
 #* @apiVersion 1.0
 
 library(config)
+library(DBI)
 library(future)
 library(ggplot2)
 library(httr)
@@ -19,7 +20,7 @@ library(pool)
 library(promises)
 library(reticulate)
 library(rjson)
-library(RPostgreSQL)
+library(RPostgres)
 library(stringr)
 library(tidyverse)
 library(uuid)
@@ -55,7 +56,7 @@ print("! Ready to accept connections.")
 queue <- function(mode="", enrichmentUUID="-1", annoSelectStr="MESH=checked,PHARMACTIONLIST=checked,ACTIVITY_CLASS=checked,ADVERSE_EFFECT=checked,INDICATION=checked,KNOWN_TOXICITY=checked,MECH_LEVEL_1=checked,MECH_LEVEL_2=checked,MECH_LEVEL_3=checked,MECHANISM=checked,MODE_CLASS=checked,PRODUCT_CLASS=checked,STRUCTURE_ACTIVITY=checked,TA_LEVEL_1=checked,TA_LEVEL_2=checked,TA_LEVEL_3=checked,THERAPEUTIC_CLASS=checked,TISSUE_TOXICITY=checked,DRUGBANK_ATC=checked,DRUGBANK_ATC_CODE=checked,DRUGBANK_CARRIERS=checked,DRUGBANK_ENZYMES=checked,DRUGBANK_TARGETS=checked,DRUGBANK_TRANSPORTERS=checked,CTD_CHEM2DISEASE=checked,CTD_CHEM2GENE_25=checked,CTD_CHEMICALS_DISEASES=checked,CTD_CHEMICALS_GENES=checked,CTD_CHEMICALS_GOENRICH_CELLCOMP=checked,CTD_CHEMICALS_GOENRICH_MOLFUNCT=checked,CTD_CHEMICALS_PATHWAYS=checked,CTD_GOSLIM_BIOPROCESS=checked,CTD_PATHWAY=checked,HTS_ACTIVE=checked,LEADSCOPE_TOXICITY=checked,MULTICASE_TOX_PREDICTION=checked,TOXCAST_ACTIVE=checked,TOXINS_TARGETS=checked,TOXPRINT_STRUCTURE=checked,TOXREFDB=checked,", nodeCutoff=10, setNames){
     # Connect to db
     poolQueue <- dbPool(
-        drv=dbDriver("PostgreSQL", max.con=100),
+        drv=RPostgres::Postgres(),
         dbname=tox21queue$database,
         host=tox21queue$host,
         user=tox21queue$uid,
@@ -91,7 +92,7 @@ queue <- function(mode="", enrichmentUUID="-1", annoSelectStr="MESH=checked,PHAR
 createTransaction <- function(originalMode="", mode="", uuid="-1", annoSelectStr="MESH=checked,PHARMACTIONLIST=checked,ACTIVITY_CLASS=checked,ADVERSE_EFFECT=checked,INDICATION=checked,KNOWN_TOXICITY=checked,MECH_LEVEL_1=checked,MECH_LEVEL_2=checked,MECH_LEVEL_3=checked,MECHANISM=checked,MODE_CLASS=checked,PRODUCT_CLASS=checked,STRUCTURE_ACTIVITY=checked,TA_LEVEL_1=checked,TA_LEVEL_2=checked,TA_LEVEL_3=checked,THERAPEUTIC_CLASS=checked,TISSUE_TOXICITY=checked,DRUGBANK_ATC=checked,DRUGBANK_ATC_CODE=checked,DRUGBANK_CARRIERS=checked,DRUGBANK_ENZYMES=checked,DRUGBANK_TARGETS=checked,DRUGBANK_TRANSPORTERS=checked,CTD_CHEM2DISEASE=checked,CTD_CHEM2GENE_25=checked,CTD_CHEMICALS_DISEASES=checked,CTD_CHEMICALS_GENES=checked,CTD_CHEMICALS_GOENRICH_CELLCOMP=checked,CTD_CHEMICALS_GOENRICH_MOLFUNCT=checked,CTD_CHEMICALS_PATHWAYS=checked,CTD_GOSLIM_BIOPROCESS=checked,CTD_PATHWAY=checked,HTS_ACTIVE=checked,LEADSCOPE_TOXICITY=checked,MULTICASE_TOX_PREDICTION=checked,TOXCAST_ACTIVE=checked,TOXINS_TARGETS=checked,TOXPRINT_STRUCTURE=checked,TOXREFDB=checked,", cutoff=10, input, originalNames, reenrich="", color, timestampPosted){
     # Connect to db
     poolTransaction <- dbPool(
-        drv=dbDriver("PostgreSQL", max.con=100),
+        drv=RPostgres::Postgres(),
         dbname=tox21queue$database,
         host=tox21queue$host,
         user=tox21queue$uid,
@@ -113,7 +114,7 @@ createTransaction <- function(originalMode="", mode="", uuid="-1", annoSelectStr
 loadTransaction <- function(uuid){
     # Connect to db
     poolTransaction <- dbPool(
-        drv=dbDriver("PostgreSQL", max.con=100),
+        drv=RPostgres::Postgres(),
         dbname=tox21queue$database,
         host=tox21queue$host,
         user=tox21queue$uid,
@@ -135,7 +136,7 @@ loadTransaction <- function(uuid){
 getQueuePos <- function(transactionId="-1", mode="none"){
     # Connect to db
     poolUpdate <- dbPool(
-        drv=dbDriver("PostgreSQL", max.con=100),
+        drv=RPostgres::Postgres(),
         dbname=tox21queue$database,
         host=tox21queue$host,
         user=tox21queue$uid,
@@ -225,7 +226,7 @@ getQueuePos <- function(transactionId="-1", mode="none"){
 finishedRequest <- function(res, req, transactionId){
     # Connect to db
     poolQueue <- dbPool(
-        drv=dbDriver("PostgreSQL", max.con=100),
+        drv=RPostgres::Postgres(),
         dbname=tox21queue$database,
         host=tox21queue$host,
         user=tox21queue$uid,
@@ -251,7 +252,7 @@ finishedRequest <- function(res, req, transactionId){
 hasError <- function(res, req, transactionId){
     # Connect to db
     poolQueue <- dbPool(
-        drv=dbDriver("PostgreSQL", max.con=100),
+        drv=RPostgres::Postgres(),
         dbname=tox21queue$database,
         host=tox21queue$host,
         user=tox21queue$uid,
@@ -276,7 +277,7 @@ hasError <- function(res, req, transactionId){
 cancelEnrichment <- function(res, req, transactionId){
     # Connect to db
     poolCancel <- dbPool(
-        drv=dbDriver("PostgreSQL", max.con=100),
+        drv=RPostgres::Postgres(),
         dbname=tox21queue$database,
         host=tox21queue$host,
         user=tox21queue$uid,
@@ -313,7 +314,7 @@ getAppVersion <- function(res, req){
 initAnnotations <- function(res, req){
     # Connect to db
     poolAnnotations <- dbPool(
-        drv=dbDriver("PostgreSQL", max.con=100),
+        drv=RPostgres::Postgres(),
         dbname=tox21config$database,
         host=tox21config$host,
         user=tox21config$uid,
@@ -337,7 +338,7 @@ initAnnotations <- function(res, req){
 total <- function(res, req){
     # Connect to db
     poolTotal <- dbPool(
-        drv=dbDriver("PostgreSQL", max.con=100),
+        drv=RPostgres::Postgres(),
         dbname=tox21queue$database,
         host=tox21queue$host,
         user=tox21queue$uid,
@@ -379,7 +380,7 @@ total <- function(res, req){
 substructure <- function(res, req, input, reenrich=FALSE){
     # Connect to db
     poolSubstructure <- dbPool(
-        drv=dbDriver("PostgreSQL", max.con=100),
+        drv=RPostgres::Postgres(),
         dbname=tox21config$database,
         host=tox21config$host,
         user=tox21config$uid,
@@ -410,7 +411,7 @@ substructure <- function(res, req, input, reenrich=FALSE){
 similarity <- function(res, req, input="", threshold){
     # Connect to db
     poolSimilarity <- dbPool(
-        drv=dbDriver("PostgreSQL", max.con=100),
+        drv=RPostgres::Postgres(),
         dbname=tox21config$database,
         host=tox21config$host,
         user=tox21config$uid,
@@ -438,7 +439,7 @@ similarity <- function(res, req, input="", threshold){
 casrnData <- function(res, req, input){
     # Connect to db
     poolCasrn <- dbPool(
-        drv=dbDriver("PostgreSQL", max.con=100),
+        drv=RPostgres::Postgres(),
         dbname=tox21config$database,
         host=tox21config$host,
         user=tox21config$uid,
@@ -466,7 +467,7 @@ reactiveGroups <- function(res, req, input){
 inchiToSmiles <- function(res, req, inchi){
     # Connect to db
     poolInchi <- dbPool(
-        drv=dbDriver("PostgreSQL", max.con=100),
+        drv=RPostgres::Postgres(),
         dbname=tox21config$database,
         host=tox21config$host,
         user=tox21config$uid,
@@ -485,7 +486,7 @@ inchiToSmiles <- function(res, req, inchi){
 convertInchi <- function(res, req, inchi){
     # Connect to db
     poolInchi <- dbPool(
-        drv=dbDriver("PostgreSQL", max.con=100),
+        drv=RPostgres::Postgres(),
         dbname=tox21config$database,
         host=tox21config$host,
         user=tox21config$uid,
@@ -506,7 +507,7 @@ convertInchi <- function(res, req, inchi){
 generateStructures <- function(res, req, input){
     # Connect to db
     poolSvg <- dbPool(
-        drv=dbDriver("PostgreSQL", max.con=100),
+        drv=RPostgres::Postgres(),
         dbname=tox21config$database,
         host=tox21config$host,
         user=tox21config$uid,
@@ -601,7 +602,7 @@ createInput <- function(res, req, transactionId, enrichmentSets, setNames, mode,
     dir.create(outDir)
     # Connect to db
     poolInput <- dbPool(
-        drv=dbDriver("PostgreSQL", max.con=100),
+        drv=RPostgres::Postgres(),
         dbname=tox21config$database,
         host=tox21config$host,
         user=tox21config$uid,
@@ -782,7 +783,7 @@ generateNetwork <- function(res, req, transactionId="-1", cutoff, mode, input, q
     termsStringPlaceholder <- paste0(chartNetworkUIDs, collapse=",")
     # Connect to db
     poolNetwork <- dbPool(
-        drv=dbDriver("PostgreSQL", max.con=100),
+        drv=RPostgres::Postgres(),
         dbname=tox21config$database,
         host=tox21config$host,
         user=tox21config$uid,
@@ -819,7 +820,7 @@ generateNetwork <- function(res, req, transactionId="-1", cutoff, mode, input, q
 getNodeChemicals <- function(res, req, termFrom, termTo, classFrom, classTo){
     # Connect to db
     poolNode <- dbPool(
-        drv=dbDriver("PostgreSQL", max.con=100),
+        drv=RPostgres::Postgres(),
         dbname=tox21config$database,
         host=tox21config$host,
         user=tox21config$uid,
@@ -855,7 +856,7 @@ getNodeChemicals <- function(res, req, termFrom, termTo, classFrom, classTo){
 getNodeDetails <- function(res, req, class){
     # Connect to db
     poolNode <- dbPool(
-        drv=dbDriver("PostgreSQL", max.con=100),
+        drv=RPostgres::Postgres(),
         dbname=tox21config$database,
         host=tox21config$host,
         user=tox21config$uid,
@@ -877,7 +878,7 @@ getNodeDetails <- function(res, req, class){
 getNodeColors <- function(res, req){
     # Connect to db
     poolNode <- dbPool(
-        drv=dbDriver("PostgreSQL", max.con=100),
+        drv=RPostgres::Postgres(),
         dbname=tox21config$database,
         host=tox21config$host,
         user=tox21config$uid,
@@ -900,7 +901,7 @@ getNodeColors <- function(res, req){
 #* @get /annotationList
 retrieveAnnotations <- function(){
     pool <- dbPool(
-        drv=dbDriver("PostgreSQL", max.con=100),
+        drv=RPostgres::Postgres(),
         dbname=tox21config$database,
         host=tox21config$host,
         user=tox21config$uid,
@@ -968,7 +969,7 @@ submit <- function(mode="", input="", annotations="MESH,PHARMACTIONLIST,ACTIVITY
     } else {
         # Open pool for PostgreSQL
         poolTanimoto <- dbPool(
-            drv=dbDriver("PostgreSQL", max.con=100),
+            drv=RPostgres::Postgres(),
             dbname=tox21config$database,
             host=tox21config$host,
             user=tox21config$uid,
@@ -1003,7 +1004,7 @@ submit <- function(mode="", input="", annotations="MESH,PHARMACTIONLIST,ACTIVITY
     annotations <- gsub(",", "=checked,", annotations)
     # Open main pool
     pool <- dbPool(
-        drv=dbDriver("PostgreSQL", max.con=100),
+        drv=RPostgres::Postgres(),
         dbname=tox21config$database,
         host=tox21config$host,
         user=tox21config$uid,

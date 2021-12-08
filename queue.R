@@ -1,5 +1,6 @@
 # Queue for Tox21 Enricher
 library(config)
+library(DBI)
 library(future)
 library(ggplot2)
 library(parallel)
@@ -8,7 +9,7 @@ library(pool)
 library(promises)
 library(purrr)
 library(rjson)
-library(RPostgreSQL)
+library(RPostgres)
 library(stringr)
 library(tidyverse)
 library(uuid)
@@ -25,7 +26,7 @@ APP_DIR <- tox21config$appdir
 
 # Define info for connecting to PostgreSQL Tox21 Enricher database on server startup
 pool <- dbPool(
-    drv=dbDriver("PostgreSQL", max.con=100),
+    drv=RPostgres::Postgres(),
     dbname=tox21config$database,
     host=tox21config$host,
     user=tox21config$uid,
@@ -116,7 +117,7 @@ print("! Ready to accept connections.")
 performEnrichment <- function(enrichmentUUID="-1", annoSelectStr="MESH=checked,PHARMACTIONLIST=checked,ACTIVITY_CLASS=checked,ADVERSE_EFFECT=checked,INDICATION=checked,KNOWN_TOXICITY=checked,MECH_LEVEL_1=checked,MECH_LEVEL_2=checked,MECH_LEVEL_3=checked,MECHANISM=checked,MODE_CLASS=checked,PRODUCT_CLASS=checked,STRUCTURE_ACTIVITY=checked,TA_LEVEL_1=checked,TA_LEVEL_2=checked,TA_LEVEL_3=checked,THERAPEUTIC_CLASS=checked,TISSUE_TOXICITY=checked,DRUGBANK_ATC=checked,DRUGBANK_ATC_CODE=checked,DRUGBANK_CARRIERS=checked,DRUGBANK_ENZYMES=checked,DRUGBANK_TARGETS=checked,DRUGBANK_TRANSPORTERS=checked,CTD_CHEM2DISEASE=checked,CTD_CHEM2GENE_25=checked,CTD_CHEMICALS_DISEASES=checked,CTD_CHEMICALS_GENES=checked,CTD_CHEMICALS_GOENRICH_CELLCOMP=checked,CTD_CHEMICALS_GOENRICH_MOLFUNCT=checked,CTD_CHEMICALS_PATHWAYS=checked,CTD_GOSLIM_BIOPROCESS=checked,CTD_PATHWAY=checked,HTS_ACTIVE=checked,LEADSCOPE_TOXICITY=checked,MULTICASE_TOX_PREDICTION=checked,TOXCAST_ACTIVE=checked,TOXINS_TARGETS=checked,TOXPRINT_STRUCTURE=checked,TOXREFDB=checked,", nodeCutoff=10) {
     # Connect to db
     poolInput <- dbPool(
-        drv=dbDriver("PostgreSQL", max.con=100),
+        drv=RPostgres::Postgres(),
         dbname=tox21queue$database,
         host=tox21queue$host,
         user=tox21queue$uid,
@@ -253,7 +254,7 @@ performEnrichment <- function(enrichmentUUID="-1", annoSelectStr="MESH=checked,P
 
     # Connect to DB to get status info
     poolStatus <- dbPool(
-        drv=dbDriver("PostgreSQL", max.con=100),
+        drv=RPostgres::Postgres(),
         dbname=tox21queue$database,
         host=tox21queue$host,
         user=tox21queue$uid,
@@ -313,7 +314,7 @@ performEnrichment <- function(enrichmentUUID="-1", annoSelectStr="MESH=checked,P
     # Update status file
     # Connect to DB to get status info
     poolStatus <- dbPool(
-        drv=dbDriver("PostgreSQL", max.con=100),
+        drv=RPostgres::Postgres(),
         dbname=tox21queue$database,
         host=tox21queue$host,
         user=tox21queue$uid,
@@ -414,7 +415,7 @@ performEnrichment <- function(enrichmentUUID="-1", annoSelectStr="MESH=checked,P
     # Update status file(s)
     # Connect to DB to get status info
     poolStatus <- dbPool(
-        drv=dbDriver("PostgreSQL", max.con=100),
+        drv=RPostgres::Postgres(),
         dbname=tox21queue$database,
         host=tox21queue$host,
         user=tox21queue$uid,
@@ -1918,7 +1919,7 @@ kappa_cluster <- function(x, deg=NULL, useTerm=FALSE, cutoff=0.5, overlap=0.5, m
     # Update status file
     # Connect to DB to get status info
     poolStatus <- dbPool(
-        drv=dbDriver("PostgreSQL", max.con=100),
+        drv=RPostgres::Postgres(),
         dbname=tox21queue$database,
         host=tox21queue$host,
         user=tox21queue$uid,
@@ -2031,7 +2032,7 @@ kappa_cluster <- function(x, deg=NULL, useTerm=FALSE, cutoff=0.5, overlap=0.5, m
     # Update status file
     # Connect to DB to get status info
     poolStatus <- dbPool(
-        drv=dbDriver("PostgreSQL", max.con=100),
+        drv=RPostgres::Postgres(),
         dbname=tox21queue$database,
         host=tox21queue$host,
         user=tox21queue$uid,
@@ -2086,7 +2087,7 @@ kappa_cluster <- function(x, deg=NULL, useTerm=FALSE, cutoff=0.5, overlap=0.5, m
     # Update status file
     # Connect to DB to get status info
     poolStatus <- dbPool(
-        drv=dbDriver("PostgreSQL", max.con=100),
+        drv=RPostgres::Postgres(),
         dbname=tox21queue$database,
         host=tox21queue$host,
         user=tox21queue$uid,
@@ -2144,7 +2145,7 @@ kappa_cluster <- function(x, deg=NULL, useTerm=FALSE, cutoff=0.5, overlap=0.5, m
     # Update status file
     # Connect to DB to get status info
     poolStatus <- dbPool(
-        drv=dbDriver("PostgreSQL", max.con=100),
+        drv=RPostgres::Postgres(),
         dbname=tox21queue$database,
         host=tox21queue$host,
         user=tox21queue$uid,
@@ -2286,7 +2287,7 @@ get_the_best_seed <- function(currentSeedRef, remainingSeedsRef, newSeedRef, mul
 getAnnotations <- function(enrichmentUUID="-1", annoSelectStr="MESH=checked,PHARMACTIONLIST=checked,ACTIVITY_CLASS=checked,ADVERSE_EFFECT=checked,INDICATION=checked,KNOWN_TOXICITY=checked,MECH_LEVEL_1=checked,MECH_LEVEL_2=checked,MECH_LEVEL_3=checked,MECHANISM=checked,MODE_CLASS=checked,PRODUCT_CLASS=checked,STRUCTURE_ACTIVITY=checked,TA_LEVEL_1=checked,TA_LEVEL_2=checked,TA_LEVEL_3=checked,THERAPEUTIC_CLASS=checked,TISSUE_TOXICITY=checked,DRUGBANK_ATC=checked,DRUGBANK_ATC_CODE=checked,DRUGBANK_CARRIERS=checked,DRUGBANK_ENZYMES=checked,DRUGBANK_TARGETS=checked,DRUGBANK_TRANSPORTERS=checked,CTD_CHEM2DISEASE=checked,CTD_CHEM2GENE_25=checked,CTD_CHEMICALS_DISEASES=checked,CTD_CHEMICALS_GENES=checked,CTD_CHEMICALS_GOENRICH_CELLCOMP=checked,CTD_CHEMICALS_GOENRICH_MOLFUNCT=checked,CTD_CHEMICALS_PATHWAYS=checked,CTD_GOSLIM_BIOPROCESS=checked,CTD_PATHWAY=checked,HTS_ACTIVE=checked,LEADSCOPE_TOXICITY=checked,MULTICASE_TOX_PREDICTION=checked,TOXCAST_ACTIVE=checked,TOXINS_TARGETS=checked,TOXPRINT_STRUCTURE=checked,TOXREFDB=checked,", nodeCutoff=10) {
     # Connect to db
     poolInput <- dbPool(
-        drv=dbDriver("PostgreSQL", max.con=100),
+        drv=RPostgres::Postgres(),
         dbname=tox21queue$database,
         host=tox21queue$host,
         user=tox21queue$uid,
@@ -2315,7 +2316,7 @@ getAnnotations <- function(enrichmentUUID="-1", annoSelectStr="MESH=checked,PHAR
     annotationMatrix <- mclapply(inputSets, mc.cores=CORES, mc.silent=FALSE, function(infile){
         # Connect to db
         poolMatrix <- dbPool(
-            drv=dbDriver("PostgreSQL", max.con=100),
+            drv=RPostgres::Postgres(),
             dbname=tox21config$database,
             host=tox21config$host,
             user=tox21config$uid,
@@ -2345,7 +2346,7 @@ getAnnotations <- function(enrichmentUUID="-1", annoSelectStr="MESH=checked,PHAR
         # Read status file and update step
         # Connect to DB to get status info
         poolStatus <- dbPool(
-            drv=dbDriver("PostgreSQL", max.con=100),
+            drv=RPostgres::Postgres(),
             dbname=tox21queue$database,
             host=tox21queue$host,
             user=tox21queue$uid,
@@ -2390,7 +2391,7 @@ getAnnotations <- function(enrichmentUUID="-1", annoSelectStr="MESH=checked,PHAR
         # Read status file and update step
         # Connect to DB to get status info
         poolStatus <- dbPool(
-            drv=dbDriver("PostgreSQL", max.con=100),
+            drv=RPostgres::Postgres(),
             dbname=tox21queue$database,
             host=tox21queue$host,
             user=tox21queue$uid,
@@ -2458,7 +2459,7 @@ getAnnotations <- function(enrichmentUUID="-1", annoSelectStr="MESH=checked,PHAR
         # Read status file and update step
         # Connect to DB to get status info
         poolStatus <- dbPool(
-            drv=dbDriver("PostgreSQL", max.con=100),
+            drv=RPostgres::Postgres(),
             dbname=tox21queue$database,
             host=tox21queue$host,
             user=tox21queue$uid,
@@ -2521,7 +2522,7 @@ getAnnotations <- function(enrichmentUUID="-1", annoSelectStr="MESH=checked,PHAR
     
     # Connect to db
     poolUpdate <- dbPool(
-        drv=dbDriver("PostgreSQL", max.con=100),
+        drv=RPostgres::Postgres(),
         dbname=tox21queue$database,
         host=tox21queue$host,
         user=tox21queue$uid,
@@ -2546,7 +2547,7 @@ queue <- function(){
     while(TRUE){
         # Connect to db
         poolQueue <- dbPool(
-            drv=dbDriver("PostgreSQL", max.con=100),
+            drv=RPostgres::Postgres(),
             dbname=tox21queue$database,
             host=tox21queue$host,
             user=tox21queue$uid,
@@ -2585,7 +2586,7 @@ queue <- function(){
                       
                     # Connect to DB to get status info
                     poolStatus <- dbPool(
-                        drv=dbDriver("PostgreSQL", max.con=100),
+                        drv=RPostgres::Postgres(),
                         dbname=tox21queue$database,
                         host=tox21queue$host,
                         user=tox21queue$uid,
@@ -2624,7 +2625,7 @@ queue <- function(){
                     
                     # Connect to DB to set appropriate finishing flags
                     poolFinished <- dbPool(
-                        drv=dbDriver("PostgreSQL", max.con=100),
+                        drv=RPostgres::Postgres(),
                         dbname=tox21queue$database,
                         host=tox21queue$host,
                         user=tox21queue$uid,
