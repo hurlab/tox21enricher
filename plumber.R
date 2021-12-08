@@ -285,7 +285,7 @@ cancelEnrichment <- function(res, req, transactionId){
         idleTimeout=3600000
     )
     # Update database to show that request was canceled
-    query <- sqlInterpolate(ANSI(), paste0("UPDATE queue SET cancel=1 WHERE uuid='", transactionId, "';"), id="cancelEnrichment")
+    query <- sqlInterpolate(ANSI(), paste0("UPDATE queue SET cancel=1, finished=1 WHERE uuid='", transactionId, "';"), id="cancelEnrichment")
     outp <- dbGetQuery(poolCancel, query)
     query <- sqlInterpolate(ANSI(), paste0("UPDATE transaction SET cancel=1 WHERE uuid='", transactionId, "';"), id="cancelEnrichment")
     outp <- dbGetQuery(poolCancel, query)

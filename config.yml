@@ -27,3 +27,4 @@ default:
     pwd: "password_queue"
     port: 5432
     database: 'tox21queue'
+    cleanupTime: 24

@@ -1,3 +1,3 @@
 #!/bin/bash
-# Start Tox21 Enricher R Plumber API
+# Start Tox21 Enricher R Queue
 Rscript ./queue.R

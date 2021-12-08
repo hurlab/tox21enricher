@@ -271,8 +271,15 @@ performEnrichment <- function(enrichmentUUID="-1", annoSelectStr="MESH=checked,P
         query <- sqlInterpolate(ANSI(), paste0("UPDATE status SET step=2 WHERE uuid='", enrichmentUUID, "' AND setname='", x, "';"), id="fetchStatus")
         outp <- dbGetQuery(poolStatus, query)
     })
+    # Check if no errors
+    query <- sqlInterpolate(ANSI(), paste0("SELECT * FROM queue WHERE uuid='", enrichmentUUID, "' AND cancel=1;"), id="fetchStatus")
+    requestCancel <- dbGetQuery(poolStatus, query)
     # Close pool
     poolClose(poolStatus)
+    if(nrow(requestCancel) > 0){
+        print(paste0("Canceling request: ", enrichmentUUID))
+        return(FALSE)
+    }
 
     # multi-core
     enrichmentStatusComplete <- mclapply(outfileBaseNames, mc.cores=CORES, mc.silent=FALSE, function(i){
@@ -323,8 +330,15 @@ performEnrichment <- function(enrichmentUUID="-1", annoSelectStr="MESH=checked,P
         query <- sqlInterpolate(ANSI(), paste0("UPDATE status SET step=7 WHERE uuid='", enrichmentUUID, "' AND setname='", x, "';"), id="fetchStatus")
         outp <- dbGetQuery(poolStatus, query)
     })
+    # Check if no errors
+    query <- sqlInterpolate(ANSI(), paste0("SELECT * FROM queue WHERE uuid='", enrichmentUUID, "' AND cancel=1;"), id="fetchStatus")
+    requestCancel <- dbGetQuery(poolStatus, query)
     # Close pool
     poolClose(poolStatus)
+    if(nrow(requestCancel) > 0){
+        print(paste0("Canceling request: ", enrichmentUUID))
+        return(FALSE)
+    }
 
     ARGV_0 <- inDir
     ARGV_1 <- outDir 
@@ -425,8 +439,15 @@ performEnrichment <- function(enrichmentUUID="-1", annoSelectStr="MESH=checked,P
         query <- sqlInterpolate(ANSI(), paste0("UPDATE status SET step=8 WHERE uuid='", enrichmentUUID, "' AND setname='", x, "';"), id="fetchStatus")
         outp <- dbGetQuery(poolStatus, query)
     })
+    # Check if no errors
+    query <- sqlInterpolate(ANSI(), paste0("SELECT * FROM queue WHERE uuid='", enrichmentUUID, "' AND cancel=1;"), id="fetchStatus")
+    requestCancel <- dbGetQuery(poolStatus, query)
     # Close pool
     poolClose(poolStatus)
+    if(nrow(requestCancel) > 0){
+        print(paste0("Canceling request: ", enrichmentUUID))
+        return(FALSE)
+    }
 
     # success
     return(200)
@@ -1908,8 +1929,15 @@ kappa_cluster <- function(x, deg=NULL, useTerm=FALSE, cutoff=0.5, overlap=0.5, m
     # Set step flag for each set name
     query <- sqlInterpolate(ANSI(), paste0("UPDATE status SET step=3 WHERE uuid='", enrichmentUUID, "' AND setname='", outfileBase, "';"), id="fetchStatus")
     outp <- dbGetQuery(poolStatus, query)
+    # Check if no errors
+    query <- sqlInterpolate(ANSI(), paste0("SELECT * FROM queue WHERE uuid='", enrichmentUUID, "' AND cancel=1;"), id="fetchStatus")
+    requestCancel <- dbGetQuery(poolStatus, query)
     # Close pool
     poolClose(poolStatus)
+    if(nrow(requestCancel) > 0){
+        print(paste0("Canceling request: ", enrichmentUUID))
+        return(FALSE)
+    }
   
     # Step#1: Calculate kappa score
     mappedCASRNCheck <- list()
@@ -2014,8 +2042,15 @@ kappa_cluster <- function(x, deg=NULL, useTerm=FALSE, cutoff=0.5, overlap=0.5, m
     # Set step flag for each set name
     query <- sqlInterpolate(ANSI(), paste0("UPDATE status SET step=4 WHERE uuid='", enrichmentUUID, "' AND setname='", outfileBase, "';"), id="fetchStatus")
     outp <- dbGetQuery(poolStatus, query)
+    # Check if no errors
+    query <- sqlInterpolate(ANSI(), paste0("SELECT * FROM queue WHERE uuid='", enrichmentUUID, "' AND cancel=1;"), id="fetchStatus")
+    requestCancel <- dbGetQuery(poolStatus, query)
     # Close pool
     poolClose(poolStatus)
+    if(nrow(requestCancel) > 0){
+        print(paste0("Canceling request: ", enrichmentUUID))
+        return(FALSE)
+    }
   
     term2sToPass <- NULL
     if(length(termpair2kappaOverThreshold) > 0){
@@ -2062,8 +2097,15 @@ kappa_cluster <- function(x, deg=NULL, useTerm=FALSE, cutoff=0.5, overlap=0.5, m
     # Set step flag for each set name
     query <- sqlInterpolate(ANSI(), paste0("UPDATE status SET step=5 WHERE uuid='", enrichmentUUID, "' AND setname='", outfileBase, "';"), id="fetchStatus")
     outp <- dbGetQuery(poolStatus, query)
+    # Check if no errors
+    query <- sqlInterpolate(ANSI(), paste0("SELECT * FROM queue WHERE uuid='", enrichmentUUID, "' AND cancel=1;"), id="fetchStatus")
+    requestCancel <- dbGetQuery(poolStatus, query)
     # Close pool
     poolClose(poolStatus)
+    if(nrow(requestCancel) > 0){
+        print(paste0("Canceling request: ", enrichmentUUID))
+        return(FALSE)
+    }
     
     remainingSeeds <- qualifiedSeeds
     finalGroups <- vector("list", length(remainingSeeds))
@@ -2113,8 +2155,15 @@ kappa_cluster <- function(x, deg=NULL, useTerm=FALSE, cutoff=0.5, overlap=0.5, m
     # Set step flag for each set name
     query <- sqlInterpolate(ANSI(), paste0("UPDATE status SET step=6 WHERE uuid='", enrichmentUUID, "' AND setname='", outfileBase, "';"), id="fetchStatus")
     outp <- dbGetQuery(poolStatus, query)
+    # Check if no errors
+    query <- sqlInterpolate(ANSI(), paste0("SELECT * FROM queue WHERE uuid='", enrichmentUUID, "' AND cancel=1;"), id="fetchStatus")
+    requestCancel <- dbGetQuery(poolStatus, query)
     # Close pool
     poolClose(poolStatus)
+    if(nrow(requestCancel) > 0){
+        print(paste0("Canceling request: ", enrichmentUUID))
+        return(FALSE)
+    }
     
     outfileCluster <- paste0(outputBaseDir, outfileBase, "__Cluster.txt")
     CLUSTER <- file(outfileCluster)
@@ -2307,8 +2356,15 @@ getAnnotations <- function(enrichmentUUID="-1", annoSelectStr="MESH=checked,PHAR
         # Set step flag for each set name
         query <- sqlInterpolate(ANSI(), paste0("UPDATE status SET step=2 WHERE uuid='", enrichmentUUID, "' AND setname='", setName, "';"), id="fetchStatus")
         outp <- dbGetQuery(poolStatus, query)
+        # Check if no errors
+        query <- sqlInterpolate(ANSI(), paste0("SELECT * FROM queue WHERE uuid='", enrichmentUUID, "' AND cancel=1;"), id="fetchStatus")
+        requestCancel <- dbGetQuery(poolStatus, query)
         # Close pool
         poolClose(poolStatus)
+        if(nrow(requestCancel) > 0){
+            print(paste0("Canceling request: ", enrichmentUUID))
+            return(FALSE)
+        }
         
         # Get the corresponding annotations for each input CASRN
         annotations <- lapply(inputCASRNs, function(CASRN){
@@ -2345,8 +2401,15 @@ getAnnotations <- function(enrichmentUUID="-1", annoSelectStr="MESH=checked,PHAR
         # Set step flag for each set name
         query <- sqlInterpolate(ANSI(), paste0("UPDATE status SET step=3 WHERE uuid='", enrichmentUUID, "' AND setname='", setName, "';"), id="fetchStatus")
         outp <- dbGetQuery(poolStatus, query)
+        # Check if no errors
+        query <- sqlInterpolate(ANSI(), paste0("SELECT * FROM queue WHERE uuid='", enrichmentUUID, "' AND cancel=1;"), id="fetchStatus")
+        requestCancel <- dbGetQuery(poolStatus, query)
         # Close pool
         poolClose(poolStatus)
+        if(nrow(requestCancel) > 0){
+            print(paste0("Canceling request: ", enrichmentUUID))
+            return(FALSE)
+        }
         
         # Create output files for each CASRN in the Set
         individualMatrix <- lapply(inputCASRNs, function(CASRN){
@@ -2406,8 +2469,15 @@ getAnnotations <- function(enrichmentUUID="-1", annoSelectStr="MESH=checked,PHAR
         # Set step flag for each set name
         query <- sqlInterpolate(ANSI(), paste0("UPDATE status SET step=4 WHERE uuid='", enrichmentUUID, "' AND setname='", setName, "';"), id="fetchStatus")
         outp <- dbGetQuery(poolStatus, query)
+        # Check if no errors
+        query <- sqlInterpolate(ANSI(), paste0("SELECT * FROM queue WHERE uuid='", enrichmentUUID, "' AND cancel=1;"), id="fetchStatus")
+        requestCancel <- dbGetQuery(poolStatus, query)
         # Close pool
         poolClose(poolStatus)
+        if(nrow(requestCancel) > 0){
+            print(paste0("Canceling request: ", enrichmentUUID))
+            return(FALSE)
+        }
         
         # Create matrix file for all CASRNs in set
         file.create(paste0(outDir, "/", setName, "__FullMatrix.txt"))
@@ -2536,8 +2606,14 @@ queue <- function(){
                         outp <- dbGetQuery(poolStatus, query)
                     })
                     
+                    # Check if no errors
+                    query <- sqlInterpolate(ANSI(), paste0("SELECT * FROM queue WHERE uuid='", enrichmentUUID, "' AND cancel=1;"), id="fetchStatus")
+                    requestCancel <- dbGetQuery(poolStatus, query)
                     # Close pool
                     poolClose(poolStatus)
+                    if(nrow(requestCancel) > 0){
+                        return(FALSE)
+                    }
                       
                     # Perform enrichment analysis or fetch relevant annotations
                     if(mode == "annotation") {
@@ -2557,7 +2633,7 @@ queue <- function(){
                         idleTimeout=3600000
                     )
                     
-                    # Check if request was cancelled
+                    # Check if request was canceled
                     query <- sqlInterpolate(ANSI(), paste0("SELECT cancel FROM queue WHERE uuid='", enrichmentUUID, "';"), id="checkCancel")
                     outp <- dbGetQuery(poolFinished, query)
                       
