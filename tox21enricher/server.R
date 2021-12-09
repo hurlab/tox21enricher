@@ -2474,6 +2474,28 @@ shinyServer(function(input, output, session) {
                                 # Open preview in modal
                                 tmpFile <- read.table(paste0(tempdir(), "/output/", transactionId, "/", i, "__Chart.txt"), sep="\t", header=TRUE, comment.char="", fill=TRUE, stringsAsFactors=FALSE)
                                 names(tmpFile) <- c("Category", "Term", "Count", "%", "PValue", "CASRNs", "List Total", "Pop Hits", "Pop Total", "Fold Enrichment", "Bonferroni", "Benjamini", "FDR")
+                                
+                                # Round up really big decimal values
+                                tmpFile[, "%"] <- unlist(lapply(tmpFile[, "%"], function(x){
+                                    #return(formatC(x, format="e", digits=4))
+                                    return(round(as.numeric(x), digits=4))
+                                }))
+                                tmpFile[, "PValue"] <- unlist(lapply(tmpFile[, "PValue"], function(x){
+                                    return(round(as.numeric(x), digits=4))
+                                }))
+                                tmpFile[, "Fold Enrichment"] <- unlist(lapply(tmpFile[, "Fold Enrichment"], function(x){
+                                    return(round(as.numeric(x), digits=4))
+                                }))
+                                tmpFile[, "Bonferroni"] <- unlist(lapply(tmpFile[, "Bonferroni"], function(x){
+                                    return(round(as.numeric(x), digits=4))
+                                }))
+                                tmpFile[, "Benjamini"] <- unlist(lapply(tmpFile[, "Benjamini"], function(x){
+                                    return(round(as.numeric(x), digits=4))
+                                }))
+                                tmpFile[, "FDR"] <- unlist(lapply(tmpFile[, "FDR"], function(x){
+                                    return(round(as.numeric(x), digits=4))
+                                }))
+                                
                                 showModal(
                                     modalDialog(
                                         title=paste0("Chart file for ", i),
@@ -2528,6 +2550,21 @@ shinyServer(function(input, output, session) {
                                 # Open preview in modal
                                 tmpFile <- read.table(paste0(tempdir(), "/output/", transactionId, "/", i, "__ChartSimple.txt"), sep="\t", header=TRUE, comment.char="", fill=TRUE, stringsAsFactors=FALSE)
                                 names(tmpFile) <- c("Category", "Term", "Count", "%", "PValue", "Fold Enrichment", "Benjamini")
+                                
+                                # Round up really big decimal values
+                                tmpFile[, "%"] <- unlist(lapply(tmpFile[, "%"], function(x){
+                                    return(round(as.numeric(x), digits=4))
+                                }))
+                                tmpFile[, "PValue"] <- unlist(lapply(tmpFile[, "PValue"], function(x){
+                                    return(round(as.numeric(x), digits=4))
+                                }))
+                                tmpFile[, "Fold Enrichment"] <- unlist(lapply(tmpFile[, "Fold Enrichment"], function(x){
+                                    return(round(as.numeric(x), digits=4))
+                                }))
+                                tmpFile[, "Benjamini"] <- unlist(lapply(tmpFile[, "Benjamini"], function(x){
+                                    return(round(as.numeric(x), digits=4))
+                                }))
+                                
                                 showModal(
                                     modalDialog(
                                         title=paste0("Chart simple file for ", i),
@@ -2634,6 +2671,25 @@ shinyServer(function(input, output, session) {
                                     tmpDF <- data.frame(tmpDF, stringsAsFactors=FALSE)
                                     colnames(tmpDF) <- c("Category", "Term", "Count", "%", "PValue", "CASRNs", "List Total", "Pop Hits", "Pop Total", "Fold Enrichment", "Bonferroni", "Benjamini", "FDR")
                                     rownames(tmpDF) <- seq_len(nrow(tmpDF))
+                                    # Round up really big decimal values
+                                    tmpDF[, "%"] <- unlist(lapply(tmpDF[, "%"], function(x){
+                                        return(round(as.numeric(x), digits=4))
+                                    }))
+                                    tmpDF[, "PValue"] <- unlist(lapply(tmpDF[, "PValue"], function(x){
+                                        return(round(as.numeric(x), digits=4))
+                                    }))
+                                    tmpDF[, "Fold Enrichment"] <- unlist(lapply(tmpDF[, "Fold Enrichment"], function(x){
+                                        return(round(as.numeric(x), digits=4))
+                                    }))
+                                    tmpDF[, "Bonferroni"] <- unlist(lapply(tmpDF[, "Bonferroni"], function(x){
+                                        return(round(as.numeric(x), digits=4))
+                                    }))
+                                    tmpDF[, "Benjamini"] <- unlist(lapply(tmpDF[, "Benjamini"], function(x){
+                                        return(round(as.numeric(x), digits=4))
+                                    }))
+                                    tmpDF[, "FDR"] <- unlist(lapply(tmpDF[, "FDR"], function(x){
+                                        return(round(as.numeric(x), digits=4))
+                                    }))
                                     return(tmpDF)
                                 })
                                 showModal(
