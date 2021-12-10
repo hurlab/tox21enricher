@@ -14,6 +14,9 @@ default:
     ### Directories/pathing ###
     # The application's home directory
     appdir: "/home/username/tox21enricher/"
+    # The application's input/output directories
+    indir: "Input/"
+    outdir: "Output/"
     # Location of your Python installation
     python: "/home/username/anaconda3/envs/my-rdkit-env/bin/python3.X"
     # Number of cores for multithreading

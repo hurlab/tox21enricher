@@ -21,8 +21,6 @@ library(uuid)
 # Load params from config file
 tox21config <- config::get("tox21enricher")
 tox21queue <- config::get("tox21enricher-queue")
-CORES <- tox21config$cores
-APP_DIR <- tox21config$appdir
 CLEANUP_TIME <- tox21queue$cleanupTime
 
 while(TRUE){

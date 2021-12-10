@@ -32,6 +32,8 @@ tox21config <- config::get("tox21enricher")
 tox21queue <- config::get("tox21enricher-queue")
 APP_VERSION <- tox21config$appversion
 APP_DIR <- tox21config$appdir
+IN_DIR <- tox21config$indir
+OUT_DIR <- tox21config$outdir
 PYTHON_DIR <- tox21config$python
 CORES <- tox21config$cores
 
@@ -181,7 +183,7 @@ getQueuePos <- function(transactionId="-1", mode="none"){
                 } else if(statusFileUpdate == 5){
                     return("(Step 3/4): Clustering (Step 2/4) - creating qualified initial seeding groups.")
                 } else if(statusFileUpdate == 6){
-                    return("(Step 3/4): Clustering (Step 3/4) - merging qualiied seeds.")
+                    return("(Step 3/4): Clustering (Step 3/4) - merging qualified seeds.")
                 } else if(statusFileUpdate == 7){
                     return("(Step 3/4): Clustering (Step 4/4) - calculating enrichment score.")
                 } else if(statusFileUpdate == 8){
@@ -301,6 +303,12 @@ cancelEnrichment <- function(res, req, transactionId){
 #* @get /ping
 ping <- function(res, req){
     return(TRUE)
+}
+
+#* Get Input/Output subdirectory names
+#* @get /inout
+inout <- function(res, req){
+    return(c(IN_DIR, OUT_DIR))
 }
 
 #* Check Tox21 Enricher version
@@ -558,13 +566,13 @@ serveManual <- function(res, req){
 #* Check if randomly-generated UUID already exists. This should be extremely rare, but not impossible
 #* @get /checkId
 checkId <- function(res, req){
-    outDir <- paste0(APP_DIR, "/Output/")
+    outDir <- paste0(APP_DIR, "/", OUT_DIR)
     transactions <- Sys.glob(paste0(outDir, "*"))
     transactionId <- UUIDgenerate()
     fullIDs <- unlist(transactions, recursive=FALSE)
     fullIDs <- unlist(lapply(fullIDs, function(x){
         # Get just the ID
-        return(unlist(str_split(x, "Output/"))[2])
+        return(unlist(str_split(x, OUT_DIR))[2])
     }))
     while(transactionId %in% fullIDs){
         # Regenerate UUID
@@ -595,10 +603,10 @@ createInput <- function(res, req, transactionId, enrichmentSets, setNames, mode,
     })
     names(enrichmentSets) <- enrichmentSetNames
     # Create input directory
-    inDir <- paste0(APP_DIR, "Input/", transactionId, "/")
+    inDir <- paste0(APP_DIR, IN_DIR, transactionId, "/")
     dir.create(inDir)
     # Create output directory
-    outDir <- paste0(APP_DIR, "Output/", transactionId, "/")
+    outDir <- paste0(APP_DIR, OUT_DIR, transactionId, "/")
     dir.create(outDir)
     # Connect to db
     poolInput <- dbPool(
@@ -665,7 +673,7 @@ createInput <- function(res, req, transactionId, enrichmentSets, setNames, mode,
 #* @param transactionId UUID of the request
 #* @get /checkSets
 checkSets <- function(res, req, transactionId){
-    inputDir <- paste0(APP_DIR, "Input/")
+    inputDir <- paste0(APP_DIR, IN_DIR)
     inputFilesList <- Sys.glob(paste0(inputDir, transactionId, "/*.txt"))
     inputFilesList <- unlist(lapply(inputFilesList, function(x){
         x_lv1 <- gsub(paste0(inputDir, transactionId, "/"), "", x)
@@ -678,7 +686,7 @@ checkSets <- function(res, req, transactionId){
 #* @param transactionId UUID of the request
 #* @get /exists
 exists <- function(res, req, transactionId){
-    outDir <- paste0(APP_DIR, "Output/")
+    outDir <- paste0(APP_DIR, OUT_DIR)
     checkIfOutFile <- paste0(outDir, transactionId, "/tox21enricher_", transactionId, ".zip")
     if(file.exists(checkIfOutFile)){
         return(TRUE)
@@ -694,7 +702,7 @@ exists <- function(res, req, transactionId){
 #* @setName if supplied, is the set name to fetch from
 #* @get /getResults
 getResults <- function(res, req, transactionId, setName="###"){
-    outDir <- paste0(APP_DIR, "Output/", transactionId, "/")
+    outDir <- paste0(APP_DIR, OUT_DIR, transactionId, "/")
     setFiles <- NULL
     if(setName == "###") {
         setFiles <- Sys.glob(paste0(outDir, "/*"))
@@ -702,11 +710,11 @@ getResults <- function(res, req, transactionId, setName="###"){
         setFiles <- Sys.glob(paste0(outDir, setName, "*"), dirmark=FALSE) 
         setFiles <- unlist(lapply(setFiles, function(fileName){
             tmpSplit <- unlist(str_split(fileName, outDir))
-            return(paste0("Output/", transactionId, "/", tmpSplit[2]))
+            return(paste0(OUT_DIR, transactionId, "/", tmpSplit[2]))
         }))
     }
     # Add zip file
-    setFiles <- append(setFiles, paste0("Output/", transactionId, "/tox21enricher_", transactionId, ".zip"))
+    setFiles <- append(setFiles, paste0(OUT_DIR, transactionId, "/tox21enricher_", transactionId, ".zip"))
     return(setFiles)
 }
 
@@ -716,7 +724,7 @@ getResults <- function(res, req, transactionId, setName="###"){
 #* @param mode Chart or Cluster
 #* @get /readGct
 readGct <- function(res, req, transactionId, cutoff, mode, set="Set1"){
-    outDir <- paste0(APP_DIR, "Output/", transactionId, "/")
+    outDir <- paste0(APP_DIR, OUT_DIR, transactionId, "/")
     gctFile <- NULL
     if(mode == "chart"){
         gctFile <- read.table(paste0(outDir, "gct/Chart_Top", cutoff, "_ALL__P_0.05_P__ValueMatrix.gct"), skip=2, header=TRUE, sep="\t", row.names=1, comment.char="", fill=FALSE, colClasses=c("Terms"="NULL", "integer") )  
@@ -733,7 +741,7 @@ readGct <- function(res, req, transactionId, cutoff, mode, set="Set1"){
 #* @param inputSet Current input set
 #* @get /bargraph
 bargraph <- function(res, req, transactionId){
-    baseDirName <- paste0(APP_DIR, "Output/", transactionId, "/")
+    baseDirName <- paste0(APP_DIR, OUT_DIR, transactionId, "/")
     # Get all Chart Simple files
     allChartFiles <- Sys.glob(paste0(baseDirName, "*__ChartSimple.txt"))
     bgChart <- lapply(allChartFiles, function(chartFile){
@@ -755,7 +763,7 @@ bargraph <- function(res, req, transactionId){
 #* @get /generateNetwork
 generateNetwork <- function(res, req, transactionId="-1", cutoff, mode, input, qval){
     input <- unlist(str_split(input, "#"))
-    baseDirName <- paste0(APP_DIR, "Output/", transactionId, "/")
+    baseDirName <- paste0(APP_DIR, OUT_DIR, transactionId, "/")
     chartForNetFile <- NULL
     # First, read files from /gct/ directory
     if(mode == "chart") {
@@ -954,8 +962,8 @@ submit <- function(mode="", input="", annotations="MESH,PHARMACTIONLIST,ACTIVITY
         return("Error: Tanimoto threshold must be between 0.01 and 1.00 inclusive.")
     }
     # Paths
-    inBaseDir <- paste0(APP_DIR, "/Input/")
-    outBaseDir <- paste0(APP_DIR, "/Output/")
+    inBaseDir <- paste0(APP_DIR, "/", IN_DIR)
+    outBaseDir <- paste0(APP_DIR, "/", OUT_DIR)
     # Generate UUID for enrichment process (return this to user later)
     transactionId <- UUIDgenerate()
     # Check if UUID already exists. If so, regenerate UUID. This should be very rare but this is here just in case
@@ -1167,7 +1175,7 @@ submit <- function(mode="", input="", annotations="MESH,PHARMACTIONLIST,ACTIVITY
 function(id="-1", res) {
     # async
     future_promise({
-        fName <- paste0(APP_DIR, "Output/", id, "/tox21enricher_", id, ".zip")
+        fName <- paste0(APP_DIR, OUT_DIR, id, "/tox21enricher_", id, ".zip")
         if(file.exists(fName)){
             readBin(fName, 'raw', n=file.info(fName)$size)  
         } else {
@@ -1184,7 +1192,7 @@ function(id="-1", res) {
 function(id="-1", filename="", res) {
     # async
     future_promise({
-        fName <- paste0(APP_DIR, "Output/", id, "/tox21enricher_", id, ".zip")
+        fName <- paste0(APP_DIR, OUT_DIR, id, "/tox21enricher_", id, ".zip")
         if(file.exists(fName)){
             readBin(fName, 'raw', n=file.info(fName)$size)  
         } else {
@@ -1199,7 +1207,7 @@ function(id="-1", filename="", res) {
 function(id="-1", res) {
     # async
     future_promise({
-        fName <- paste0(APP_DIR, "Output/", id, "/tox21enricher_", id, ".zip")
+        fName <- paste0(APP_DIR, OUT_DIR, id, "/tox21enricher_", id, ".zip")
         # Returns 1 if completed, 0 if not.
         if(file.exists(fName)){
             return(1)  

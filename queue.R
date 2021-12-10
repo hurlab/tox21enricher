@@ -23,6 +23,8 @@ tox21config <- config::get("tox21enricher")
 tox21queue <- config::get("tox21enricher-queue")
 CORES <- tox21config$cores
 APP_DIR <- tox21config$appdir
+IN_DIR <- tox21config$indir
+OUT_DIR <- tox21config$outdir
 
 # Define info for connecting to PostgreSQL Tox21 Enricher database on server startup
 pool <- dbPool(
@@ -147,8 +149,8 @@ performEnrichment <- function(enrichmentUUID="-1", annoSelectStr="MESH=checked,P
     })
     names(funCat2Selected) <- annoSelectStrSplit
 
-    inDir <- paste0(APP_DIR, "Input/", enrichmentUUID) # Directory for input files for enrichment set
-    outDir <- paste0(APP_DIR, "Output/", enrichmentUUID) # Directory for output files for enrichment set
+    inDir <- paste0(APP_DIR, IN_DIR, enrichmentUUID) # Directory for input files for enrichment set
+    outDir <- paste0(APP_DIR, OUT_DIR, enrichmentUUID) # Directory for output files for enrichment set
 
     # CASRN count
     funCatTerm2CASRNCount <- list() 
@@ -201,7 +203,7 @@ performEnrichment <- function(enrichmentUUID="-1", annoSelectStr="MESH=checked,P
     })
 
     # Load input DSSTox ID or CASRN ID sets
-    inputFiles <- list.files(path=paste0(APP_DIR, "Input/", enrichmentUUID), pattern="*.txt", full.names=TRUE)
+    inputFiles <- list.files(path=paste0(APP_DIR, IN_DIR, enrichmentUUID), pattern="*.txt", full.names=TRUE)
 
     # Throw error if no input sets
     if(length(inputFiles) < 1){
@@ -223,7 +225,7 @@ performEnrichment <- function(enrichmentUUID="-1", annoSelectStr="MESH=checked,P
 
     # Assign names to ldf
     inputFilesNames <- unlist(lapply(inputFiles, function(x){
-        x_lv1 <- gsub(paste0(APP_DIR, "Input/", enrichmentUUID, "/"), "", x)
+        x_lv1 <- gsub(paste0(APP_DIR, IN_DIR, enrichmentUUID, "/"), "", x)
         x_lv2 <- gsub(".txt", "", x_lv1)
     }))
     names(ldf) <- inputFilesNames
@@ -247,7 +249,7 @@ performEnrichment <- function(enrichmentUUID="-1", annoSelectStr="MESH=checked,P
     setNameCounter <- 1
 
     outfileBaseNames <- lapply(seq_len(length(ldf)), function(setNameCtr){
-        setNameItem <- str_remove(inputFiles[[setNameCtr]], paste0(APP_DIR, "Input/", enrichmentUUID, "/")) # Remove path
+        setNameItem <- str_remove(inputFiles[[setNameCtr]], paste0(APP_DIR, IN_DIR, enrichmentUUID, "/")) # Remove path
         setNameItem <- str_remove(setNameItem, ".txt") # Remove filename extension
     })
   names(inputIDListHash) <- outfileBaseNames
@@ -306,7 +308,7 @@ performEnrichment <- function(enrichmentUUID="-1", annoSelectStr="MESH=checked,P
     
         # Perform enrichment analysis
         print(paste0("Performing enrichment on ", outfileBase, "..."))
-        enrichmentStatus <- perform_CASRN_enrichment_analysis(CASRNS, paste0(APP_DIR, "Output/", enrichmentUUID, "/"), outfileBase, mappedCASRNs, funCat2Selected, CASRN2funCatTerm, funCatTerm2CASRN, funCat2CASRNCount, funCat2termCount, funCatTerm2CASRNCount, pvalueThresholdToDisplay, similarityThreshold, initialGroupMembership, multipleLinkageThreshold, EASEThreshold, nodeCutoff, enrichmentUUID)
+        enrichmentStatus <- perform_CASRN_enrichment_analysis(CASRNS, paste0(APP_DIR, OUT_DIR, enrichmentUUID, "/"), outfileBase, mappedCASRNs, funCat2Selected, CASRN2funCatTerm, funCatTerm2CASRN, funCat2CASRNCount, funCat2termCount, funCatTerm2CASRNCount, pvalueThresholdToDisplay, similarityThreshold, initialGroupMembership, multipleLinkageThreshold, EASEThreshold, nodeCutoff, enrichmentUUID)
     })
 
     # Create individual GCT file
@@ -2309,8 +2311,8 @@ getAnnotations <- function(enrichmentUUID="-1", annoSelectStr="MESH=checked,PHAR
     # Get list of selected annotations
     annoSelect <- unlist(str_split(annoSelectStr, "=checked,"), recursive=FALSE)
     # Get input sets
-    inDir <- paste0(APP_DIR, "Input/", enrichmentUUID) # Directory for input files for enrichment set
-    outDir <- paste0(APP_DIR, "Output/", enrichmentUUID) # Directory for output files for enrichment set
+    inDir <- paste0(APP_DIR, IN_DIR, enrichmentUUID) # Directory for input files for enrichment set
+    outDir <- paste0(APP_DIR, OUT_DIR, enrichmentUUID) # Directory for output files for enrichment set
     inputSets <- Sys.glob(paste0(inDir, "/*"))
   
     annotationMatrix <- mclapply(inputSets, mc.cores=CORES, mc.silent=FALSE, function(infile){
@@ -2544,6 +2546,7 @@ getAnnotations <- function(enrichmentUUID="-1", annoSelectStr="MESH=checked,PHAR
 
 # Keeps looping and looks for unfinished requests
 queue <- function(){
+    plan('multicore')
     while(TRUE){
         # Connect to db
         poolQueue <- dbPool(
@@ -2556,8 +2559,8 @@ queue <- function(){
             idleTimeout=3600000
         )
         
-        # Get only unfinished requests ("finished" flag is set to 0)
-        query <- sqlInterpolate(ANSI(), paste0("SELECT * FROM queue WHERE finished=0 AND error IS NULL;"), id="createQueueEntry")
+        # Get only unfinished requests ("finished" flag is set to 0 and not currently being processed by another thread)
+        query <- sqlInterpolate(ANSI(), paste0("SELECT * FROM queue WHERE finished=0 AND lock=0 AND error IS NULL;"), id="createQueueEntry")
         outp <- dbGetQuery(poolQueue, query)
         
         # Close pool
@@ -2594,6 +2597,10 @@ queue <- function(){
                         port=tox21queue$port,
                         idleTimeout=3600000
                     )
+                    
+                    # Set lock for current request so it won't be reprocessed
+                    query <- sqlInterpolate(ANSI(), paste0("UPDATE queue SET lock=1 WHERE uuid='", enrichmentUUID, "';"), id="setLock")
+                    outp <- dbGetQuery(poolStatus, query)
                       
                     # Get status entry for corresponding queue entry
                     query <- sqlInterpolate(ANSI(), paste0("SELECT * FROM status WHERE uuid='", enrichmentUUID, "';"), id="fetchStatus")
@@ -2662,6 +2669,11 @@ queue <- function(){
                         query <- sqlInterpolate(ANSI(), paste0("UPDATE queue SET finished=1 WHERE uuid='", enrichmentUUID, "';"), id="deleteEntries")
                         outp <- dbGetQuery(poolFinished, query)
                     }
+                    
+                    # Release lock
+                    query <- sqlInterpolate(ANSI(), paste0("UPDATE queue SET lock=0 WHERE uuid='", enrichmentUUID, "';"), id="setLock")
+                    outp <- dbGetQuery(poolFinished, query)
+                    
                     # Close pool
                     poolClose(poolFinished)
                 })

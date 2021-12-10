@@ -321,9 +321,7 @@ shinyServer(function(input, output, session) {
         enrichmentSetsList$enrichmentSets <- enrichmentSets
         # Set setColors$color - necessary for preserving color for bargraph generation
         setColors$color <- colorsList
-        future({
-            enrichmentResults(mode, transactionId, annoSelectStr, nodeCutoff, enrichmentSets, originalNames, reenrichResults, originalMode, colorsList)
-        }, seed=TRUE)
+        enrichmentResults(mode, transactionId, annoSelectStr, nodeCutoff, enrichmentSets, originalNames, reenrichResults, originalMode, colorsList)
     })
     
     # update theme data when checkbox is clicked
@@ -1381,9 +1379,6 @@ shinyServer(function(input, output, session) {
         # If UUID is good, assign to reactiveValue
         reactiveTransactionId$id <- transactionId
 
-        inDirWeb <- paste0("Input/", transactionId, "/")
-        outDirWeb <- paste0("Output/", transactionId, "/")
-
         # Get selected annotation classes
         annoSelectStrPubChem <- lapply (input$checkboxPubChem, function(i) {
             return(paste0(i, "=checked,"))
@@ -1874,9 +1869,26 @@ shinyServer(function(input, output, session) {
             setColors$color <- colorsList
         }
         
-        # Get directories
-        inDirWeb <- paste0("Input/", transactionId, "/")
-        outDirWeb <- paste0("Output/", transactionId, "/")
+        # Get names of input/output subdirectories on server
+        resp <- NULL
+        inout <- c("Input/", "Output/")
+        tryInout <- tryCatch({
+            resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="inout")
+            TRUE
+        }, error=function(cond){
+            return(FALSE)
+        })
+        if(!tryInout){
+            showNotification("Error: The application cannot connect to the Tox21 Enricher server. Please try again later.", type="error")
+            return(FALSE)
+        } else {
+            inout <- unlist(content(resp))
+        }
+        if(resp$status_code != 200){
+            return(NULL)
+        }
+        inDirWeb <- paste0(inout[1], transactionId, "/")
+        outDirWeb <- paste0(inout[2], transactionId, "/")
 
         # If success at this point, hide waiting page
         shinyjs::hide(id="waitingPage")
