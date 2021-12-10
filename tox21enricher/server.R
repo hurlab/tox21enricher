@@ -167,9 +167,28 @@ shinyServer(function(input, output, session) {
             )
             updateActionButton(session, "searchButton", label="Perform enrichment", icon=icon("undo"))  
             searchStatus$option <- "enrich"
+            
+            # Get delete time from server
+            resp <- NULL
+            deleteTime <- 30
+            tryDelete <- tryCatch({
+                resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="deleteTime")
+                TRUE
+            }, error=function(cond){
+              return(FALSE)
+            })
+            if(!tryDelete){
+                showNotification("Error: The application cannot connect to the Tox21 Enricher server. Please try again later.", type="error")
+                return(FALSE)
+            } else {
+                deleteTime <- unlist(content(resp))
+            }
+            
             output[["enrichmentTable"]] <- renderUI(
                 column(12,
-                    textInput(inputId="searchPreviousID", label="Input the UUID of a previous request", placeholder="i.e., XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX")
+                    h3("Input the UUID of a previous request"),
+                    HTML(paste0("<div class=\"text-danger\"><b>Warning:</b> requests will be deleted from the server after ", deleteTime, " day(s) from their initial posting and may no longer be accessed.</div>")),
+                    textInput(inputId="searchPreviousID", label="", placeholder="i.e., XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX")
                 )
             )
         } else {

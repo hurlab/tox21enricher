@@ -399,9 +399,6 @@ performEnrichment <- function(enrichmentUUID="-1", annoSelectStr="MESH=checked,P
         if(file.exists(paste0(baseDirName, "/", i, "__Cluster.txt"))){
               xlsxCluster <- read.table(paste0(baseDirName, "/", i, "__Cluster.txt"), header=FALSE, sep="\t", comment.char="", col.names=seq_len(13), fill=TRUE ) #this needs to be treated differently due to having different # of columns
         }
-        #write.xlsx2(xlsxChart, paste0(baseDirName, "/", i, "__Chart.xlsx"), sheetName=paste0(i), col.names=TRUE, row.names=TRUE, append=FALSE)
-        #write.xlsx2(xlsxChartSimple, paste0(baseDirName, "/", i, "__ChartSimple.xlsx"), sheetName=paste0(i), col.names=TRUE, row.names=TRUE, append=FALSE)
-        #write.xlsx2(xlsxCluster, paste0(baseDirName, "/", i, "__Cluster.xlsx"), sheetName=paste0(i), col.names=TRUE, row.names=TRUE, append=FALSE)
         return(1)
     })
 

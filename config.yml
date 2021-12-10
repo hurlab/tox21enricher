@@ -30,4 +30,7 @@ default:
     pwd: "password_queue"
     port: 5432
     database: 'tox21queue'
+    # Number of HOURS before a transaction hanging in the queue should be cleared
     cleanupTime: 24
+    # Number of DAYS before the records of an old transaction should be deleted from the database and filesystem
+    deleteTime: 30

@@ -36,6 +36,7 @@ IN_DIR <- tox21config$indir
 OUT_DIR <- tox21config$outdir
 PYTHON_DIR <- tox21config$python
 CORES <- tox21config$cores
+DELETE_TIME <- tox21queue$deleteTime
 
 # Source Python
 Sys.setenv(RETICULATE_PYTHON=PYTHON_DIR)
@@ -309,6 +310,12 @@ ping <- function(res, req){
 #* @get /inout
 inout <- function(res, req){
     return(c(IN_DIR, OUT_DIR))
+}
+
+#* Get delete time for old transaction
+#* @get /deleteTime
+deleteTime <- function(res, req){
+    return(DELETE_TIME)
 }
 
 #* Check Tox21 Enricher version
@@ -727,11 +734,11 @@ readGct <- function(res, req, transactionId, cutoff, mode, set="Set1"){
     outDir <- paste0(APP_DIR, OUT_DIR, transactionId, "/")
     gctFile <- NULL
     if(mode == "chart"){
-        gctFile <- read.table(paste0(outDir, "gct/Chart_Top", cutoff, "_ALL__P_0.05_P__ValueMatrix.gct"), skip=2, header=TRUE, sep="\t", row.names=1, comment.char="", fill=FALSE, colClasses=c("Terms"="NULL", "integer") )  
+        gctFile <- read.table(paste0(outDir, "gct/Chart_Top", cutoff, "_ALL__P_0.05_P__ValueMatrix.gct"), skip=2, header=TRUE, sep="\t", row.names=1, comment.char="", fill=FALSE, colClasses=c("Terms"="NULL") )
     } else if(mode == "cluster"){
-        gctFile <- read.table(paste0(outDir, "gct/Cluster_Top", cutoff, "_ALL__P_0.05_P__ValueMatrix.gct"), skip=2, header=TRUE, sep="\t", row.names=1, comment.char="", fill=FALSE, colClasses=c("Terms"="NULL", "integer") )
+        gctFile <- read.table(paste0(outDir, "gct/Cluster_Top", cutoff, "_ALL__P_0.05_P__ValueMatrix.gct"), skip=2, header=TRUE, sep="\t", row.names=1, comment.char="", fill=FALSE, colClasses=c("Terms"="NULL") )
     } else { # per set
-        gctFile <- read.table(paste0(outDir, "gct_per_set/", set, "__Chart.gct"), skip=2, header=TRUE, sep="\t", row.names=1, comment.char="", fill=FALSE, colClasses=c("Name"="NULL", "integer") )
+        gctFile <- read.table(paste0(outDir, "gct_per_set/", set, "__Chart.gct"), skip=2, header=TRUE, sep="\t", row.names=1, comment.char="", fill=FALSE, colClasses=c("Name"="NULL") )
     }
     return(gctFile)
 }
