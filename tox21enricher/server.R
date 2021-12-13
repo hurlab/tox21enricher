@@ -77,6 +77,7 @@ shinyServer(function(input, output, session) {
     }
     annoClasses <- reactiveValues(classes=c())
     
+    totalEnrichmentCount <- reactiveValues(count=0)
     # Get total # of requests
     getEnrichmentCount <- function(){
         tryEnrichmentCount <- tryCatch({
@@ -93,7 +94,8 @@ shinyServer(function(input, output, session) {
     
     # Display number of total enrichments performed
     output$totalEnrichments <- renderUI({
-        totalEnrichments <- HTML(paste0("<br>Total requests serviced by Tox21 Enricher this month: <b>", getEnrichmentCount(), "</b>"))
+        totalEnrichmentCount$count <- getEnrichmentCount()
+        totalEnrichments <- HTML(paste0("<br>Total requests serviced by Tox21 Enricher this month: <b>", totalEnrichmentCount$count, "</b>"))
         return(totalEnrichments)
     })
     
@@ -102,7 +104,6 @@ shinyServer(function(input, output, session) {
         filename=function(){
             return(paste0("Tox21Enricher_User_Manual.pdf"))
         },
-        
         content=function(file){
             # First, query API to get most recent version of manual
             resp <- NULL
@@ -386,22 +387,26 @@ shinyServer(function(input, output, session) {
     }, ignoreInit=TRUE, ignoreNULL=TRUE)
     
     # Display API connection status
-    pingAPI <- tryCatch({
-        resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="ping")
-        if(resp$status_code != 200) {
+    apiCon <- reactiveValues(status=HTML(paste0("<div class=\"text-danger\">Could not connect to Tox21 Enricher server!</div>")))
+    apiStatus <- function() {
+        pingAPI <- tryCatch({
+            resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="ping")
+            if(resp$status_code != 200) {
+                output$apiConnection <- renderUI({
+                    HTML(paste0("<div class=\"text-danger\">Could not connect to Tox21 Enricher server!</div>"))
+                })
+            } else {
+                output$apiConnection <- renderUI({
+                    HTML(paste0("<div class=\"text-success\">Connection with Tox21 Enricher server successfully established.</div>"))
+                })
+            } 
+        }, error=function(cond){
             output$apiConnection <- renderUI({
                 HTML(paste0("<div class=\"text-danger\">Could not connect to Tox21 Enricher server!</div>"))
             })
-        } else {
-            output$apiConnection <- renderUI({
-                HTML(paste0("<div class=\"text-success\">Connection with Tox21 Enricher server successfully established.</div>"))
-            })
-        } 
-    }, error=function(cond){
-        output$apiConnection <- renderUI({
-            HTML(paste0("<div class=\"text-danger\">Could not connect to Tox21 Enricher server!</div>"))
         })
-    })
+    }
+    apiCon$status <- apiStatus()
     
     # Display list of annotations to select
     output$annotations <- renderUI({
@@ -853,8 +858,13 @@ shinyServer(function(input, output, session) {
         updateCheckboxGroupInput(session, "checkboxOther", selected=annoClassList[[5]])
         updateActionButton(session, "select_all_annotations", label="Deselect all")
         selectStatus$option <- "deselect"
+        totalEnrichmentCount$count <- getEnrichmentCount() # Get new total count
+        apiCon$status <- apiStatus() # refresh connection status message
         shinyjs::reset(id="enrichmentForm")
         shinyjs::reset(id="resultsContainer")
+        shinyjs::reset(id="sidebar")
+        shinyjs::reset(id="apiConnection")
+        shinyjs::reset(id="totalEnrichments")
         shinyjs::show(id="enrichmentForm")
         shinyjs::enable(id="enrichmentForm")
         shinyjs::reset(id="select_all_annotations")

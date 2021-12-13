@@ -133,7 +133,7 @@ performEnrichment <- function(enrichmentUUID="-1", annoSelectStr="MESH=checked,P
     
     # Set begin time in transaction table
     query <- sqlInterpolate(ANSI(), paste0("UPDATE transaction SET timestamp_started='", beginTime, "' WHERE uuid='", enrichmentUUID, "';"), id="updateTransactionStart")
-    outp <- dbGetQuery(poolInput, query)   
+    outp <- dbExecute(poolInput, query)   
     
     # Close pool
     poolClose(poolInput)
@@ -272,7 +272,7 @@ performEnrichment <- function(enrichmentUUID="-1", annoSelectStr="MESH=checked,P
     # Set step flag for each set name
     lapply(statusFiles, function(x){
         query <- sqlInterpolate(ANSI(), paste0("UPDATE status SET step=2 WHERE uuid='", enrichmentUUID, "' AND setname='", x, "';"), id="fetchStatus")
-        outp <- dbGetQuery(poolStatus, query)
+        outp <- dbExecute(poolStatus, query)
     })
     # Check if no errors
     query <- sqlInterpolate(ANSI(), paste0("SELECT * FROM queue WHERE uuid='", enrichmentUUID, "' AND cancel=1;"), id="fetchStatus")
@@ -331,7 +331,7 @@ performEnrichment <- function(enrichmentUUID="-1", annoSelectStr="MESH=checked,P
     # Set step flag for each set name
     lapply(statusFiles, function(x){
         query <- sqlInterpolate(ANSI(), paste0("UPDATE status SET step=7 WHERE uuid='", enrichmentUUID, "' AND setname='", x, "';"), id="fetchStatus")
-        outp <- dbGetQuery(poolStatus, query)
+        outp <- dbExecute(poolStatus, query)
     })
     # Check if no errors
     query <- sqlInterpolate(ANSI(), paste0("SELECT * FROM queue WHERE uuid='", enrichmentUUID, "' AND cancel=1;"), id="fetchStatus")
@@ -428,7 +428,7 @@ performEnrichment <- function(enrichmentUUID="-1", annoSelectStr="MESH=checked,P
 
     # Set finish time in transaction table
     query <- sqlInterpolate(ANSI(), paste0("UPDATE transaction SET timestamp_finished='", finishTime, "' WHERE uuid='", enrichmentUUID, "';"), id="transactionUpdateFinished")
-    outp <- dbGetQuery(poolStatus, query)
+    outp <- dbExecute(poolStatus, query)
 
     # Get set names from database
     query <- sqlInterpolate(ANSI(), paste0("SELECT setname FROM status WHERE uuid='", enrichmentUUID, "';"), id="fetchStatus")
@@ -437,7 +437,7 @@ performEnrichment <- function(enrichmentUUID="-1", annoSelectStr="MESH=checked,P
     # Set step flag for each set name
     lapply(statusFiles, function(x){
         query <- sqlInterpolate(ANSI(), paste0("UPDATE status SET step=8 WHERE uuid='", enrichmentUUID, "' AND setname='", x, "';"), id="fetchStatus")
-        outp <- dbGetQuery(poolStatus, query)
+        outp <- dbExecute(poolStatus, query)
     })
     # Check if no errors
     query <- sqlInterpolate(ANSI(), paste0("SELECT * FROM queue WHERE uuid='", enrichmentUUID, "' AND cancel=1;"), id="fetchStatus")
@@ -1928,7 +1928,7 @@ kappa_cluster <- function(x, deg=NULL, useTerm=FALSE, cutoff=0.5, overlap=0.5, m
     )
     # Set step flag for each set name
     query <- sqlInterpolate(ANSI(), paste0("UPDATE status SET step=3 WHERE uuid='", enrichmentUUID, "' AND setname='", outfileBase, "';"), id="fetchStatus")
-    outp <- dbGetQuery(poolStatus, query)
+    outp <- dbExecute(poolStatus, query)
     # Check if no errors
     query <- sqlInterpolate(ANSI(), paste0("SELECT * FROM queue WHERE uuid='", enrichmentUUID, "' AND cancel=1;"), id="fetchStatus")
     requestCancel <- dbGetQuery(poolStatus, query)
@@ -2041,7 +2041,7 @@ kappa_cluster <- function(x, deg=NULL, useTerm=FALSE, cutoff=0.5, overlap=0.5, m
     )
     # Set step flag for each set name
     query <- sqlInterpolate(ANSI(), paste0("UPDATE status SET step=4 WHERE uuid='", enrichmentUUID, "' AND setname='", outfileBase, "';"), id="fetchStatus")
-    outp <- dbGetQuery(poolStatus, query)
+    outp <- dbExecute(poolStatus, query)
     # Check if no errors
     query <- sqlInterpolate(ANSI(), paste0("SELECT * FROM queue WHERE uuid='", enrichmentUUID, "' AND cancel=1;"), id="fetchStatus")
     requestCancel <- dbGetQuery(poolStatus, query)
@@ -2096,7 +2096,7 @@ kappa_cluster <- function(x, deg=NULL, useTerm=FALSE, cutoff=0.5, overlap=0.5, m
     )
     # Set step flag for each set name
     query <- sqlInterpolate(ANSI(), paste0("UPDATE status SET step=5 WHERE uuid='", enrichmentUUID, "' AND setname='", outfileBase, "';"), id="fetchStatus")
-    outp <- dbGetQuery(poolStatus, query)
+    outp <- dbExecute(poolStatus, query)
     # Check if no errors
     query <- sqlInterpolate(ANSI(), paste0("SELECT * FROM queue WHERE uuid='", enrichmentUUID, "' AND cancel=1;"), id="fetchStatus")
     requestCancel <- dbGetQuery(poolStatus, query)
@@ -2154,7 +2154,7 @@ kappa_cluster <- function(x, deg=NULL, useTerm=FALSE, cutoff=0.5, overlap=0.5, m
     )
     # Set step flag for each set name
     query <- sqlInterpolate(ANSI(), paste0("UPDATE status SET step=6 WHERE uuid='", enrichmentUUID, "' AND setname='", outfileBase, "';"), id="fetchStatus")
-    outp <- dbGetQuery(poolStatus, query)
+    outp <- dbExecute(poolStatus, query)
     # Check if no errors
     query <- sqlInterpolate(ANSI(), paste0("SELECT * FROM queue WHERE uuid='", enrichmentUUID, "' AND cancel=1;"), id="fetchStatus")
     requestCancel <- dbGetQuery(poolStatus, query)
@@ -2300,7 +2300,7 @@ getAnnotations <- function(enrichmentUUID="-1", annoSelectStr="MESH=checked,PHAR
     
     # Set begin time in transaction table
     query <- sqlInterpolate(ANSI(), paste0("UPDATE transaction SET timestamp_started='", beginTime, "' WHERE uuid='", enrichmentUUID, "';"), id="updateTransactionStart")
-    outp <- dbGetQuery(poolInput, query)
+    outp <- dbExecute(poolInput, query)
     
     # Close pool
     poolClose(poolInput)
@@ -2355,7 +2355,7 @@ getAnnotations <- function(enrichmentUUID="-1", annoSelectStr="MESH=checked,PHAR
         )
         # Set step flag for each set name
         query <- sqlInterpolate(ANSI(), paste0("UPDATE status SET step=2 WHERE uuid='", enrichmentUUID, "' AND setname='", setName, "';"), id="fetchStatus")
-        outp <- dbGetQuery(poolStatus, query)
+        outp <- dbExecute(poolStatus, query)
         # Check if no errors
         query <- sqlInterpolate(ANSI(), paste0("SELECT * FROM queue WHERE uuid='", enrichmentUUID, "' AND cancel=1;"), id="fetchStatus")
         requestCancel <- dbGetQuery(poolStatus, query)
@@ -2400,7 +2400,7 @@ getAnnotations <- function(enrichmentUUID="-1", annoSelectStr="MESH=checked,PHAR
         )
         # Set step flag for each set name
         query <- sqlInterpolate(ANSI(), paste0("UPDATE status SET step=3 WHERE uuid='", enrichmentUUID, "' AND setname='", setName, "';"), id="fetchStatus")
-        outp <- dbGetQuery(poolStatus, query)
+        outp <- dbExecute(poolStatus, query)
         # Check if no errors
         query <- sqlInterpolate(ANSI(), paste0("SELECT * FROM queue WHERE uuid='", enrichmentUUID, "' AND cancel=1;"), id="fetchStatus")
         requestCancel <- dbGetQuery(poolStatus, query)
@@ -2468,7 +2468,7 @@ getAnnotations <- function(enrichmentUUID="-1", annoSelectStr="MESH=checked,PHAR
         )
         # Set step flag for each set name
         query <- sqlInterpolate(ANSI(), paste0("UPDATE status SET step=4 WHERE uuid='", enrichmentUUID, "' AND setname='", setName, "';"), id="fetchStatus")
-        outp <- dbGetQuery(poolStatus, query)
+        outp <- dbExecute(poolStatus, query)
         # Check if no errors
         query <- sqlInterpolate(ANSI(), paste0("SELECT * FROM queue WHERE uuid='", enrichmentUUID, "' AND cancel=1;"), id="fetchStatus")
         requestCancel <- dbGetQuery(poolStatus, query)
@@ -2534,7 +2534,7 @@ getAnnotations <- function(enrichmentUUID="-1", annoSelectStr="MESH=checked,PHAR
     
     # Set finish time in transaction table
     query <- sqlInterpolate(ANSI(), paste0("UPDATE transaction SET timestamp_finished='", finishTime, "' WHERE uuid='", enrichmentUUID, "';"), id="transactionUpdateFinished")
-    outp <- dbGetQuery(poolUpdate, query)
+    outp <- dbExecute(poolUpdate, query)
     
     # Close pool
     poolClose(poolUpdate)
@@ -2597,7 +2597,7 @@ queue <- function(){
                     
                     # Set lock for current request so it won't be reprocessed
                     query <- sqlInterpolate(ANSI(), paste0("UPDATE queue SET lock=1 WHERE uuid='", enrichmentUUID, "';"), id="setLock")
-                    outp <- dbGetQuery(poolStatus, query)
+                    outp <- dbExecute(poolStatus, query)
                       
                     # Get status entry for corresponding queue entry
                     query <- sqlInterpolate(ANSI(), paste0("SELECT * FROM status WHERE uuid='", enrichmentUUID, "';"), id="fetchStatus")
@@ -2608,7 +2608,7 @@ queue <- function(){
                     lapply(seq_len(nrow(statusFiles)), function(i){
                         tmpSetName <- statusFiles[i, "setname"]
                         query <- sqlInterpolate(ANSI(), paste0("UPDATE status SET step=1 WHERE uuid='", enrichmentUUID, "' AND setname='", tmpSetName, "';"), id="fetchStatus")
-                        outp <- dbGetQuery(poolStatus, query)
+                        outp <- dbExecute(poolStatus, query)
                     })
                     
                     # Check if no errors
@@ -2651,25 +2651,25 @@ queue <- function(){
                     if (status_code == 200){
                         # Set flag for queue
                         query <- sqlInterpolate(ANSI(), paste0("UPDATE queue SET finished=1 WHERE uuid='", enrichmentUUID, "';"), id="deleteEntries")
-                        outp <- dbGetQuery(poolFinished, query)
+                        outp <- dbExecute(poolFinished, query)
                     } else if (status_code == -1) {
                         print(paste0("Request cancelled for ", enrichmentUUID, ". Deleting..."))
                         # Set flag for queue
                         query <- sqlInterpolate(ANSI(), paste0("UPDATE queue SET finished=1 WHERE uuid='", enrichmentUUID, "';"), id="deleteEntries")
-                        outp <- dbGetQuery(poolFinished, query)
+                        outp <- dbExecute(poolFinished, query)
                     } else { # Else, generate error file for reference
                         print(paste0("Error performing enrichment: ", status_code, " : "))
                         # Set error message in queue table
                         query <- sqlInterpolate(ANSI(), paste0("UPDATE queue SET error='Error performing enrichment. Please try again.' WHERE uuid='", enrichmentUUID, "';"), id="addErrorMsg")
-                        outp <- dbGetQuery(poolFinished, query)
+                        outp <- dbExecute(poolFinished, query)
                         # Set flag for queue
                         query <- sqlInterpolate(ANSI(), paste0("UPDATE queue SET finished=1 WHERE uuid='", enrichmentUUID, "';"), id="deleteEntries")
-                        outp <- dbGetQuery(poolFinished, query)
+                        outp <- dbExecute(poolFinished, query)
                     }
                     
                     # Release lock
                     query <- sqlInterpolate(ANSI(), paste0("UPDATE queue SET lock=0 WHERE uuid='", enrichmentUUID, "';"), id="setLock")
-                    outp <- dbGetQuery(poolFinished, query)
+                    outp <- dbExecute(poolFinished, query)
                     
                     # Close pool
                     poolClose(poolFinished)

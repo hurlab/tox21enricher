@@ -69,12 +69,12 @@ queue <- function(mode="", enrichmentUUID="-1", annoSelectStr="MESH=checked,PHAR
     )
     # Update database with "queue" entry
     query <- sqlInterpolate(ANSI(), paste0("INSERT INTO queue(mode, uuid, annoselectstr, cutoff) VALUES('", mode, "', '", enrichmentUUID, "', '", annoSelectStr, "', ", nodeCutoff, ") ;"), id="createQueueEntry")
-    outp <- dbGetQuery(poolQueue, query)
+    outp <- dbExecute(poolQueue, query)
     # Update database with corresponding status entries
     setNamesSplit <- unlist(str_split(setNames, "\n"))
     lapply(setNamesSplit, function(x){
         query <- sqlInterpolate(ANSI(), paste0("INSERT INTO status(step, uuid, setname) VALUES(0, '", enrichmentUUID, "', '", x, "') ;"), id="createStatusEntry")
-        outp <- dbGetQuery(poolQueue, query) 
+        outp <- dbExecute(poolQueue, query) 
     })
     # Close pool
     poolClose(poolQueue)
@@ -105,7 +105,7 @@ createTransaction <- function(originalMode="", mode="", uuid="-1", annoSelectStr
     )
     # Update database with transaction entry
     query <- sqlInterpolate(ANSI(), paste0("INSERT INTO transaction(original_mode, mode, uuid, annotation_selection_string, cutoff, input, original_names, reenrich, colors, timestamp_posted) VALUES('", originalMode, "', '", mode, "', '", uuid, "', '", annoSelectStr, "', '", cutoff, "', '", input, "', '", originalNames, "', '", reenrich, "', '", color, "', '", timestampPosted, "');"), id="createTransactionEntry")
-    outp <- dbGetQuery(poolTransaction, query)
+    outp <- dbExecute(poolTransaction, query)
     # Close pool
     poolClose(poolTransaction)
     return(TRUE)
@@ -290,9 +290,9 @@ cancelEnrichment <- function(res, req, transactionId){
     )
     # Update database to show that request was canceled
     query <- sqlInterpolate(ANSI(), paste0("UPDATE queue SET cancel=1, finished=1 WHERE uuid='", transactionId, "';"), id="cancelEnrichment")
-    outp <- dbGetQuery(poolCancel, query)
+    outp <- dbExecute(poolCancel, query)
     query <- sqlInterpolate(ANSI(), paste0("UPDATE transaction SET cancel=1 WHERE uuid='", transactionId, "';"), id="cancelEnrichment")
-    outp <- dbGetQuery(poolCancel, query)
+    outp <- dbExecute(poolCancel, query)
     # Close pool
     poolClose(poolCancel)
     return(TRUE)
@@ -440,7 +440,7 @@ similarity <- function(res, req, input="", threshold){
     }
     # Set Tanimoto threshold for similarity cutoff
     queryTanimoto <- sqlInterpolate(ANSI(), paste0("set rdkit.tanimoto_threshold=", threshold, ";"), id="tanimotoResults")
-    outpTanimoto <- dbGetQuery(poolSimilarity, queryTanimoto)
+    outpTanimoto <- dbExecute(poolSimilarity, queryTanimoto)
     similarityQuery <- sqlInterpolate(ANSI(), paste0("SELECT * FROM get_mfp2_neighbors('", input, "');"), id="similarityResults")
     similarityOutp <- dbGetQuery(poolSimilarity, similarityQuery)
     # Close pool
@@ -993,7 +993,7 @@ submit <- function(mode="", input="", annotations="MESH,PHARMACTIONLIST,ACTIVITY
             idleTimeout=3600000
         )
         queryTanimoto <- sqlInterpolate(ANSI(), paste0("set rdkit.tanimoto_threshold=", tanimoto, ";"))
-        outpTanimoto <- dbGetQuery(poolTanimoto, queryTanimoto)
+        outpTanimoto <- dbExecute(poolTanimoto, queryTanimoto)
         # Close pool
         poolClose(poolTanimoto)
     }

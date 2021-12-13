@@ -66,9 +66,9 @@ while(TRUE){
         )
         lapply(badTransactions, function(x){
             query <- sqlInterpolate(ANSI(), paste0("UPDATE queue SET finished=1, cancel=1, error='Canceled by queue cleanup.' WHERE uuid='", x, "';"), id="updateBad")
-            outp <- dbGetQuery(pool, query)
+            outp <- dbExecute(pool, query)
             query <- sqlInterpolate(ANSI(), paste0("UPDATE transaction SET cancel=1 WHERE uuid='", x, "';"), id="updateBad")
-            outp <- dbGetQuery(pool, query)
+            outp <- dbExecute(pool, query)
         })
         poolClose(pool)
     }
@@ -114,9 +114,9 @@ while(TRUE){
             lapply(oldTransactions, function(x){
                 # delete from database
                 query <- sqlInterpolate(ANSI(), paste0("DELETE FROM queue WHERE uuid='", x, "';"), id="deleteOld")
-                outp <- dbGetQuery(pool, query)
+                outp <- dbExecute(pool, query)
                 query <- sqlInterpolate(ANSI(), paste0("DELETE FROM transaction WHERE uuid='", x, "';"), id="deleteOld")
-                outp <- dbGetQuery(pool, query)
+                outp <- dbExecute(pool, query)
                 
                 # delete files from filesystem input and output directories
                 inDir <- paste0(APP_DIR, IN_DIR, "/", x)
