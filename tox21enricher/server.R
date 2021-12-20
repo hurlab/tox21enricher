@@ -4653,22 +4653,14 @@ shinyServer(function(input, output, session) {
     # Generate a list of "acceptable" colors. This is a subset of the colors returned by colors() that contrast well with a white background but also present black text well.
     getNetworkColors <- function(){
         list(
-            "coral3", "coral", "chocolate3", "chocolate1", "chocolate", "chartreuse4", "chartreuse3", "chartreuse", "cadetblue4", "cadetblue3", "cadetblue2", "burlywood4", "burlywood3", "brown3", "brown1", "brown", "blueviolet", "blue1", "bisque4", "bisque3", 
-            "azure4", "azure3", "aquamarine4", "aquamarine3", "antiquewhite4", "antiquewhite3", "deeppink4", "deeppink3", "deeppink", "darkviolet", "darkturquoise", "darkslategrey", "darkslategray4", "darkslategray3", "darkslateblue", "darkseagreen4", 
-            "darkseagreen3", "darkseagreen", "darksalmon", "darkred", "darkorchid4", "darkorchid", "darkorange4", "darkorange", "darkolivegreen4", "darkolivegreen3", "darkolivegreen", "darkmagenta", "darkkhaki", "darkgrey", "darkgreen", "darkgoldenrod4", 
-            "darkgoldenrod1", "darkgoldenrod", "darkcyan", "darkblue", "cyan4", "cyan3", "cyan", "cornsilk4", "cornsilk3", "cornflowerblue", "coral4", "goldenrod4", "goldenrod3", "goldenrod", "gold", "forestgreen", "firebrick4", "firebrick3", "firebrick1", 
-            "dodgerblue4", "dodgerblue3", "dodgerblue", "dimgrey", "deepskyblue4", "deepskyblue3", "deepskyblue", "greenyellow", "green4", "green2", "green", "grey70", "grey55", "grey40", "lightpink1", "lightgrey", "lightgreen", "lightgoldenrod4", 
-            "lightgoldenrod3", "lightgoldenrod1", "lightcyan4", "lightcyan3", "lightcyan", "lightcoral", "lightblue4", "lightblue3", "lightblue1", "lemonchiffon4", "lemonchiffon3", "lemonchiffon1", "lawngreen", "lavenderblush4", "lavenderblush3", "lavender", 
-            "khaki4", "khaki3", "khaki1", "khaki", "ivory4", "ivory3", "indianred4", "indianred1", "indianred", "hotpink4", "hotpink3", "hotpink1", "hotpink", "honeydew4", "honeydew3", "mistyrose", "mediumvioletred", "mediumturquoise", "mediumspringgreen", 
-            "mediumslateblue", "mediumseagreen", "mediumpurple4", "mediumpurple3", "mediumpurple1", "mediumorchid4", "mediumorchid3", "mediumorchid1", "mediumaquamarine", "maroon4", "maroon3", "maroon1", "maroon", "magenta4", "magenta3", "magenta", "limegreen", 
-            "lightyellow4", "lightyellow3", "lightsteelblue4", "lightsteelblue3", "lightsteelblue2", "lightslategrey", "lightslateblue", "lightskyblue3", "lightskyblue", "lightseagreen", "lightsalmon4", "lightsalmon3", "lightsalmon", "lightpink4", "lightpink2", 
-            "pink4", "pink3", "pink2", "peru", "peachpuff4", "peachpuff3", "peachpuff", "papayawhip", "palevioletred4", "palevioletred3", "palevioletred1", "paleturquoise4", "paleturquoise3", "paleturquoise1", "palegreen4", "palegreen3", "palegreen", 
-            "palegoldenrod", "orchid4", "orchid3", "orchid1", "orangered4", "orangered3", "orangered", "orange4", "orange3", "orange2", "orange", "olivedrab4", "olivedrab3", "olivedrab2", "olivedrab", "navajowhite4", "navajowhite3", "navajowhite", "moccasin", 
-            "mistyrose4", "mistyrose3", "mistyrose2", "slategray1", "slategray", "slateblue4", "slateblue3", "slateblue1", "slateblue", "skyblue4", "skyblue3", "skyblue1", "skyblue", "sienna4", "sienna3", "sienna1", "seashell4", "seashell3", "seashell2", 
-            "seagreen4", "seagreen3", "seagreen1", "sandybrown", "salmon4", "salmon3", "salmon1", "salmon", "saddlebrown", "royalblue4", "royalblue3", "royalblue1", "royalblue", "rosybrown4", "rosybrown3", "rosybrown1", "red2", "red", "purple4", "purple3", 
-            "purple1", "powderblue", "plum4", "plum3", "plum1", "yellowgreen", "yellow4", "yellow3", "yellow2", "yellow", "wheat4", "wheat3", "wheat2", "wheat1", "violetred4", "violetred3", "violetred1", "violetred", "violet", "turquoise4", "turquoise3", 
-            "turquoise1", "turquoise", "tomato4", "tomato3", "tomato", "thistle4", "thistle3", "thistle2", "thistle", "tan4", "tan3", "tan1", "tan", "steelblue4", "steelblue3", "steelblue2", "steelblue", "springgreen4", "springgreen3", "springgreen", "snow4", 
-            "snow3", "slategray4", "slategray3", "slategray2"
+            "coral3", "coral", "chocolate4", "chocolate", "chartreuse4", "chartreuse3", "chartreuse", "cadetblue4", "cadetblue3", "cadetblue2", "burlywood4", "burlywood3", "brown", "blueviolet", "blue1", "bisque4", "bisque3", "azure3", 
+            "aquamarine4", "aquamarine3", "deeppink4", "deeppink", "darkviolet", "darkturquoise", "darkslategrey", "darkslategray4", "darkslateblue", "darkseagreen4", "darkseagreen", "darksalmon", "darkred", "darkolivegreen3", "darkolivegreen", 
+            "darkkhaki", "darkgrey", "darkgreen", "darkcyan", "darkblue", "cyan3", "cyan", "cornsilk3", "cornflowerblue", "goldenrod1", "goldenrod", "gold", "forestgreen", "firebrick1", "dodgerblue4", "dodgerblue", "deepskyblue4", "deepskyblue", 
+            "greenyellow", "green4", "green2", "grey70", "grey55", "grey90", "lightpink1", "lightgreen", "lightgoldenrod", "lightcyan3", "lightcoral", "lightblue3", "lemonchiffon3", "lemonchiffon1", "lavender", "khaki", "indianred4", "indianred", 
+            "hotpink4", "hotpink", "mediumturquoise", "mediumspringgreen", "mediumslateblue", "mediumseagreen", "mediumpurple1", "mediumaquamarine", "maroon1", "maroon", "magenta", "limegreen", "lightyellow3", "lightsteelblue1", "lightsteelblue", 
+            "lightslateblue", "lightseagreen", "lightsalmon", "pink", "peru", "peachpuff", "papayawhip", "palegreen4", "palegreen3", "palegreen", "orchid", "orangered", "orange", "olivedrab2", "olivedrab", "moccasin", "slategray1", "slateblue4", 
+            "slateblue", "skyblue", "sienna1", "sienna", "seagreen1", "seagreen", "sandybrown", "salmon", "saddlebrown", "royalblue", "red", "purple", "powderblue", "plum", "yellowgreen", "yellow", "wheat3", "wheat", "violetred1", "violetred", "violet", 
+            "turquoise", "tomato", "tan", "steelblue1", "steelblue", "springgreen4", "springgreen", "slategray2"
         )
     }
     
