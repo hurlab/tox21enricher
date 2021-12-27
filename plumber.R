@@ -174,6 +174,9 @@ getQueuePos <- function(transactionId="-1", mode="none"){
             statusList <- lapply(statusFiles, function(statusFileUpdate){
                 # waiting in queue
                 if(statusFileUpdate < 2){
+                    if(statusFileUpdate == -1){#error
+                        return("Ran into error.")
+                    }
                     return(paste0("Waiting in queue position: ", queuePos, "."))
                 } else if(statusFileUpdate == 2){
                     return("(Step 1/4): Processing input file(s).")
@@ -197,6 +200,9 @@ getQueuePos <- function(transactionId="-1", mode="none"){
             statusList <- lapply(statusFiles, function(statusFileUpdate){
                 # waiting in queue
                 if(statusFileUpdate < 2){
+                    if(statusFileUpdate == -1){#error
+                        return("Ran into error.")
+                    }
                     return(paste0("Waiting in queue position: ", queuePos, "."))
                 } else if(statusFileUpdate == 2){
                     return("(Step 1/4): Processing input file(s).")
