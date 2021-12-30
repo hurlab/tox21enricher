@@ -101,9 +101,7 @@ print("! Finished loading base annotations.")
 
 # Load DrugMatrix Annotations
 # CASRN2funCatTerm
-CASRN2funCatTerm_lv1 <- lapply(split(outpAnnotations, outpAnnotations$casrn), function(x){
-    return(split(x, x$annoclassname)) 
-})
+CASRN2funCatTerm_lv1 <- lapply(split(outpAnnotations, outpAnnotations$casrn), function(x) split(x, x$annoclassname))
 CASRN2funCatTerm <- lapply(CASRN2funCatTerm_lv1, function(x){
     return(lapply(x, function(y){
         inner_CASRN2funCatTerm <- lapply(y$annoterm, function(z) 1)
@@ -111,11 +109,8 @@ CASRN2funCatTerm <- lapply(CASRN2funCatTerm_lv1, function(x){
         return(inner_CASRN2funCatTerm)
     }))
 })
-
 # funCatTerm2CASRN
-funCatTerm2CASRN_lv1 <- lapply(split(outpAnnotations, outpAnnotations$annoclassname), function(x){
-        return(split(x, x$annoterm))
-})
+funCatTerm2CASRN_lv1 <- lapply(split(outpAnnotations, outpAnnotations$annoclassname), function(x) split(x, x$annoterm))
 funCatTerm2CASRN <- lapply(funCatTerm2CASRN_lv1, function(x){
     return(lapply(x, function(y) {
         inner_funCatTerm2CASRN <- lapply(y$casrn, function(z) 1) 
@@ -123,16 +118,10 @@ funCatTerm2CASRN <- lapply(funCatTerm2CASRN_lv1, function(x){
         return(inner_funCatTerm2CASRN)
     }))
 })
-
 # funCat2CASRN
-funCat2CASRN <- lapply(split(outpAnnotations, outpAnnotations$annoclassname), function(x) {
-    return(split(x, x$casrn))
-})
-
+funCat2CASRN <- lapply(split(outpAnnotations, outpAnnotations$annoclassname), function(x) split(x, x$casrn))
 # term2funCat
-term2funCat <- lapply(split(outpAnnotations, outpAnnotations$annoterm), function(x) {
-    return(split(x, x$annoclassname))
-})
+term2funCat <- lapply(split(outpAnnotations, outpAnnotations$annoterm), function(x) split(x, x$annoclassname))
 
 print("! Finished loading DrugMatrix annotations.")
 print("! Ready to accept connections.")
@@ -167,13 +156,13 @@ performEnrichment <- function(enrichmentUUID="-1", annoSelectStr="MESH=checked,P
 
     # Enrichment parameters
     annoSelectStrSplit <- unlist(str_split(annoSelectStr, "=checked,"))
-    # Remove blanks
     annoSelectStrSplit <- annoSelectStrSplit[nchar(annoSelectStrSplit) > 0]
     
     # Create funCat2Selected
     funCat2Selected <- lapply(annoSelectStrSplit, function(i) 1)
     names(funCat2Selected) <- annoSelectStrSplit
-
+    
+    # Directories
     inDir <- paste0(APP_DIR, IN_DIR, enrichmentUUID) # Directory for input files for enrichment set
     outDir <- paste0(APP_DIR, OUT_DIR, enrichmentUUID) # Directory for output files for enrichment set
 
@@ -181,10 +170,8 @@ performEnrichment <- function(enrichmentUUID="-1", annoSelectStr="MESH=checked,P
     pvalueThresholdToDisplay <- 0.2 # p-value < 0.1 to be printed
 
     # DSSTox Clustering
-    similarityTermOverlap <- 3
     similarityThreshold <- 0.50
     initialGroupMembership <- 3
-    finalGroupMembership <- 3
     multipleLinkageThreshold <- 0.50
     EASEThreshold <- 1.0
 
@@ -230,6 +217,7 @@ performEnrichment <- function(enrichmentUUID="-1", annoSelectStr="MESH=checked,P
         return("No valid input sets.")
     }
 
+    # Check which input sets are good
     ldf <- lapply(inputFiles, function(i){
         openInput <- tryCatch({
             read.delim(file=i, header=FALSE, sep="\t", comment.char="", fill=TRUE)
@@ -237,8 +225,6 @@ performEnrichment <- function(enrichmentUUID="-1", annoSelectStr="MESH=checked,P
             return(NULL)
         })
     })
-
-    # Check which input sets are good
     ldf <- lapply(seq_len(length(ldf)), function(x) ldf[[x]])
 
     # Assign names to ldf
@@ -287,8 +273,6 @@ performEnrichment <- function(enrichmentUUID="-1", annoSelectStr="MESH=checked,P
     print(paste0("Processing ", length(inputIDListHash), " set(s)."))
 
     # Perform EASE calculation
-    setNameCounter <- 1
-
     outfileBaseNames <- lapply(seq_len(length(ldf)), function(setNameCtr){
         setNameItem <- str_remove(inputFiles[[setNameCtr]], paste0(APP_DIR, IN_DIR, enrichmentUUID, "/")) # Remove path
         setNameItem <- str_remove(setNameItem, ".txt") # Remove filename extension
@@ -379,18 +363,10 @@ performEnrichment <- function(enrichmentUUID="-1", annoSelectStr="MESH=checked,P
         return(FALSE)
     }
 
-    ARGV_0 <- inDir
-    ARGV_1 <- outDir 
-    ARGV_2 <- nodeCutoff
-    ARGV_3 <- "ALL"
-    ARGV_4 <- "P"
-    ARGV_5 <- 0.05
-    ARGV_6 <- "P"
-
     # Get the corresponding directory names
     baseinputDirName <- inDir
     baseDirName <- outDir
-    baseShortDirName <- ''
+    baseShortDirName <- ""
     baseOutputDir <- paste0(baseDirName, "/gct_per_set/")
     baseOutputDirGct <- paste0(baseDirName, "/gct/")
     dir.create(baseOutputDir)
@@ -400,7 +376,7 @@ performEnrichment <- function(enrichmentUUID="-1", annoSelectStr="MESH=checked,P
     names(CASRN2Name) <- lapply(seq_len(nrow(outpChemDetail)), function(x) outpChemDetail[x, "casrn"])
 
     # Generate individual gct files
-    process_variable_DAVID_CHART_directories_individual_file (baseinputDirName, baseDirName, baseOutputDir, '', '', ARGV_4, ARGV_5, ARGV_6, CASRN2Name)
+    process_variable_DAVID_CHART_directories_individual_file (baseinputDirName, baseDirName, baseOutputDir, '', '', "P", 0.05, "P", CASRN2Name)
     # Generate clustering images (heatmaps)
     create_clustering_images (baseOutputDir, "-color=BR")
     # Create DAVID Chart/Cluster files
@@ -455,7 +431,7 @@ performEnrichment <- function(enrichmentUUID="-1", annoSelectStr="MESH=checked,P
 ## SUBROUTINES
 
 # Generate individual GCT files
-process_variable_DAVID_CHART_directories_individual_file <- function(inputDirName, dirName, outputDir, extTag, additionalFileName, ARGV_4, ARGV_5, ARGV_6, CASRN2Name) {
+process_variable_DAVID_CHART_directories_individual_file <- function(inputDirName, dirName, outputDir, extTag, additionalFileName, sigColumn, sigCutOff, valueColumn, CASRN2Name) {
     # Load the input file
     setInputFiles <- Sys.glob(paste0(inputDirName, "/", "*.txt"), dirmark=FALSE)
 
@@ -475,11 +451,9 @@ process_variable_DAVID_CHART_directories_individual_file <- function(inputDirNam
         return(infile)
     })
     infiles <- infiles[!vapply(infiles, is.null, FUN.VALUE=logical(1))]
-
-    sigCutOff <- ARGV_5
-    sigColumnName <- toupper(ARGV_4)
+    sigColumnName <- toupper(sigColumn)
     sigColumnIndex <- get_column_index(sigColumnName) # 5=p-value, 12=BH p-value, 13=FDR
-    valueColumnName <- toupper(ARGV_6)
+    valueColumnName <- toupper(valueColumn)
     valueColumnIndex <- get_column_index(valueColumnName) # 5=p-value, 12=BH p-value, 13=FDR
 
     # Step1. Get the list of significant terms
@@ -511,7 +485,6 @@ process_variable_DAVID_CHART_directories_individual_file <- function(inputDirNam
                 tmpSplit[11] <- as.character(DATA[line, "Bonferroni"])
                 tmpSplit[12] <- as.character(DATA[line, "Benjamini"])
                 tmpSplit[13] <- as.character(DATA[line, "FDR"])
-
                 if ( grepl("^\\D", tmpSplit[[sigColumnIndex]]) | as.double(tmpSplit[[sigColumnIndex]]) >= sigCutOff | as.double(tmpSplit[[10]]) < 1) {
                     # skip
                 } else {
@@ -538,7 +511,6 @@ process_variable_DAVID_CHART_directories_individual_file <- function(inputDirNam
                 tmpSplit[11] <- as.character(DATA[line, "Bonferroni"])
                 tmpSplit[12] <- as.character(DATA[line, "Benjamini"])
                 tmpSplit[13] <- as.character(DATA[line, "FDR"])
-    
                 if ( grepl("^\\D", tmpSplit[[sigColumnIndex]]) | as.double(tmpSplit[[sigColumnIndex]]) >= sigCutOff | as.double(tmpSplit[[10]]) < 1) {
                     # skip
                 } else {
@@ -569,7 +541,6 @@ process_variable_DAVID_CHART_directories_individual_file <- function(inputDirNam
                 tmpSplit[11] <- as.character(DATA[line, "Bonferroni"])
                 tmpSplit[12] <- as.character(DATA[line, "Benjamini"])
                 tmpSplit[13] <- as.character(DATA[line, "FDR"])
-                
                 if ( grepl("^\\D", tmpSplit[[sigColumnIndex]]) | as.double(tmpSplit[[sigColumnIndex]]) >= sigCutOff | as.double(tmpSplit[[10]]) < 1) {
                     # skip
                 } else {
@@ -593,14 +564,12 @@ process_variable_DAVID_CHART_directories_individual_file <- function(inputDirNam
             # Now create new output files
             setFileName <- gsub(".txt", "", tmp2[length(tmp2)])
             OUTFILE <- file(paste0(outputDir, setFileName, ".gct"))
-    
             if(typeof(CASRN2TermMatrix) == "list"){
                 CASRNs <- names(CASRN2TermMatrix)
             }
             else {
                 CASRNs <- colnames(CASRN2TermMatrix)
             }
-    
             tmpTermKeys <- names(term2pvalue)
             tmpTermKeys <- unique(tmpTermKeys)
             CASRNCount <- length(CASRNs)
@@ -659,29 +628,6 @@ create_clustering_images <- function(outDir="", imageFlags="-color=BR"){
         dirTypeTag <- "PRESELECTED__"
     }
 
-    # arguments for clustering
-    outputBaseDir <- outDir
-    libDir <- paste0(APP_DIR, "HClusterLibrary/")
-    path_separator <- ';'
-    log_transform <- "no"
-    row_center <- "no"
-    row_normalize <- "no"
-    column_center <- "no"
-    column_normalize <- "no"
-    column_distance_measure <- "2" #pearson correlation
-    row_distance_measure <- "2" #pearson correlation
-    clustering_method <- "m" #pairwise complete-linkage
-    color_scheme <- "global" # or "row normalized"
-    color_palette <- ""
-
-    # Handle additional options
-    output_format <- "png"
-    # .jpeg, .png, .tiff, .bmp, .eps
-    if (!is.null(imageFlags) & grepl("(jpeg|png|tiff|bmp|eps)", tolower(imageFlags), fixed=TRUE)){ 
-        output_format <- tolower(imageFlags)
-    }
-    color_palette <- paste0(libDir, "colorSchemeBlackRed.txt")
-
     # Define required variables - Clustering Images
     java_flags <- "-Djava.awt.headless=true -Xmx1024m"
     row_size <- "16"
@@ -693,15 +639,26 @@ create_clustering_images <- function(outDir="", imageFlags="-color=BR"){
     row_to_highlight <- ""
     row_highlight_color <- ""
     use_color_gradient <- "no"
+    outputBaseDir <- outDir
+    libDir <- paste0(APP_DIR, "HClusterLibrary/")
+    column_distance_measure <- "2" #pearson correlation
+    row_distance_measure <- "2" #pearson correlation
+    clustering_method <- "m" #pairwise complete-linkage
+    color_scheme <- "global" # or "row normalized"
+    color_palette <- paste0(libDir, "colorSchemeBlackRed.txt")
+    output_format <- "png"
+    # .jpeg, .png, .tiff, .bmp, .eps
+    if (!is.null(imageFlags) & grepl("(jpeg|png|tiff|bmp|eps)", tolower(imageFlags), fixed=TRUE)){ 
+        output_format <- tolower(imageFlags)
+    }
 
     # Check OS and define program - this is probably always going to be 64-bit Linux at the moment.
     cluster_program <- "clusterLinux64"
 
     # Load directory list
-    baseSubDirs <- list()
     baseNameSplit <- unlist(str_split(dirName, "/"))
     baseNameSplit <- baseNameSplit[nchar(baseNameSplit) > 0]
-    baseShortDirName  <- ''
+    baseShortDirName  <- ""
     if (baseNameSplit[length(baseNameSplit)] == ""){
         baseShortDirName <- paste0(baseNameSplit[length(baseNameSplit)-1], '/')
     } else {
@@ -715,7 +672,9 @@ create_clustering_images <- function(outDir="", imageFlags="-color=BR"){
         if(x != "." & x != "..") {
             return(x)
         }
+        return(NULL)
     })
+    baseSubDirs <- baseSubDirs[!vapply(baseSubDirs, is.null, FUN.VALUE=logical(1))]
 
     # Perform HClustering
     perform_hclustering_per_directory (dirName, '', outputBaseDir, dirTypeTag, libDir, cluster_program, row_distance_measure, column_distance_measure, clustering_method, java_flags, output_format, column_size, row_size, show_grid, grid_color, show_row_description, show_row_names, row_to_highlight, row_highlight_color, color_scheme, color_palette, use_color_gradient)
@@ -732,13 +691,11 @@ create_clustering_images <- function(outDir="", imageFlags="-color=BR"){
 perform_hclustering_per_directory <- function(givenDirName, additionalDirName, outputBaseDir, dirTypeTag, libDir, cluster_program, row_distance_measure, column_distance_measure, clustering_method, java_flags, output_format, column_size, row_size, show_grid, grid_color, show_row_description, show_row_names, row_to_highlight, row_highlight_color, color_scheme, color_palette, use_color_gradient) {
     # Load GCT files for hierarchical clustering, in the given directory
     gctFiles <- Sys.glob(paste0(givenDirName, "/", "*.gct"), dirmark=FALSE)
-
     tmp1 <- unlist(str_split (givenDirName, "/"))
     tmp1 <- tmp1[nchar(tmp1) > 0]
     baseDirName <- tmp1[length(tmp1)]
     outputDir <- paste0(outputBaseDir, '/')
-    create_sub_directory(outputDir)
-  
+    create_sub_directory(outputDir) # create subdirectories
     generateImagesProcess <- mclapply (gctFiles, function(infile){
         tmp1 <- unlist(str_split(infile, "/"))
         tmp1 <- tmp1[nchar(tmp1) > 0]
@@ -757,8 +714,8 @@ perform_hclustering_per_directory <- function(givenDirName, additionalDirName, o
                 cdtFile <- paste0(output_base_name, ".cdt")
                 gtrFile <- paste0(output_base_name, ".gtr")
                 atrFile <- paste0(output_base_name, ".atr")
-                atrCmd <- ""
                 gtrCmd <- ""
+                atrCmd <- ""
                 if (row_distance_measure != 0){ 
                     gtrCmd <- paste0(" -x\"", gtrFile, "\"")
                 }
@@ -807,7 +764,6 @@ create_sub_directory <- function(outputDir){
 
 check_gct_contains_more_than_two_lines <- function(infile){
     INFILE <- read.delim(infile, sep="\t", comment.char="", quote="", stringsAsFactors=FALSE, header=TRUE, skip=2, fill=TRUE)
-    lineCount <- 0
     lineCount <- nrow(INFILE)
     if(lineCount >= 2){
         return(1)
@@ -827,7 +783,6 @@ create_david_chart_cluster <- function(baseDirName="", topTermLimit=10, mode="AL
     } else {
         baseShortDirName <- paste0(baseNameSplit[length(baseNameSplit)], '/')
     }
-    annotationBaseDir <- "Annotation/"
     baseOutputDir <- paste0(baseDirName, '/gct/')
     if (dir.exists(baseOutputDir)) {
         # do nothing if directory already exists (i.e., we are regenerating the network)
@@ -836,10 +791,7 @@ create_david_chart_cluster <- function(baseDirName="", topTermLimit=10, mode="AL
         print(paste0("No directory found for ", baseOutputDir, ". Creating..."))
         dir.create(baseOutputDir)
     }
-
     # Load term annotation data
-    # Get data saved from tox21enricher database
-    # Load Annotations from data table
     className2classID <- lapply(seq_len(nrow(outpClasses)), function(line) outpClasses[line, "annoclassid"])
     names(className2classID) <- lapply(seq_len(nrow(outpClasses)), function(line) outpClasses[line, "annoclassname"])
     classID2className <- lapply(seq_len(nrow(outpClasses)), function(line) outpClasses[line, "annoclassname"])
@@ -852,7 +804,6 @@ create_david_chart_cluster <- function(baseDirName="", topTermLimit=10, mode="AL
             return(inner_classID2annotationTerm2termUniqueID)
         }))
     })
-
     # Enumerate all possible directories
     process_variable_DAVID_CHART_directories (baseDirName, baseOutputDir, "", "", topTermLimit, mode, sigColumnName, sigCutoff, valueColumnName, className2classID, classID2annotationTerm2termUniqueID)
     process_variable_DAVID_CLUSTER_directories (baseDirName, baseOutputDir, "", "", topTermLimit, mode, sigColumnName, sigCutoff, valueColumnName, className2classID, classID2annotationTerm2termUniqueID)
@@ -882,20 +833,16 @@ process_variable_DAVID_CLUSTER_directories <- function(dirName, outputDir, extTa
     }
 
     # Load DAVID cluster files
-    pvalueMatrix <- list()
-
     # Step1. Get the list of significant terms
     if(length(infiles) < 1){
         return(FALSE)
     }
-
     getSigTerms <- lapply(infiles, function(infile) {
         tmp1 <- unlist(str_split(infile, "/"))
         tmpNameSplit <- unlist(str_split(tmp1[length(tmp1)], "__Cluster.txt"))
         shortFileBaseName <- tmpNameSplit[1]
         originalSourceFile <- paste0(dirInputName, "/", shortFileBaseName, ".txt")
-        DATA <- read.delim(infile, sep="\t", comment.char="", quote="", stringsAsFactors=FALSE, header=FALSE, fill=TRUE, col.names=c("Category", "Term", "Count", "%", "PValue", "CASRNs", "List", "Total", "Pop Hits", "Pop Total", "Fold Enrichment", "Bonferroni", "Benjamini", "FDR"))
-        lines <- DATA
+        lines <- read.delim(infile, sep="\t", comment.char="", quote="", stringsAsFactors=FALSE, header=FALSE, fill=TRUE, col.names=c("Category", "Term", "Count", "%", "PValue", "CASRNs", "List", "Total", "Pop Hits", "Pop Total", "Fold Enrichment", "Bonferroni", "Benjamini", "FDR"))
         if(nrow(lines) < 1){
             return(FALSE)
         }
@@ -905,11 +852,8 @@ process_variable_DAVID_CLUSTER_directories <- function(dirName, outputDir, extTa
             })
             if(grepl("^Annotation Cluster", tmpSplit[[1]])) {
                 firstClusterIndex <- i + 2
-                tmpSplitInner <- lapply(lines[firstClusterIndex, ], function(lineItem) {
-                    return(lineItem)
-                })
+                tmpSplitInner <- lapply(lines[firstClusterIndex, ], function(lineItem) lineItem)
                 if (tmpSplitInner[[sigColumnIndex]] == "" | is.na(tmpSplitInner[[sigColumnIndex]]) | grepl("^\\D", tmpSplitInner[[sigColumnIndex]]) | as.double(tmpSplitInner[[sigColumnIndex]]) >= sigCutoff | as.double(tmpSplitInner[[10]]) < 1) {
-                    # do nothing
                     return(NULL)
                 } else {
                     tmpID <- paste0(tmpSplitInner[[1]], " | ", tmpSplitInner[[2]])
@@ -928,21 +872,18 @@ process_variable_DAVID_CLUSTER_directories <- function(dirName, outputDir, extTa
         }
     
         tmp_ID2Term <- lapply(seq_len(nrow(lines)), function(i){
-            tmpSplit <- lapply(lines[i, ], function(lineItem) {
-                return(lineItem)
-            })
+            tmpSplit <- lapply(lines[i, ], function(lineItem) lineItem)
             if(grepl("^Annotation Cluster", tmpSplit[[1]])) {
                 firstClusterIndex <- i + 2
-                tmpSplitInner <- lapply(lines[firstClusterIndex, ], function(lineItem) {
-                    return(lineItem)
-                })
+                tmpSplitInner <- lapply(lines[firstClusterIndex, ], function(lineItem) lineItem)
                 if (tmpSplitInner[[sigColumnIndex]] == "" | is.na(tmpSplitInner[[sigColumnIndex]]) | grepl("^\\D", tmpSplitInner[[sigColumnIndex]]) | as.double(tmpSplitInner[[sigColumnIndex]]) >= sigCutoff | as.double(tmpSplitInner[[10]]) < 1) {
-                    # do nothing
+                    return(NULL)
                 } else {
                     tmpTerm <- paste0(tmpSplitInner[[1]], " | ", tmpSplitInner[[2]])
                     return(tmpTerm)
                 }
             }
+            return(NULL)
         })
         #Get not null elements
         tmp_ID2Term <- tmp_ID2Term[!vapply(tmp_ID2Term, is.null, FUN.VALUE=logical(1))]
@@ -954,20 +895,17 @@ process_variable_DAVID_CLUSTER_directories <- function(dirName, outputDir, extTa
         }
         
         tmp_ID2Class <- lapply(seq_len(nrow(lines)), function(i){
-            tmpSplit <- lapply(lines[i, ], function(lineItem) {
-                return(lineItem)
-            })
+            tmpSplit <- lapply(lines[i, ], function(lineItem) lineItem)
             if(grepl("^Annotation Cluster", tmpSplit[[1]])) {
                 firstClusterIndex <- i + 2
-                tmpSplitInner <- lapply(lines[firstClusterIndex, ], function(lineItem) {
-                    return(lineItem)
-                })
+                tmpSplitInner <- lapply(lines[firstClusterIndex, ], function(lineItem) lineItem)
                 if (tmpSplitInner[[sigColumnIndex]] == "" | is.na(tmpSplitInner[[sigColumnIndex]]) | grepl("^\\D", tmpSplitInner[[sigColumnIndex]]) | as.double(tmpSplitInner[[sigColumnIndex]]) >= sigCutoff | as.double(tmpSplitInner[[10]]) < 1) {
-                    # do nothing
+                    return(NULL)
                 } else {
                     return(tmpSplitInner[[1]])
                 }
             }
+            return(NULL)
         })
         #Get not null elements
         tmp_ID2Class <- tmp_ID2Class[!vapply(tmp_ID2Class, is.null, FUN.VALUE=logical(1))]
@@ -975,7 +913,7 @@ process_variable_DAVID_CLUSTER_directories <- function(dirName, outputDir, extTa
         
         # Cut off entries over the limit
         if(length(tmp_ID2Class) > as.double(topTermLimit)){
-          tmp_ID2Class <- tmp_ID2Class[seq_len((as.double(topTermLimit)))]
+            tmp_ID2Class <- tmp_ID2Class[seq_len((as.double(topTermLimit)))]
         }
         names(tmp_ID2Term) <- tmpIDList
         names(tmp_ID2Class) <- tmpIDList
@@ -991,7 +929,6 @@ process_variable_DAVID_CLUSTER_directories <- function(dirName, outputDir, extTa
   
     # For cluster, we want to append the class name before the term as a given term may appear in multiple classes. If that happens, heatmap generation will be messed up.
     IDs <- ID2Term
-  
     fileHeaderNames <- lapply(infiles, function(infile) {
         tmp1 <- unlist(str_split(infile, "/"))
         tmpNameSplit <- str_split(tmp1[length(tmp1)], "__Cluster.txt")
@@ -1059,13 +996,11 @@ process_variable_DAVID_CLUSTER_directories <- function(dirName, outputDir, extTa
     summaryFileName <- paste0(summaryFileNameBase, "__ValueMatrix.txt")
     file.create(paste0(outputDir, summaryFileName))
     SUMMARY <- file(paste0(outputDir, summaryFileName))
-    fileHeaderNames <- unlist(fileHeaderNames)
-    fileHeaderNames <- sort_by_file_number(fileHeaderNames)
+    fileHeaderNames <- sort_by_file_number(unlist(fileHeaderNames))
     writeToSummaryHeader <- paste0("GROUP\tID\tTerms\t", paste0(fileHeaderNames, collapse="\t"), "\n")
 
     #Get not null elements
     IDs <- IDs[!vapply(IDs, is.na, FUN.VALUE=logical(1))]
-    IDs <- unlist(IDs, recursive=FALSE)
     IDs <- unique(IDs)
   
     writeToSummary <- lapply(IDs, function(ID) { 
@@ -1123,7 +1058,6 @@ process_variable_DAVID_CLUSTER_directories <- function(dirName, outputDir, extTa
     sampleCnt <- length(headerSplit) - 3
     geneCnt <- 0
     content <- ""
-  
     if(nrow(INFILE) > 0){
         content <- lapply(seq_len(nrow(INFILE)), function(l) {
             line <- paste0(INFILE[l, ], collapse="\t")
@@ -1172,8 +1106,6 @@ process_variable_DAVID_CHART_directories <- function(dirName, outputDir, extTag,
     summaryFileNameExt <- paste0(summaryFileNameExt,  "Chart_Top", topTermLimit, "_", mode, "__", sigColumnName, "_", sigCutoff, "_", valueColumnName)
   
     # Load DAVID Chart files
-    pvalueMatrix <- list()
-
     # Step0. Get only the files that actually have contents
     infiles <- lapply(infilesAll, function(infile) {
         infileDF <- read.table(infile, sep="\t", header=TRUE, comment.char="", fill=TRUE, stringsAsFactors=FALSE)
@@ -1199,19 +1131,17 @@ process_variable_DAVID_CHART_directories <- function(dirName, outputDir, extTag,
             return(FALSE)
         }
         tmpIDList <- lapply(seq_len(nrow(lines)), function(i){
-            tmpSplit <- lapply(lines[i, ], function(lineItem) {
-                return(lineItem)
-            })
+            tmpSplit <- lapply(lines[i, ], function(lineItem) lineItem)
             if (tmpSplit[[sigColumnIndex]] == "" | is.na(tmpSplit[[sigColumnIndex]]) | grepl("^\\D", tmpSplit[[sigColumnIndex]]) | tmpSplit[[sigColumnIndex]] >= sigCutoff | tmpSplit[[10]] < 1) {
-                # do nothing
+                return(NULL)
             } else {
-                tmpID <- paste0(tmpSplit[[2]])
+                return(paste0(tmpSplit[[2]]))
             }
+            return(NULL)
         })
         
         #Get not null elements
         tmpIDList <- tmpIDList[!vapply(tmpIDList, is.null, FUN.VALUE=logical(1))]
-        tmpIDList <- tmpIDList[!vapply(tmpIDList, is.na, FUN.VALUE=logical(1))]
         tmpIDList <- unlist(tmpIDList, recursive=FALSE)
         
         # Cut off entries over the limit
@@ -1257,19 +1187,16 @@ process_variable_DAVID_CHART_directories <- function(dirName, outputDir, extTag,
     })
     getSigTermsFilteredTerms <- lapply(seq_len(length(getSigTerms)), function(i) getSigTerms[[i]]["ID2Term"])
     getSigTermsFilteredClasses <- lapply(seq_len(length(getSigTerms)), function(i) getSigTerms[[i]]["ID2Class"])
-  
     ID2Term <- unlist(unname(unlist(getSigTermsFilteredTerms, recursive=FALSE)), recursive=FALSE)
     ID2Class <- unlist(unname(unlist(getSigTermsFilteredClasses, recursive=FALSE)), recursive=FALSE)
     # remove NA
     ID2Term <- ID2Term[!vapply(ID2Term, is.na, FUN.VALUE=logical(1))]
     ID2Class <- ID2Class[!vapply(ID2Class, is.na, FUN.VALUE=logical(1))]
-  
     if (length(ID2Class) > 0){
         IDs <- paste0(ID2Class, " | ", names(ID2Class))
     } else {
         IDs <- list()
     }
-  
     # Check term file and load
     fileHeaderNames <- lapply(infiles, function(infile) {
         tmp1 <- unlist(str_split(infile, "/"))
@@ -1418,34 +1345,28 @@ process_variable_DAVID_CHART_directories <- function(dirName, outputDir, extTag,
 
 # Sort by file numbers (this is for the situation where the set names are like <Set 1, Set 2, Set 3, etc.>)
 sort_by_file_number <- function(originalArray) {
-    originalCount <- length(originalArray)
-    sortedArray <- list()
-    number2original <- list()
     if (!is.null(originalArray[1]) & grepl("\\w\\d+$", originalArray[1])) {
         # Number
-        number2originalNames <- lapply(seq_len(length(originalArray)), function(name){
+        number2originalNames <- unlist(lapply(seq_len(length(originalArray)), function(name){
             if (grepl("\\w(\\d+)$", originalArray[name])) {
                 return(name)
             }
-        })
-        number2originalNames <- unlist(number2originalNames, recursive=FALSE)
-    
+            return(NULL)
+        }))
+        number2originalNames <- number2originalNames[!vapply(number2originalNames, is.null, FUN.VALUE=logical(1))]
         # Original name
-        number2original <- lapply(originalArray, function(name){
+        number2original <- unlist(lapply(originalArray, function(name){
             if (grepl("\\w(\\d+)$", name)) {
                 return(name)
             }
-        })
-        number2original <- unlist(number2original, recursive=FALSE)
+            return(NULL)
+        }))
+        number2original <- number2original[!vapply(number2original, is.null, FUN.VALUE=logical(1))]
         sortedNumbers <- number2original[order(unlist(number2original), decreasing=FALSE)]
         if (length(sortedNumbers) != length(originalArray)) {
             return (originalArray)
         } else {
-            sortedArray <- lapply(sortedNumbers, function(num){
-                return(num)
-            })
-            sortedArray<- unlist(sortedArray, recursive=FALSE)
-            return(sortedArray)
+            return(sortedNumbers)
         }
     }
     return(originalArray)
@@ -1498,9 +1419,7 @@ perform_CASRN_enrichment_analysis <- function(CASRNRef, outputBaseDir, outfileBa
                 return(sigTermResults)
             })
         }
-        names(tmp_sigTerm2CASRNMatrix) <- lapply(funCatTerms, function(term){
-            return(paste0(funCat, "|", term))
-        })
+        names(tmp_sigTerm2CASRNMatrix) <- lapply(funCatTerms, function(term) paste0(funCat, "|", term))
         tmp_sigTerm2CASRNMatrix <- tmp_sigTerm2CASRNMatrix[vapply(tmp_sigTerm2CASRNMatrix, length, FUN.VALUE=numeric(1)) > 0]
         if(length(tmp_sigTerm2CASRNMatrix) < 1){
             return(NULL)
@@ -1519,6 +1438,7 @@ perform_CASRN_enrichment_analysis <- function(CASRNRef, outputBaseDir, outfileBa
                 if (!is.null(CASRN2funCatTerm[[CASRN]][[funCat]])){
                     return(names(CASRN2funCatTerm[[CASRN]][[funCat]]))
                 }
+                return(NULL)
             })
             localTerms <- localTerms[!vapply(localTerms, is.null, FUN.VALUE=logical(1))]
             totalCount <- length(localTerms)
@@ -1548,7 +1468,6 @@ perform_CASRN_enrichment_analysis <- function(CASRNRef, outputBaseDir, outfileBa
                         
                         # skip any under-represented terms
                         foldenrichment <- (targetCASRNCount/length(targetTotalCASRNInFunCatCount))/(n1p/npp)
-                        pvalue <- 1
                         datArrayLine  <- list(n11, (n1p-n11), (np1-n11), (npp-n1p-np1+n11))
                         return(datArrayLine)
                     }
@@ -1602,10 +1521,8 @@ perform_CASRN_enrichment_analysis <- function(CASRNRef, outputBaseDir, outfileBa
                         
                         # Skip any under-represented terms
                         foldenrichment <- (targetCASRNCount/length(targetTotalCASRNInFunCatCount))/(n1p/npp)
-                        pvalue <- 1
-                        
                         # Truncate pvalue digits after decimal to 15
-                        annoArrayLine <- c(funCat, term, targetCASRNCount, round((targetCASRNCount/inputCASRNsCount*100), digits=15), 1, paste(unlist(unname(vapply(targetCASRNsRef, paste, FUN.VALUE=character(1), collapse=", "))), collapse=', '), targetTotalCASRNInFunCatCount, n1p, npp, (targetCASRNCount/targetTotalCASRNInFunCatCount)/(n1p/npp), (1-(1-pvalue)^targetTotalTermCount))
+                        annoArrayLine <- c(funCat, term, targetCASRNCount, round((targetCASRNCount/inputCASRNsCount*100), digits=15), 1, paste(unlist(unname(vapply(targetCASRNsRef, paste, FUN.VALUE=character(1), collapse=", "))), collapse=', '), targetTotalCASRNInFunCatCount, n1p, npp, (targetCASRNCount/targetTotalCASRNInFunCatCount)/(n1p/npp))
                         return(annoArrayLine)
                     }
                     return(NULL)
@@ -1631,7 +1548,7 @@ perform_CASRN_enrichment_analysis <- function(CASRNRef, outputBaseDir, outfileBa
         sortedHeaderTerms <- sigTerm2CASRNMatrix[order(unlist(sigTerm2CASRNMatrix), decreasing=FALSE)]
         # Clean out NA values
         sortedHeaderTerms <- sortedHeaderTerms[lengths(sortedHeaderTerms) != 0]
-        matrixHeader <- paste(names(sortedHeaderTerms), collapse='\t')
+        matrixHeader <- paste0(names(sortedHeaderTerms), collapse='\t')
         matrixPrintToFile <- lapply(names(mappedCASRNs), function(tmpCasrn){ 
             tmpMatrixHeaderProcess <- lapply(names(sortedHeaderTerms), function(tmpMatrixHeader){
                 if (!is.null(sigTerm2CASRNMatrix[[tmpMatrixHeader]][[tmpCasrn]]) & tmpMatrixHeader != "NA"){
@@ -1657,17 +1574,18 @@ perform_CASRN_enrichment_analysis <- function(CASRNRef, outputBaseDir, outfileBa
         file.create(outfileCluster)
         return(FALSE)
     }
-    # The old Perl script used to create a R command file here to calculate results of the fisher test. Now this just works on a data frame
+    # Calculate results of the fisher test - P-value, Bonferroni, BY, and FDR
     p.value <- apply(RINPUT_df, 1, function(x) fisher.test(matrix(unlist(x), nrow=2))$p.value)
-    ROUTPUT <- data.frame(p.value, fdr=p.adjust(p.value))
-    # Load the output file 
+    ROUTPUT <- data.frame(p.value=p.value, bonferroni=p.adjust(p.value, method="bonferroni"), by=p.adjust(p.value, method="BY"), fdr=p.adjust(p.value, method="fdr"))
+    # Load the output 
     ROutputData <- apply(ROUTPUT, 1, function(line){
         if (length(line) > 0) {
-            ROutputLineSplit <- list(line[['p.value']], line[['fdr']])
+            ROutputLineSplit <- list(p.value=line[['p.value']], bonferroni=line[['bonferroni']], by=line[['by']], fdr=line[['fdr']])
             return(ROutputLineSplit)
         }
+        return(NULL)
     })
-  
+    ROutputData <- ROutputData[!vapply(ROutputData, is.null, FUN.VALUE=logical(1))]
     # Integrate ROutput into the main hashes/arrays
     # Error checking/handling for the case the number of lines are different between @annoArray and @ROutputData
     if(length(annoArray) != length(ROutputData)) {
@@ -1730,20 +1648,20 @@ perform_CASRN_enrichment_analysis <- function(CASRNRef, outputBaseDir, outfileBa
             annoArray[[annoArrayIndex]][[2]], # annotation term name
             as.numeric(annoArray[[annoArrayIndex]][[3]]), # count
             as.numeric(annoArray[[annoArrayIndex]][[4]]), # %
-            ROutputData[[annoArrayIndex]][[1]], # update the p-value
+            ROutputData[[annoArrayIndex]][["p.value"]], # update the p-value
             annoArray[[annoArrayIndex]][[6]], # casrn list
             as.numeric(annoArray[[annoArrayIndex]][[7]]), # list total
             as.numeric(annoArray[[annoArrayIndex]][[8]]), # pop hits
             as.numeric(annoArray[[annoArrayIndex]][[9]]), # pop total
             as.numeric(annoArray[[annoArrayIndex]][[10]]), # fold enrichment
-            as.numeric(annoArray[[annoArrayIndex]][[11]]), # bonferroni
-            ROutputData[[annoArrayIndex]][[2]], # benjamini
-            ROutputData[[annoArrayIndex]][[1]] # add FDR to the array 
+            ROutputData[[annoArrayIndex]][["bonferroni"]], # Bonferroni
+            ROutputData[[annoArrayIndex]][["by"]], # Benjamini
+            ROutputData[[annoArrayIndex]][["fdr"]] # add FDR to the array 
         ))
     })
     term2Contents <- lapply(seq_len(length(annoArray)), function(annoArrayIndex) paste0(annoArray[[annoArrayIndex]]))
     names(term2Contents) <- lapply(seq_len(length(annoArray)), function(annoArrayIndex) paste0(annoArray[[annoArrayIndex]][1], "|", annoArray[[annoArrayIndex]][2]))
-    term2Pvalue <- lapply(seq_len(length(annoArray)), function(annoArrayIndex) ROutputData[[annoArrayIndex]][[1]])
+    term2Pvalue <- lapply(seq_len(length(annoArray)), function(annoArrayIndex) ROutputData[[annoArrayIndex]][["p.value"]])
     names(term2Pvalue) <- lapply(seq_len(length(annoArray)), function(annoArrayIndex) paste0(annoArray[[annoArrayIndex]][1], "|", annoArray[[annoArrayIndex]][2]))
 
     # Sort by the p-values across multiple funCat
@@ -1808,11 +1726,6 @@ perform_CASRN_enrichment_analysis <- function(CASRNRef, outputBaseDir, outfileBa
     res <- kappa_cluster(x=df, outputBaseDir=outputBaseDir, outfileBase=outfileBase, sortedFunCatTerms=sortedFunCatTerms, sigTerm2CASRNMatrix=sigTerm2CASRNMatrix, sortedFunCatTermsCount=sortedFunCatTermsCount, inputCASRNsCount=inputCASRNsCount, similarityThreshold=similarityThreshold, initialGroupMembership=initialGroupMembership, multipleLinkageThreshold=multipleLinkageThreshold, EASEThreshold=EASEThreshold, term2Pvalue=term2Pvalue, term2Contents=term2Contents, enrichmentUUID=enrichmentUUID)
 }
 
-get_funCat_from_funCatTerm <- function(funCatTerm){
-    tmpSplit <- unlist(str_split(funCatTerm, '\\|'))
-    return(tmpSplit[1])
-}
-
 kappa_cluster <- function(x, deg=NULL, useTerm=FALSE, cutoff=0.5, overlap=0.5, minSize=5, escore=3, outputBaseDir, outfileBase, sortedFunCatTerms, sigTerm2CASRNMatrix, sortedFunCatTermsCount, inputCASRNsCount=0, similarityThreshold=0.50, initialGroupMembership, multipleLinkageThreshold=0.5, EASEThreshold=1.0, term2Pvalue, term2Contents, enrichmentUUID) {
     # Perform functional term clustering
     # Update status file
@@ -1840,66 +1753,24 @@ kappa_cluster <- function(x, deg=NULL, useTerm=FALSE, cutoff=0.5, overlap=0.5, m
     }
   
     # Step#1: Calculate kappa score
-    mappedCASRNCheck <- list()
-    mappedCASRNIDs <- list()
-    posTermCASRNCount <- list()
-    posTermCASRNCount <- lapply(names(sortedFunCatTerms), function(funCatTerm){
-        localCASRNIDs <- sigTerm2CASRNMatrix[[funCatTerm[[1]]]]
-        return(length(localCASRNIDs))
-    })
-  
+    posTermCASRNCount <- lapply(names(sortedFunCatTerms), function(funCatTerm) length(sigTerm2CASRNMatrix[[funCatTerm[[1]]]]))
     # Set names
-    names(posTermCASRNCount) <- lapply(names(sortedFunCatTerms), function(funCatTerm){
-        return(funCatTerm[[1]])
-    })
-  
-    tmp_mappedCASRNCheck <- lapply(names(sortedFunCatTerms), function(funCatTerm){
-        localCASRNIDs <- names(sigTerm2CASRNMatrix[funCatTerm[[1]]])
-        tmp_inner_mappedCASRNCheck <- lapply(localCASRNIDs, function(CASRNID){
-            return(1)
-        })
-        tmp_inner_mappedCASRNCheck <- unlist(tmp_inner_mappedCASRNCheck, recursive=FALSE)
-        tmp_names_mappedCASRNCheck <- lapply(localCASRNIDs, function(CASRNID){
-            return(CASRNID)
-        })
-        tmp_names_mappedCASRNCheck <- unlist(tmp_names_mappedCASRNCheck, recursive=FALSE)
-        return(list(CASRNID=tmp_names_mappedCASRNCheck, content=tmp_inner_mappedCASRNCheck))
-    })
-  
-    mappedCASRNCheckNames <- lapply(seq_len(length(tmp_mappedCASRNCheck)), function(i){
-        return(tmp_mappedCASRNCheck[[i]]["CASRNID"])
-    })
-    mappedCASRNCheckContent <- lapply(seq_len(length(tmp_mappedCASRNCheck)), function(i){
-        return(tmp_mappedCASRNCheck[[i]]["content"])
-    })
-  
-    mappedCASRNCheck <- unlist(unname(unlist(mappedCASRNCheckContent, recursive=FALSE)))
-    names(mappedCASRNCheck) <- unlist(unname(unlist(mappedCASRNCheckNames, recursive=FALSE)))
-    mappedCASRNIDs <- names(mappedCASRNCheck)
-    totalMappedCASRNIDCount <- length(mappedCASRNIDs)
-  
+    names(posTermCASRNCount) <- names(sortedFunCatTerms)
     # Calculate kappa score for each term pair
     sortedFunCatTerms <- names(sortedFunCatTerms)
     termpair2kappaOverThreshold <- mclapply ((seq_len((sortedFunCatTermsCount-1))), mc.cores=CORES, mc.silent=FALSE, function(i) {
         termpair2kappaOverThresholdInner <- lapply (seq((i+1), sortedFunCatTermsCount), function(j) {
             #calculate_kappa_statistics 
-            term1term2 <- 0
-            term1only <- 0
-            term2only <- 0
-            term1term2Non <- 0
-            
             posTerm1Total <- posTermCASRNCount[[sortedFunCatTerms[i]]]
             posTerm2Total <- posTermCASRNCount[[sortedFunCatTerms[j]]]
             negTerm1Total <- inputCASRNsCount - posTerm1Total # note that the total is inputCASRNsCount not the mapped total
             negTerm2Total <- inputCASRNsCount - posTerm2Total # note that the total is inputCASRNsCount not the mapped total
-            
             # Get number of chemicals that are shared or not for term1 and term2
             sharedTerms <- intersect(names(sigTerm2CASRNMatrix[[sortedFunCatTerms[i]]]), names(sigTerm2CASRNMatrix[[sortedFunCatTerms[j]]]))
             term1term2 <- length(sharedTerms)
             term1only <- length(names(sigTerm2CASRNMatrix[[sortedFunCatTerms[i]]])) - length(sharedTerms)
             term2only <- length(names(sigTerm2CASRNMatrix[[sortedFunCatTerms[j]]])) - length(sharedTerms)
             term1term2Non <- inputCASRNsCount - term1term2 - term1only - term2only
-            
             # Calculate the kappa score 
             # http://david.abcc.ncifcrf.gov/content.jsp?file=linear_search.html
             Oab <- (term1term2 + term1term2Non)/inputCASRNsCount
@@ -1913,6 +1784,7 @@ kappa_cluster <- function(x, deg=NULL, useTerm=FALSE, cutoff=0.5, overlap=0.5, m
                     colnames(ijFrame) <- list(iTerm, jTerm)
                     return(ijFrame)
                 }
+                return(NULL)
             }
             return(NULL)
         })
@@ -1951,7 +1823,6 @@ kappa_cluster <- function(x, deg=NULL, useTerm=FALSE, cutoff=0.5, overlap=0.5, m
         print(paste0("Cancelling request: ", enrichmentUUID))
         return(FALSE)
     }
-  
     term2sToPass <- NULL
     if(length(termpair2kappaOverThreshold) > 0){
         termpair2kappaOverThreshold <- termpair2kappaOverThreshold[order(names(termpair2kappaOverThreshold), decreasing=TRUE)]
@@ -1959,7 +1830,6 @@ kappa_cluster <- function(x, deg=NULL, useTerm=FALSE, cutoff=0.5, overlap=0.5, m
         term2sToPass <- lapply(seq_len(sortedFunCatTermsCount), function(i) append(termpair2kappaOverThreshold[[sortedFunCatTerms[i]]], sortedFunCatTerms[i], after=0))
         names(term2sToPass) <- mclapply(seq_len(sortedFunCatTermsCount), mc.cores=CORES, mc.silent=FALSE, function(i) sortedFunCatTerms[i])
     }
-
     qualifiedSeeds <- mclapply(seq_len(sortedFunCatTermsCount), mc.cores=CORES, mc.silent=FALSE, function(i){
         # Seed condition #1: initial group membership
         if (!is.null(termpair2kappaOverThreshold[[sortedFunCatTerms[i]]]) & length(termpair2kappaOverThreshold[[sortedFunCatTerms[i]]]) >= (initialGroupMembership-1)) {
@@ -1968,9 +1838,9 @@ kappa_cluster <- function(x, deg=NULL, useTerm=FALSE, cutoff=0.5, overlap=0.5, m
             over_percentage <- unlist(results_calculate_percentage_of_membership_over_threshold["overPercentage"])
             term2sRef <- results_calculate_percentage_of_membership_over_threshold["term2s"]
             if (as.numeric(over_percentage) > as.numeric(multipleLinkageThreshold)) {
-                # this seed group is qualified
-                return(unlist(unname(term2sRef)))
+                return(unlist(unname(term2sRef))) # this seed group is qualified
             }
+            return(NULL)
         }
         return(NULL)
     })
@@ -2005,11 +1875,10 @@ kappa_cluster <- function(x, deg=NULL, useTerm=FALSE, cutoff=0.5, overlap=0.5, m
     remainingSeeds <- qualifiedSeeds
     finalGroups <- vector("list", length(remainingSeeds))
     finalGroupsIndex <- 1
-  
+    # TODO: make this more efficient (no while loops)
     while(!is.null(unlist(remainingSeeds[1]))){
         currentSeedRef <- remainingSeeds[[1]]
         remainingSeeds <- remainingSeeds[-1]
-        newSeeds <- list()
         while(TRUE) {
             results_get_the_best_seed <- get_the_best_seed (currentSeedRef, remainingSeeds, newSeeds, multipleLinkageThreshold, finalGroupsIndex)
             # update the current reference seed ref with new seeds
@@ -2026,7 +1895,6 @@ kappa_cluster <- function(x, deg=NULL, useTerm=FALSE, cutoff=0.5, overlap=0.5, m
         finalGroups[[finalGroupsIndex]] <- currentSeedRef
         finalGroupsIndex <- finalGroupsIndex + 1
     }
-  
     # Remove null elements
     finalGroups <- lapply(finalGroups, function(innerList){
         if(length(innerList) > 0) {
@@ -2035,7 +1903,7 @@ kappa_cluster <- function(x, deg=NULL, useTerm=FALSE, cutoff=0.5, overlap=0.5, m
         return(NULL)
     })
     finalGroups <- finalGroups[!vapply(finalGroups, is.null, FUN.VALUE=logical(1))]
-  
+
     # Step#4: Calculate enrichment score and print out the results
     # Update status file
     # Connect to DB to get status info
@@ -2060,15 +1928,12 @@ kappa_cluster <- function(x, deg=NULL, useTerm=FALSE, cutoff=0.5, overlap=0.5, m
         print(paste0("Cancelling request: ", enrichmentUUID))
         return(FALSE)
     }
-    
     outfileCluster <- paste0(outputBaseDir, outfileBase, "__Cluster.txt")
     CLUSTER <- file(outfileCluster)
     clusterHeader <- "Category\tTerm\tCount\t%\tPValue\tCASRNs\tList Total\tPop Hits\tPop Total\tFold Enrichment\tBonferroni\tBenjamini\tFDR\n"
     EASEScore <- list()
     if(length(finalGroups) > 0){
-        EASEScore <- lapply(seq_len(length(finalGroups)), function(i){
-            return(calculate_Enrichment_Score (finalGroups[i], term2Pvalue))
-        })
+        EASEScore <- lapply(seq_len(length(finalGroups)), function(i) calculate_Enrichment_Score(finalGroups[i], term2Pvalue))
         EASEScore <- unlist(EASEScore, recursive=FALSE)
     }
   
@@ -2100,7 +1965,6 @@ kappa_cluster <- function(x, deg=NULL, useTerm=FALSE, cutoff=0.5, overlap=0.5, m
 }
 
 calculate_Enrichment_Score <- function(tmp_groupRef, term2PvalueRef) {
-    EASESum <- 0
     groupRef <- tmp_groupRef[[1]]
     EASESum <- Reduce("+", unlist(lapply(groupRef, function(termTmp) {
         term <- termTmp[[1]]
@@ -2132,25 +1996,23 @@ calculate_percentage_of_membership_over_threshold <- function(termpair2kappaOver
     }))
     passedPair <- passedPair[!vapply(passedPair, is.null, FUN.VALUE=logical(1))]
     passedPair <- length(passedPair)
-    
     # Use n choose k to calculate total number of unique pairs
     totalPairs <- choose(length(term2s), 2)
     return(list(overPercentage=(passedPair/totalPairs), term2s=term2s))
 }
 
-get_the_best_seed <- function(currentSeedRef, remainingSeedsRef, newSeedRef, multipleLinkageThreshold, index) {
+get_the_best_seed <- function(currentSeedRef, remainingSeedsRef, newSeedRef=list(), multipleLinkageThreshold, currentSeedIndex) {
     bestOverlapping <- 0
     bestSeedIndex <- 0
-    bestIndex <- list()
     currentSeedTerms <- currentSeedRef
     currentSeedTermCount <- length(currentSeedTerms)
     if(length(remainingSeedsRef) > 1){
-        bestIndex <- lapply(seq_len((length(remainingSeedsRef)-1)), function(i) {
+        bestIndex <- lapply(seq_len((length(remainingSeedsRef) - 1)), function(i) {
             # calculate the overlapping
             secondSeedTerms <- remainingSeedsRef[[i]]
             commonCount <- length(intersect(secondSeedTerms, currentSeedTerms))
             totalCount <- length(secondSeedTerms)
-            overlapping <- 2*commonCount / (currentSeedTermCount + totalCount)
+            overlapping <- 2 * commonCount / (currentSeedTermCount + totalCount)
             if (overlapping > multipleLinkageThreshold) {
                 return(list(overlapping, i))
             }
@@ -2167,13 +2029,13 @@ get_the_best_seed <- function(currentSeedRef, remainingSeedsRef, newSeedRef, mul
     }
     if (bestOverlapping == 0) {
         # no more merging is possible
-        return(list(remainingSeedsRef=remainingSeedsRef, newSeedRef=newSeedRef, finished=0))
+        return(list(remainingSeedsRef=remainingSeedsRef, newSeedRef=newSeedRef, bestSeedIndex=bestSeedIndex, finished=0))
     } else {
         # best mergable seed found
         newSeedRef <- union(currentSeedTerms, remainingSeedsRef[[bestSeedIndex]])
         # splice
         remainingSeedsRef <- remainingSeedsRef[-bestSeedIndex]
-        return(list(remainingSeedsRef=remainingSeedsRef, newSeedRef=newSeedRef, finished=1))
+        return(list(remainingSeedsRef=remainingSeedsRef, newSeedRef=newSeedRef, bestSeedIndex=bestSeedIndex, finished=1))
     }
 }
 
@@ -2189,14 +2051,11 @@ getAnnotations <- function(enrichmentUUID="-1", annoSelectStr="MESH=checked,PHAR
         port=tox21queue$port,
         idleTimeout=3600000
     )
-    
     # Get begin time for request
     beginTime <- Sys.time()
-    
     # Set begin time in transaction table
     query <- sqlInterpolate(ANSI(), paste0("UPDATE transaction SET timestamp_started='", beginTime, "' WHERE uuid='", enrichmentUUID, "';"), id="updateTransactionStart")
     outp <- dbExecute(poolInput, query)
-    
     # Close pool
     poolClose(poolInput)
     
@@ -2206,7 +2065,6 @@ getAnnotations <- function(enrichmentUUID="-1", annoSelectStr="MESH=checked,PHAR
     inDir <- paste0(APP_DIR, IN_DIR, enrichmentUUID) # Directory for input files for enrichment set
     outDir <- paste0(APP_DIR, OUT_DIR, enrichmentUUID) # Directory for output files for enrichment set
     inputSets <- Sys.glob(paste0(inDir, "/*"))
-  
     annotationMatrix <- mclapply(inputSets, mc.cores=CORES, mc.silent=FALSE, function(infile){
         # Get set name
         setNameSplit <- unlist(str_split(infile, "/"))
@@ -2353,11 +2211,7 @@ getAnnotations <- function(enrichmentUUID="-1", annoSelectStr="MESH=checked,PHAR
         })
         # Set list names to CASRNs
         # Merge class and annotation names
-        individualMatrix <- lapply(individualMatrix, function(x){
-            fixedInnerList <- unlist(lapply(x, function(y){
-                return(gsub("\t", "\\|", y))
-            }))
-        })
+        individualMatrix <- lapply(individualMatrix, function(x) fixedInnerList <- unlist(lapply(x, function(y) gsub("\t", "\\|", y))))
         names(individualMatrix) <- inputCASRNs
         combinedMatrix <- unlist(unname(individualMatrix), recursive=FALSE)
 
@@ -2405,9 +2259,6 @@ getAnnotations <- function(enrichmentUUID="-1", annoSelectStr="MESH=checked,PHAR
         # Write to matrix file
         writeLines(paste0(matrixOutput, paste0(matrixOutputFull, collapse="\n")), MATRIX)
         close(MATRIX)
-        
-        # Close pool connection to db when done accessing
-        poolClose(poolMatrix)
         return(TRUE)
     })
     annotationMatrix <- annotationMatrix[!vapply(annotationMatrix, is.null, FUN.VALUE=logical(1))]
@@ -2461,11 +2312,9 @@ queue <- function(){
             port=tox21queue$port,
             idleTimeout=3600000
         )
-        
         # Get only unfinished requests ("finished" flag is set to 0 and not currently being processed by another thread)
         query <- sqlInterpolate(ANSI(), paste0("SELECT * FROM queue WHERE finished=0 AND lock=0 AND error IS NULL;"), id="createQueueEntry")
         outp <- dbGetQuery(poolQueue, query)
-        
         # Close pool
         poolClose(poolQueue)
         

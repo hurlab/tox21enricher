@@ -21,11 +21,34 @@ COPY ./tox21db_tox21queue.bak $HOME/tox21enricher-database/tox21db_tox21queue.ba
 # Start PostgreSQL server, create tox21enricher database, and restore database content from backup file
 # (***) Replace "username" with the name of the user you want to own and run the database in the Docker Container.
 RUN pg_ctl -D $HOME/tox21enricher-database/ -l $HOME/tox21enricher-database/logfile start && \
-    psql -c "CREATE USER tox21enricher WITH PASSWORD 'password1'; CREATE USER tox21enricher_queuemanager WITH PASSWORD 'password2';" postgres && \
+    psql -c "CREATE USER tox21enricher WITH PASSWORD 'password1';" postgres && \
+    psql -c "CREATE USER tox21enricher_queuemanager WITH PASSWORD 'password2';" postgres && \
     createdb tox21enricher -O username && \
     psql tox21enricher < $HOME/tox21enricher-database/tox21db_tox21enricher.bak && \
     createdb tox21queue -O username && \
-    psql tox21queue < $HOME/tox21enricher-database/tox21db_tox21queue.bak
+    psql tox21queue < $HOME/tox21enricher-database/tox21db_tox21queue.bak && \
+    # Set privileges for tox21enricher and tox21enricher_queuemanager users
+    psql -d tox21enricher -c "REVOKE ALL PRIVILEGES ON tox21enricher FROM tox21enricher_queuemanager;" postgres && \
+    psql -d tox21enricher -c "REVOKE ALL PRIVILEGES ON tox21enricher FROM tox21enricher; " postgres && \
+    psql -d tox21enricher -c "GRANT CONNECT ON DATABASE tox21enricher TO tox21enricher;" postgres && \
+    psql -d tox21enricher -c "GRANT EXECUTE ON DATABASE tox21enricher TO tox21enricher;" postgres && \
+    psql -d tox21enricher -c "GRANT SELECT ON TABLE public.annotation_class TO tox21enricher;" postgres && \
+    psql -d tox21enricher -c "GRANT SELECT ON TABLE public.annotation_detail TO tox21enricher;" postgres && \
+    psql -d tox21enricher -c "GRANT SELECT ON TABLE public.annotation_matrix TO tox21enricher;" postgres && \
+    psql -d tox21enricher -c "GRANT SELECT ON TABLE public.annotation_matrix_terms TO tox21enricher;" postgres && \
+    psql -d tox21enricher -c "GRANT SELECT ON TABLE public.annoterm_pairwise TO tox21enricher;" postgres && \
+    psql -d tox21enricher -c "GRANT SELECT ON TABLE public.chemical_detail TO tox21enricher;" postgres && \
+    psql -d tox21enricher -c "GRANT SELECT ON TABLE public.fps_2 TO tox21enricher;" postgres && \
+    psql -d tox21enricher -c "GRANT SELECT ON TABLE public.mols_2 TO tox21enricher;" postgres && \
+    psql -d tox21enricher -c "GRANT SELECT ON TABLE public.term2casrn_mapping TO tox21enricher;" postgres && \
+    psql -d tox21queue -c "REVOKE ALL PRIVILEGES ON tox21queue FROM tox21enricher; " postgres && \
+    psql -d tox21queue -c "REVOKE ALL PRIVILEGES ON tox21queue FROM tox21enricher_queuemanager; " postgres && \
+    psql -d tox21queue -c "GRANT CONNECT ON DATABASE tox21queue TO tox21enricher_queuemanager;" postgres && \
+    psql -d tox21queue -c "GRANT EXECUTE ON DATABASE tox21queue TO tox21enricher_queuemanager;" postgres && \
+    psql -d tox21queue -c "GRANT SELECT,INSERT,UPDATE,DELETE ON TABLE public.queue TO tox21enricher_queuemanager;" postgres && \
+    psql -d tox21queue -c "GRANT ALL ON SEQUENCE public.queue_index_seq TO tox21enricher_queuemanager;" postgres && \
+    psql -d tox21queue -c "GRANT SELECT,INSERT,UPDATE,DELETE ON TABLE public.status TO tox21enricher_queuemanager;" postgres && \
+    psql -d tox21queue -c "GRANT SELECT,INSERT,UPDATE,DELETE ON TABLE public.transaction TO tox21enricher_queuemanager;" postgres
 
 # Copy entrypoint script from local machine
 # (***) Replace "username" with the name of the user you want to own and run the database in the Docker Container.

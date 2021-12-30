@@ -1446,17 +1446,17 @@ shinyServer(function(input, output, session) {
         reenrichResultsSanitized <- ""
         if(length(reenrichResultsList$reenrichResults) > 0){
             reenrichResultsSanitized <- unlist(lapply(seq_len(length(reenrichResultsList$reenrichResults)), function(reenrichResult){
-                rr_setname    <- names(reenrichResultsList$reenrichResults)[[reenrichResult]]
-                rr_casrn      <- paste0(reenrichResultsList$reenrichResults[[reenrichResult]][, "casrn"], collapse=";")
-                rr_m          <- paste0(reenrichResultsList$reenrichResults[[reenrichResult]][, "m"], collapse=";")
+                rr_setname <- names(reenrichResultsList$reenrichResults)[[reenrichResult]]
+                rr_casrn <- paste0(reenrichResultsList$reenrichResults[[reenrichResult]][, "casrn"], collapse=";")
+                rr_m <- paste0(reenrichResultsList$reenrichResults[[reenrichResult]][, "m"], collapse=";")
                 rr_sim <- NULL
                 if("similarity" %in% names(reenrichResultsList$reenrichResults[[reenrichResult]])){
-                    rr_sim      <- paste0(reenrichResultsList$reenrichResults[[reenrichResult]][, "similarity"], collapse=";")
+                    rr_sim <- paste0(reenrichResultsList$reenrichResults[[reenrichResult]][, "similarity"], collapse=";")
                 }
-                rr_cyanide    <- paste0(reenrichResultsList$reenrichResults[[reenrichResult]][, "cyanide"], collapse=";")
+                rr_cyanide <- paste0(reenrichResultsList$reenrichResults[[reenrichResult]][, "cyanide"], collapse=";")
                 rr_isocyanate <- paste0(reenrichResultsList$reenrichResults[[reenrichResult]][, "isocyanate"], collapse=";")
-                rr_aldehyde   <- paste0(reenrichResultsList$reenrichResults[[reenrichResult]][, "aldehyde"], collapse=";")
-                rr_epoxide    <- paste0(reenrichResultsList$reenrichResults[[reenrichResult]][, "epoxide"], collapse=";")
+                rr_aldehyde <- paste0(reenrichResultsList$reenrichResults[[reenrichResult]][, "aldehyde"], collapse=";")
+                rr_epoxide <- paste0(reenrichResultsList$reenrichResults[[reenrichResult]][, "epoxide"], collapse=";")
                 
                 if(is.null(rr_sim)){ # no similarity column
                     return(paste0(rr_setname, "__", rr_casrn, "__", rr_m, "__", rr_cyanide, "__", rr_isocyanate, "__", rr_aldehyde, "__", rr_epoxide))
@@ -1469,9 +1469,7 @@ shinyServer(function(input, output, session) {
         beginTime <- Sys.time()
         
         # Clean up colors to put into local file
-        colorsToPrint <- lapply(seq_len(length(colorsAllSets)), function(i){
-            paste0(names(colorsAllSets)[i], "__", colorsAllSets[i])
-        })
+        colorsToPrint <- lapply(seq_len(length(colorsAllSets)), function(i) paste0(names(colorsAllSets)[i], "__", colorsAllSets[i]))
         colorsToPrint <- paste0(colorsToPrint, collapse="|")
         
         # Send query to create transaction entry in database
@@ -1930,6 +1928,7 @@ shinyServer(function(input, output, session) {
                 fluidRow(
                     column(12,
                         h1(id="resultsHeader", "Fetched Annotations"),
+                        h4(id="resultsTransactionID", paste0("Request ID: ", transactionId)),
                         do.call(tabsetPanel, c(id='tab', lapply(names(enrichmentSets), function(i) {
                             tabPanel(
                                 title=paste0(i),
@@ -1962,11 +1961,8 @@ shinyServer(function(input, output, session) {
             }
             setFiles <- unlist(content(resp))
             # Add input file name to results
-            setFilesInput <- lapply(names(enrichmentSets), function(i){
-                return(paste0(inDirWeb, i, "__Input.txt"))
-            })
+            setFilesInput <- lapply(names(enrichmentSets), function(i) paste0(inDirWeb, i, "__Input.txt"))
             setFiles <- append(setFiles, setFilesInput)
-            
             setFilesSplit <- lapply(setFiles, function(setFile){
                 tmpSplit <- unlist(str_split(setFile, "/"))
                 return(tmpSplit[length(tmpSplit)])
@@ -2282,6 +2278,7 @@ shinyServer(function(input, output, session) {
                     fluidRow(
                         column(12,
                             h1(id="resultsHeader", "Enrichment Results"),
+                            h4(id="resultsTransactionID", paste0("Request ID: ", transactionId)),
                             do.call(tabsetPanel, c(id='tab', lapply(names(enrichmentSets), function(i) {
                                 outputOptions(output, paste0("outTab_", i), suspendWhenHidden=FALSE)
                                 tabPanel(
@@ -2647,14 +2644,8 @@ shinyServer(function(input, output, session) {
                                 }))
                                 clusterNames <- clusterNames[!vapply(clusterNames, is.null, FUN.VALUE=logical(1))]
                                 clusterList <- lapply(seq_len(length(clusterNames)), function(x) list())
-                                names(clusterList) <- lapply(clusterNames, function(x) {
-                                    # Remove enrichment scores
-                                    return(unlist(str_split(x, "\t"))[1])
-                                })
-                                enrichmentScores <- lapply(clusterNames, function(x) {
-                                    # Remove enrichment scores
-                                    return(unlist(str_split(x, "\t"))[2])
-                                })
+                                names(clusterList) <- lapply(clusterNames, function(x) unlist(str_split(x, "\t"))[1]) # Remove enrichment scores
+                                enrichmentScores <- lapply(clusterNames, function(x) unlist(str_split(x, "\t"))[2]) # Remove enrichment scores
                                 names(enrichmentScores) <- names(clusterList)
                                 currentCluster <- ""
                                 tmpFileDFs <- unlist(lapply(tmpFile, function(x){
@@ -2945,26 +2936,16 @@ shinyServer(function(input, output, session) {
             })
             
             # Render reenrichment if Substructure or Similarity
-            reenrichResultsTotalLength <- length(unlist(lapply(names(reenrichResults), function(i){
-                return(unlist(reenrichResults[[i]][, "casrn"]))
-            })))
-            reenrichResultsTotalLength <- reenrichResultsTotalLength + sum(unlist(lapply(names(reenrichResults), function(i) {
-                return(nrow(reenrichResults[[i]]))
-            })))
+            reenrichResultsTotalLength <- length(unlist(lapply(names(reenrichResults), function(i) unlist(reenrichResults[[i]][, "casrn"]))))
+            reenrichResultsTotalLength <- reenrichResultsTotalLength + sum(unlist(lapply(names(reenrichResults), function(i) nrow(reenrichResults[[i]]))))
             
             # Checkbox input to select chemicals for re-enrichment
-            reenrichChoices <- lapply(names(reenrichResults), function(i){
-                return(reenrichResults[[i]][, "casrn"])
-            })
+            reenrichChoices <- lapply(names(reenrichResults), function(i) reenrichResults[[i]][, "casrn"])
             names(reenrichChoices) <- names(reenrichResults)
           
             checkboxes <- lapply(names(reenrichChoices), function(reenrichSet){
-                tmp_checkboxes <- lapply(reenrichChoices[[reenrichSet]], function(x){
-                    return(checkboxInput(inputId=paste0(x, "__", reenrichSet), value=TRUE, label=NULL, width="4px"))
-                })
-                names(tmp_checkboxes) <- lapply(reenrichChoices[[reenrichSet]], function(x){
-                    return(paste0(x, "__", reenrichSet))
-                })
+                tmp_checkboxes <- lapply(reenrichChoices[[reenrichSet]], function(x) checkboxInput(inputId=paste0(x, "__", reenrichSet), value=TRUE, label=NULL, width="4px"))
+                names(tmp_checkboxes) <- lapply(reenrichChoices[[reenrichSet]], function(x) paste0(x, "__", reenrichSet))
                 return(tmp_checkboxes)
             })
             names(checkboxes) <- names(reenrichChoices)
@@ -2982,9 +2963,7 @@ shinyServer(function(input, output, session) {
                     imgPath2 <- ' height="100" width="100"></img>'
       
                     # query API to generate images
-                    resultImagesSVG <- unlist(lapply(seq_len(nrow(reenrichResults[[i]]["casrn"])), function(x) {
-                        return(paste0(reenrichResults[[i]][x, "casrn"], "__", reenrichResults[[i]][x, "m"]))
-                    }))
+                    resultImagesSVG <- unlist(lapply(seq_len(nrow(reenrichResults[[i]]["casrn"])), function(x) paste0(reenrichResults[[i]][x, "casrn"], "__", reenrichResults[[i]][x, "m"])))
                     resultImagesSVG <- paste0(resultImagesSVG, collapse="\n")
                     # Get SVG images from server
                     resp <- NULL
@@ -3207,23 +3186,18 @@ shinyServer(function(input, output, session) {
                         isocyanateCol <- fullTableTmp[tableRow, (ncol(fullTableTmp)-2)]
                         aldehydeCol <- fullTableTmp[tableRow, (ncol(fullTableTmp)-1)]
                         epoxideCol <- fullTableTmp[tableRow, (ncol(fullTableTmp))]
-        
                         if(toString(nitrileCol) != toString(originalInputStrReactive[1])) {
-                            warningToDisplay <- paste0(tipify(div( HTML(paste0(warningToDisplay, imgPath1, 'nitrile.png"', imgPath2))   ), "Nitrile (Cyanide) group.", placement="left"))
+                            warningToDisplay <- paste0(tipify(div( HTML(paste0(warningToDisplay, imgPath1, 'nitrile.png"', imgPath2))), "Nitrile (Cyanide) group.", placement="left"))
                         }
-                        
                         if(toString(isocyanateCol) != toString(originalInputStrReactive[2])) {
-                            warningToDisplay <- paste0(tipify(div( HTML(paste0(warningToDisplay, imgPath1, 'isocyanate.png"', imgPath2)) ), "Isocyanate group.", placement="left"))
+                            warningToDisplay <- paste0(tipify(div( HTML(paste0(warningToDisplay, imgPath1, 'isocyanate.png"', imgPath2))), "Isocyanate group.", placement="left"))
                         }
-                      
                         if(toString(aldehydeCol) != toString(originalInputStrReactive[3])) {
-                            warningToDisplay <- paste0(tipify(div( HTML(paste0(warningToDisplay, imgPath1, 'aldehyde.png"', imgPath2))   ),  "Aldehyde group.", placement="left"))
+                            warningToDisplay <- paste0(tipify(div( HTML(paste0(warningToDisplay, imgPath1, 'aldehyde.png"', imgPath2))),  "Aldehyde group.", placement="left"))
                         }
-                  
                         if(toString(epoxideCol) != toString(originalInputStrReactive[4])) {
-                            warningToDisplay <- paste0(tipify(div( HTML(paste0(warningToDisplay, imgPath1, 'epoxide.png"', imgPath2))     ), "Epoxide group.", placement="left"))
+                            warningToDisplay <- paste0(tipify(div( HTML(paste0(warningToDisplay, imgPath1, 'epoxide.png"', imgPath2))), "Epoxide group.", placement="left"))
                         }
-            
                         if(warningToDisplay == "") { # if no warnings
                             warningToDisplay <- "<p>None</p>"
                         }
@@ -3251,9 +3225,7 @@ shinyServer(function(input, output, session) {
                     warningList$warnings[[i]] <- warningCheck
                   
                     # Create checkbox column to display
-                    selectList <- lapply(checkboxes[[i]], function(x) {
-                        return(paste0(x))
-                    })
+                    selectList <- lapply(checkboxes[[i]], function(x) paste0(x))
                   
                     if(length(warningCheck) > 0){
                         # If we have warnings, then include the warning column
@@ -3396,7 +3368,6 @@ shinyServer(function(input, output, session) {
                             }
                         }
                     ),
-                    
                     # Reenrich selected chemicals
                     column(id=paste0("reenrichButtonCol"), 12, 
                         if(mode != "casrn" | (originalEnrichMode == "substructure" | originalEnrichMode == "similarity")) {
@@ -3435,8 +3406,6 @@ shinyServer(function(input, output, session) {
                 showNotification("Error: The application cannot connect to the Tox21 Enricher server. Please try again later.", type="error")
                 return(FALSE)
             }
-            
-            #TODO: error check
             if(resp$status_code != 200){
                 # Hide results container
                 shinyjs::hide(id="resultsContainer")
@@ -3463,12 +3432,10 @@ shinyServer(function(input, output, session) {
                     return(dfToReturn)
                 }, FUN.VALUE=double(colLength))
                 gctFileChart <- data.frame(gctFileChart)
-                
                 # This is here to catch anything that's only 1 input set
                 if(ncol(gctFileChart) > 1) {
                     gctFileChart <- t(gctFileChart)
                 } 
-              
                 gctFileChartColNames <- unique(unlist(lapply(content(resp), function(x){
                     gctFileChartInner <- unlist(lapply(names(x), function(y) {
                         if(y != "_row"){
@@ -3480,7 +3447,6 @@ shinyServer(function(input, output, session) {
                     gctFileChartInner <- gctFileChartInner[!vapply(gctFileChartInner, is.null, FUN.VALUE=logical(1))]
                     return(gctFileChartInner)
                 })))
-    
                 gctFileChartRowNames <- unique(unlist(lapply(content(resp), function(x){
                     gctFileChartInner <- unlist(lapply(names(x), function(y) {
                         if(y != "_row"){
@@ -3561,7 +3527,6 @@ shinyServer(function(input, output, session) {
                     gctFileClusterInner <- gctFileClusterInner[!vapply(gctFileClusterInner, is.null, FUN.VALUE=logical(1))]
                     return(gctFileClusterInner)
                 })))
-              
                 colnames(gctFileCluster) <- gctFileClusterColNames
                 row.names(gctFileCluster) <- gctFileClusterRowNames
                 gctFileClusterMatrix <- data.matrix(gctFileCluster)
@@ -3572,15 +3537,11 @@ shinyServer(function(input, output, session) {
             # Transpose matrices for heatmap display and get relevant annotation class names
             if(!is.null(gctFileChartMatrix)){
                 gctFileChartMatrix <- t(gctFileChartMatrix) 
-                chartClasses <- unique(unlist(lapply(colnames(gctFileChartMatrix), function(x){
-                    return(unlist(str_split(x, " \\| "))[1])
-                })))
+                chartClasses <- unique(unlist(lapply(colnames(gctFileChartMatrix), function(x) unlist(str_split(x, " \\| "))[1])))
             }
             if(!is.null(gctFileClusterMatrix)){
                 gctFileClusterMatrix <- t(gctFileClusterMatrix)
-                clusterClasses <- unique(unlist(lapply(colnames(gctFileClusterMatrix), function(x){
-                    return(unlist(str_split(x, " \\| "))[1])
-                })))
+                clusterClasses <- unique(unlist(lapply(colnames(gctFileClusterMatrix), function(x) unlist(str_split(x, " \\| "))[1])))
             }
             
             # Generate networks for chart & cluster
