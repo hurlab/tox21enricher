@@ -918,7 +918,7 @@ shinyServer(function(input, output, session) {
     
     # Perform CASRN enrichment analysis when submit button is pressed
     observeEvent(input$submit, {
-        output$error_box <- renderUI({
+        output$error_box <- renderUI({ # clear any displayed errors
             p()
         })
         # First, check if user filled out text input form  
@@ -1042,8 +1042,8 @@ shinyServer(function(input, output, session) {
         # Hide original form when done with enrichment
         shinyjs::hide(id="enrichmentForm")
       
-        # Disable changing input type when button is clicked
-        shinyjs::disable(id="enrich_from")
+        # Hide changing input type when button is clicked
+        shinyjs::hide(id="enrich_from")
         
         # Disable & Hide results page
         shinyjs::disable(id="enrichmentResults")
@@ -1311,8 +1311,8 @@ shinyServer(function(input, output, session) {
                 # Hide original form when done with enrichment
                 shinyjs::show(id="enrichmentForm")
                 
-                # Disable changing input type when button is clicked
-                shinyjs::enable(id="enrich_from")
+                # Show changing input type when button is clicked
+                shinyjs::show(id="enrich_from")
                 
                 # Show 'Restart' button, disable by default so user can't interfere with enrichment process
                 shinyjs::hide(id="refresh")
@@ -1502,8 +1502,8 @@ shinyServer(function(input, output, session) {
             # Hide original form when done with enrichment
             shinyjs::show(id="enrichmentForm")
             
-            # Disable changing input type when button is clicked
-            shinyjs::enable(id="enrich_from")
+            # Show changing input type when button is clicked
+            shinyjs::show(id="enrich_from")
             
             # Show 'Restart' button, disable by default so user can't interfere with enrichment process
             shinyjs::hide(id="refresh")
@@ -1572,8 +1572,8 @@ shinyServer(function(input, output, session) {
             # Hide original form when done with enrichment
             shinyjs::show(id="enrichmentForm")
             
-            # Disable changing input type when button is clicked
-            shinyjs::enable(id="enrich_from")
+            # Show changing input type when button is clicked
+            shinyjs::show(id="enrich_from")
             
             # Show 'Restart' button, disable by default so user can't interfere with enrichment process
             shinyjs::hide(id="refresh")
@@ -1641,8 +1641,8 @@ shinyServer(function(input, output, session) {
             # Hide original form when done with enrichment
             shinyjs::show(id="enrichmentForm")
             
-            # Disable changing input type when button is clicked
-            shinyjs::enable(id="enrich_from")
+            # Show changing input type when button is clicked
+            shinyjs::show(id="enrich_from")
             
             # Show 'Restart' button, disable by default so user can't interfere with enrichment process
             shinyjs::hide(id="refresh")
@@ -1692,8 +1692,8 @@ shinyServer(function(input, output, session) {
             # Hide original form when done with enrichment
             shinyjs::show(id="enrichmentForm")
             
-            # Disable changing input type when button is clicked
-            shinyjs::enable(id="enrich_from")
+            # Show changing input type when button is clicked
+            shinyjs::show(id="enrich_from")
             
             # Re-enable search button
             shinyjs::enable(id="searchButton")
@@ -1790,8 +1790,8 @@ shinyServer(function(input, output, session) {
         # Hide original form when done with enrichment
         shinyjs::show(id="enrichmentForm")
         
-        # Disable changing input type when button is clicked
-        shinyjs::enable(id="enrich_from")
+        # Show changing input type when button is clicked
+        shinyjs::show(id="enrich_from")
         
         # Re-enable search button
         shinyjs::enable(id="searchButton")
@@ -1990,20 +1990,27 @@ shinyServer(function(input, output, session) {
                                 showNotification("Error: The application cannot connect to the Tox21 Enricher server. Please try again later.", type="error")
                             } else {
                                 # Open preview in modal
+                                # disable refreshbutton
+                                shinyjs::disable(id="refresh")
                                 tmpFile <- read.table(paste0(tempdir(), "/output/", transactionId, "/", setFilesSplit[setFile]), sep="\t", comment.char="", fill=TRUE, stringsAsFactors=FALSE)
                                 names(tmpFile) <- c("Class", "Annotation")
                                 showModal(
                                     modalDialog(
                                         title=paste0("Annotation file for ", gsub(".txt", "", gsub("__", ": ", setFilesSplit[setFile]))),
-                                        footer=modalButton("Close preview"),
+                                        footer=actionButton(inputId="modalCloseAnnotation", label="Close preview"),
                                         size="l",
                                         fluidRow(
                                             column(12, 
-                                                dataTableOutput("annotationPreview") %>% withSpinner()
+                                                dataTableOutput("annotationPreview")
                                             )
                                         )
                                     )
                                 )
+                                observeEvent(input$modalCloseAnnotation, {
+                                    # enable refreshbutton
+                                    shinyjs::enable(id="refresh")
+                                    removeModal()
+                                })
                                 output[["annotationPreview"]] <- renderDataTable(
                                     DT::datatable({tmpFile},
                                         escape=FALSE,
@@ -2046,20 +2053,27 @@ shinyServer(function(input, output, session) {
                             showNotification("Error: The application cannot connect to the Tox21 Enricher server. Please try again later.", type="error")
                         } else {
                             # Open preview in modal
+                            # disable refreshbutton
+                            shinyjs::disable(id="refresh")
                             tmpFile <- read.table(paste0(tempdir(), "/input/", transactionId, "/", i, ".txt"), sep="\t", comment.char="", fill=TRUE, stringsAsFactors=FALSE)
                             names(tmpFile) <- c("CASRN", "Chemical Name")
                             showModal(
                                 modalDialog(
                                     title=paste0("Input file for ", i),
-                                    footer=modalButton("Close preview"),
+                                    footer=actionButton(inputId="modalCloseInputAnnotation", label="Close preview"),
                                     size="l",
                                     fluidRow(
                                         column(12, 
-                                            dataTableOutput("inputPreview") %>% withSpinner()
+                                            dataTableOutput("inputPreview")
                                         )
                                     )
                                 )
                             )
+                            observeEvent(input$modalCloseInputAnnotation, {
+                                # enable refreshbutton
+                                shinyjs::enable(id="refresh")
+                                removeModal()
+                            })
                             output[["inputPreview"]] <- renderDataTable(
                                 DT::datatable({tmpFile},
                                     escape=FALSE,
@@ -2098,20 +2112,27 @@ shinyServer(function(input, output, session) {
                             showNotification("Error: The application cannot connect to the Tox21 Enricher server. Please try again later.", type="error")
                         } else {
                             # Open preview in modal
+                            # disable refreshbutton
+                            shinyjs::disable(id="refresh")
                             tmpFile <- read.table(paste0(tempdir(), "/output/", transactionId, "/", i, "__ErrorCASRNs.txt"), sep="\t", comment.char="", fill=TRUE, stringsAsFactors=FALSE)
                             names(tmpFile) <- c("CASRN")
                             showModal(
                                 modalDialog(
                                     title=paste0("Error CASRNs for ", i),
-                                    footer=modalButton("Close preview"),
+                                    footer=actionButton(inputId="modalCloseErrorAnnotation", label="Close preview"),
                                     size="l",
                                     fluidRow(
                                         column(12, 
-                                            dataTableOutput("errorPreview") %>% withSpinner()
+                                            dataTableOutput("errorPreview")
                                         )
                                     )
                                 )
                             )
+                            observeEvent(input$modalCloseErrorAnnotation, {
+                                # enable refreshbutton
+                                shinyjs::enable(id="refresh")
+                                removeModal()
+                            })
                             output[["errorPreview"]] <- renderDataTable(
                                 DT::datatable({tmpFile},
                                     escape=FALSE,
@@ -2152,6 +2173,8 @@ shinyServer(function(input, output, session) {
                             showNotification("Error: The application cannot connect to the Tox21 Enricher server. Please try again later.", type="error")
                         } else {
                             # Open preview in modal
+                            # disable refreshbutton
+                            shinyjs::disable(id="refresh")
                             tmpFile <- read.table(paste0(tempdir(), "/output/", transactionId, "/", i, "__FullMatrix.txt"), sep="\t", header=TRUE, comment.char="", fill=TRUE, stringsAsFactors=FALSE)
                             names(tmpFile) <- lapply(names(tmpFile), function(x){
                               return(gsub("\\.", " ", x))
@@ -2159,15 +2182,20 @@ shinyServer(function(input, output, session) {
                             showModal(
                                 modalDialog(
                                     title=paste0("Full matrix file for ", i),
-                                    footer=modalButton("Close preview"),
+                                    footer=actionButton(inputId="modalCloseFullMatrix", label="Close preview"),
                                     size="l",
                                     fluidRow(
                                         column(12, 
-                                            dataTableOutput("fullMatrixPreview") %>% withSpinner()
+                                            dataTableOutput("fullMatrixPreview")
                                         )
                                     )
                                 )
                             )
+                            observeEvent(input$modalCloseFullMatrix, {
+                                # enable refreshbutton
+                                shinyjs::enable(id="refresh")
+                                removeModal()
+                            })
                             output[["fullMatrixPreview"]] <- renderDataTable(
                                 DT::datatable({tmpFile},
                                     escape=FALSE,
@@ -2457,20 +2485,27 @@ shinyServer(function(input, output, session) {
                                 showNotification("Error: The application cannot connect to the Tox21 Enricher server. Please try again later.", type="error")
                             } else {
                                 # Open preview in modal
+                                # disable refreshbutton
+                                shinyjs::disable(id="refresh")
                                 tmpFile <- read.table(paste0(tempdir(), "/input/", transactionId, "/", i, ".txt"), sep="\t", comment.char="", fill=TRUE, stringsAsFactors=FALSE)
                                 names(tmpFile) <- c("CASRN", "Chemical Name")
                                 showModal(
                                     modalDialog(
                                         title=paste0("Input file for ", i),
-                                        footer=modalButton("Close preview"),
+                                        footer=actionButton(inputId="modalCloseInputEnrichment", label="Close preview"),
                                         size="l",
                                         fluidRow(
                                             column(12, 
-                                                dataTableOutput("inputPreview") %>% withSpinner()
+                                                dataTableOutput("inputPreview")
                                             )
                                         )
                                     )
                                 )
+                                observeEvent(input$modalCloseInputEnrichment, {
+                                    # enable refreshbutton
+                                    shinyjs::enable(id="refresh")
+                                    removeModal()
+                                })
                                 output[["inputPreview"]] <- renderDataTable(
                                     DT::datatable({tmpFile},
                                         escape=FALSE,
@@ -2509,20 +2544,27 @@ shinyServer(function(input, output, session) {
                                 showNotification("Error: The application cannot connect to the Tox21 Enricher server. Please try again later.", type="error")
                             } else {
                                 # Open preview in modal
+                                # disable refreshbutton
+                                shinyjs::disable(id="refresh")
                                 tmpFile <- read.table(paste0(tempdir(), "/output/", transactionId, "/", i, "__Chart.txt"), sep="\t", header=TRUE, comment.char="", fill=TRUE, stringsAsFactors=FALSE)
                                 names(tmpFile) <- c("Category", "Term", "Count", "%", "PValue", "CASRNs", "List Total", "Pop Hits", "Pop Total", "Fold Enrichment", "Bonferroni", "Benjamini", "FDR")
                                 showModal(
                                     modalDialog(
                                         title=paste0("Chart file for ", i),
-                                        footer=modalButton("Close preview"),
+                                        footer=actionButton(inputId="modalCloseChart", label="Close preview"),
                                         size="l",
                                         fluidRow(
                                             column(12, 
-                                                dataTableOutput("chartPreview") %>% withSpinner()
+                                                dataTableOutput("chartPreview")
                                             )
                                         )
                                     )
                                 )
+                                observeEvent(input$modalCloseChart, {
+                                    # enable refreshbutton
+                                    shinyjs::enable(id="refresh")
+                                    removeModal()
+                                })
                                 output[["chartPreview"]] <- renderDataTable(
                                     DT::datatable({tmpFile},
                                         escape=FALSE,
@@ -2572,20 +2614,27 @@ shinyServer(function(input, output, session) {
                                 showNotification("Error: The application cannot connect to the Tox21 Enricher server. Please try again later.", type="error")
                             } else {
                                 # Open preview in modal
+                                # disable refreshbutton
+                                shinyjs::disable(id="refresh")
                                 tmpFile <- read.table(paste0(tempdir(), "/output/", transactionId, "/", i, "__ChartSimple.txt"), sep="\t", header=TRUE, comment.char="", fill=TRUE, stringsAsFactors=FALSE)
                                 names(tmpFile) <- c("Category", "Term", "Count", "%", "PValue", "Fold Enrichment", "Benjamini")
                                 showModal(
                                     modalDialog(
                                         title=paste0("Chart simple file for ", i),
-                                        footer=modalButton("Close preview"),
+                                        footer=actionButton(inputId="modalCloseChartSimple", label="Close preview"),
                                         size="l",
                                         fluidRow(
                                             column(12, 
-                                                dataTableOutput("chartSimplePreview") %>% withSpinner()
+                                                dataTableOutput("chartSimplePreview")
                                             )
                                         )
                                     )
                                 )
+                                observeEvent(input$modalCloseChartSimple, {
+                                    # enable refreshbutton
+                                    shinyjs::enable(id="refresh")
+                                    removeModal()
+                                })
                                 output[["chartSimplePreview"]] <- renderDataTable(
                                     DT::datatable({tmpFile},
                                         escape=FALSE,
@@ -2685,29 +2734,36 @@ shinyServer(function(input, output, session) {
                                     rownames(tmpDF) <- seq_len(nrow(tmpDF))
                                     return(tmpDF)
                                 })
+                                # disable refreshbutton
+                                shinyjs::disable(id="refresh")
                                 showModal(
                                     modalDialog(
                                         title=paste0("Cluster file for ", i),
-                                        footer=modalButton("Close preview"),
+                                        footer=actionButton(inputId="modalCloseCluster", label="Close preview"),
                                         size="l",
                                         fluidRow(
                                             lapply(names(filteredTmpFileDFs), function(x){
                                                 column(12, 
-                                                    h4(paste0(x, " - ", enrichmentScores[x])),
-                                                    dataTableOutput(paste0("clusterPreview__", x)) %>% withSpinner()
+                                                    DT::dataTableOutput(paste0("clusterPreview__", x))
                                                 )
                                             })
                                         )
                                     )
                                 )
+                                observeEvent(input$modalCloseCluster, {
+                                    # enable refreshbutton
+                                    shinyjs::enable(id="refresh")
+                                    removeModal()
+                                })
                                 lapply(names(filteredTmpFileDFs), function(x){
-                                    output[[paste0("clusterPreview__", x)]] <- renderDataTable(
+                                    output[[paste0("clusterPreview__", x)]] <- DT::renderDataTable(
                                         DT::datatable({filteredTmpFileDFs[[x]]},
                                             escape=FALSE,
                                             rownames=FALSE,
                                             class="row-border stripe compact",
                                             style="bootstrap",
                                             select="none",
+                                            caption=HTML(paste0("<span style='color:", theme$textcolor, ";'>", x, " - ", enrichmentScores[x], "</span>")),
                                             options=list( 
                                                 paging=TRUE,
                                                 scrollX=TRUE,
@@ -2716,10 +2772,23 @@ shinyServer(function(input, output, session) {
                                                 buttons=list("copy", "csv", "excel", "pdf", "print"),
                                                 rowCallback=JS(
                                                     "function(row, data) {
-                                                        for (i=1; i < data.length; i++) {
-                                                            if (data[i] < 1){
-                                                                $('td:eq('+i+')', row).html(data[i].toExponential(1));
-                                                            }
+                                                        if (parseFloat(data[3]) < 1){ // %
+                                                            $('td:eq('+3+')', row).html(parseFloat(data[3]).toExponential(1));
+                                                        }
+                                                        if (parseFloat(data[4]) < 1){ // Pvalue
+                                                            $('td:eq('+4+')', row).html(parseFloat(data[4]).toExponential(1));
+                                                        }
+                                                        if (parseFloat(data[9]) < 1){ // Fold Enrichment
+                                                            $('td:eq('+9+')', row).html(parseFloat(data[9]).toExponential(1));
+                                                        }
+                                                        if (parseFloat(data[10]) < 1){ // Bonferroni
+                                                            $('td:eq('+10+')', row).html(parseFloat(data[10]).toExponential(1));
+                                                        }
+                                                        if (parseFloat(data[11]) < 1){ // Benjamini
+                                                            $('td:eq('+11+')', row).html(parseFloat(data[11]).toExponential(1));
+                                                        }
+                                                        if (parseFloat(data[12]) < 1){ // FDR
+                                                            $('td:eq('+12+')', row).html(parseFloat(data[12]).toExponential(1));
                                                         }
                                                     }"
                                                 )
@@ -2750,6 +2819,8 @@ shinyServer(function(input, output, session) {
                                 showNotification("Error: The application cannot connect to the Tox21 Enricher server. Please try again later.", type="error")
                             } else {
                                 # Open preview in modal
+                                # disable refreshbutton
+                                shinyjs::disable(id="refresh")
                                 tmpFile <- read.csv(paste0(tempdir(), "/output/", transactionId, "/", i, "__Matrix.txt"), sep="\t", header=TRUE, comment.char="", fill=TRUE, stringsAsFactors=FALSE)
                                 names(tmpFile) <- lapply(names(tmpFile), function(x){
                                     return(gsub("\\.", " ", x))
@@ -2757,15 +2828,20 @@ shinyServer(function(input, output, session) {
                                 showModal(
                                     modalDialog(
                                         title=paste0("Matrix file for ", i),
-                                        footer=modalButton("Close preview"),
+                                        footer=actionButton(inputId="modalCloseMatrix", label="Close preview"),
                                         size="l",
                                         fluidRow(
                                             column(12, 
-                                                dataTableOutput("matrixPreview") %>% withSpinner()
+                                                dataTableOutput("matrixPreview")
                                             )
                                         )
                                     )
                                 )
+                                observeEvent(input$modalCloseMatrix, {
+                                    # enable refreshbutton
+                                    shinyjs::enable(id="refresh")
+                                    removeModal()
+                                })
                                 output[["matrixPreview"]] <- renderDataTable(
                                     DT::datatable({tmpFile},
                                         escape=FALSE,
@@ -2805,20 +2881,27 @@ shinyServer(function(input, output, session) {
                                 showNotification("Error: The application cannot connect to the Tox21 Enricher server. Please try again later.", type="error")
                             } else {
                                 # Open preview in modal
+                                # disable refreshbutton
+                                shinyjs::disable(id="refresh")
                                 tmpFile <- read.table(paste0(tempdir(), "/output/", transactionId, "/", i, "__ErrorCASRNs.txt"), sep="\t", comment.char="", fill=TRUE, stringsAsFactors=FALSE)
                                 names(tmpFile) <- c("CASRN")
                                 showModal(
                                     modalDialog(
                                         title=paste0("Error CASRNs for ", i),
-                                        footer=modalButton("Close preview"),
+                                        footer=actionButton(inputId="modalCloseErrorEnrichment", label= "Close preview"),
                                         size="l",
                                         fluidRow(
                                             column(12, 
-                                                dataTableOutput("errorPreview") %>% withSpinner()
+                                                dataTableOutput("errorPreview")
                                             )
                                         )
                                     )
                                 )
+                                observeEvent(input$modalCloseErrorEnrichment, {
+                                    # enable refreshbutton
+                                    shinyjs::enable(id="refresh")
+                                    removeModal()
+                                })
                                 output[["errorPreview"]] <- renderDataTable(
                                     DT::datatable({tmpFile},
                                         escape=FALSE,
@@ -3040,10 +3123,12 @@ shinyServer(function(input, output, session) {
                         # Create observer
                         if(is.null(setFilesObservers$observers[[paste0("svgObserver__", casrn, "__", i)]])){
                             setFilesObservers$observers[[paste0("svgObserver__", casrn, "__", i)]] <- observeEvent(input[[paste0("ab__img__", casrn, "__", i)]], {
+                                # disable refreshbutton
+                                shinyjs::disable(id="refresh")
                                 showModal(
                                     modalDialog(
                                         title=casrn,
-                                        footer=modalButton("Close"),
+                                        footer=actionButton(inputId="modalCloseStructure", label="Close"),
                                         size="l",
                                         fluidRow(
                                             column(12, HTML(paste0(svgExpanded)))
@@ -3095,6 +3180,11 @@ shinyServer(function(input, output, session) {
                                     )
                                 )
                             }, ignoreInit=TRUE)
+                            observeEvent(input$modalCloseStructure, {
+                                # enable refreshbutton
+                                shinyjs::enable(id="refresh")
+                                removeModal()
+                            })
                         }
                         infoOutp <- c("iupac_name"=outputIupac, "smiles"=outputSmiles, "dtxsid"=outputDtxsid, "dtxrid"=outputDtxrid, "mol_formula"=outputFormula, "mol_weight"=outputWeight, "inchis"=outputInchi, "inchikey"=outputInchikey)
                         return(infoOutp)
@@ -4319,6 +4409,8 @@ shinyServer(function(input, output, session) {
                 })
                 # Create observers for Venn Diagram buttons
                 observeEvent(input$vennFromButtonChart, {
+                    # disable refreshbutton
+                    shinyjs::disable(id="refresh")
                     showModal(
                         modalDialog(
                             title=paste0("Chemicals for ", termFrom),
@@ -4326,16 +4418,20 @@ shinyServer(function(input, output, session) {
                             size="l",
                             fluidRow(
                                 column(12, 
-                                    HTML(paste0(casrnsFrom, collapse="<br/>"))       
+                                    HTML(paste0(casrnsFrom, collapse="<br/>"))
                                 )
                             )
                         )
                     )
                 }, ignoreNULL=TRUE, ignoreInit=TRUE)
                 observeEvent(input$vennFromButtonCloseChart, {
+                    # enable refreshbutton
+                    shinyjs::enable(id="refresh")
                     removeModal()
                 })
                 observeEvent(input$vennToButtonChart, {
+                    # disable refreshbutton
+                    shinyjs::disable(id="refresh")
                     showModal(
                         modalDialog(
                             title=paste0("Chemicals for ", termTo),
@@ -4343,16 +4439,20 @@ shinyServer(function(input, output, session) {
                             size="l",
                             fluidRow(
                                 column(12, 
-                                    HTML(paste0(casrnsTo, collapse="<br/>"))       
+                                    HTML(paste0(casrnsTo, collapse="<br/>"))
                                 )
                             )
                         )
                     )
                 }, ignoreNULL=TRUE, ignoreInit=TRUE)
                 observeEvent(input$vennToButtonCloseChart, {
+                    # enable refreshbutton
+                    shinyjs::enable(id="refresh")
                     removeModal()
                 })
                 observeEvent(input$vennSharedButtonChart, {
+                    # disable refreshbutton
+                    shinyjs::disable(id="refresh")
                     showModal(
                         modalDialog(
                             title=paste0("Shared chemicals"),
@@ -4360,13 +4460,15 @@ shinyServer(function(input, output, session) {
                             size="l",
                             fluidRow(
                                 column(12, 
-                                    HTML(paste0(casrnsShared, collapse="<br/>"))       
+                                    HTML(paste0(casrnsShared, collapse="<br/>"))
                                 )
                             )
                         )
                     )
                 }, ignoreNULL=TRUE, ignoreInit=TRUE)
                 observeEvent(input$vennSharedButtonCloseChart, {
+                    # enable refreshbutton
+                    shinyjs::enable(id="refresh")
                     removeModal()
                 })
                 output$vennChartDownloadImg <- downloadHandler(
@@ -4413,6 +4515,8 @@ shinyServer(function(input, output, session) {
                 })
                 # Create observers for Venn Diagram buttons
                 observeEvent(input$vennFromButtonCluster, {
+                    # disable refreshbutton
+                    shinyjs::disable(id="refresh")
                     showModal(
                         modalDialog(
                             title=paste0("Chemicals for ", termFrom),
@@ -4420,16 +4524,20 @@ shinyServer(function(input, output, session) {
                             size="l",
                             fluidRow(
                                 column(12, 
-                                    HTML(paste0(casrnsFrom, collapse="<br/>"))       
+                                    HTML(paste0(casrnsFrom, collapse="<br/>"))
                                 )
                             )
                         )
                     )
                 }, ignoreNULL=TRUE, ignoreInit=TRUE)
                 observeEvent(input$vennFromButtonCloseCluster, {
+                    # enable refreshbutton
+                    shinyjs::enable(id="refresh")
                     removeModal()
                 })
                 observeEvent(input$vennToButtonCluster, {
+                    # disable refreshbutton
+                    shinyjs::disable(id="refresh")
                     showModal(
                         modalDialog(
                             title=paste0("Chemicals for ", termTo),
@@ -4444,9 +4552,13 @@ shinyServer(function(input, output, session) {
                     )
                 }, ignoreNULL=TRUE, ignoreInit=TRUE)
                 observeEvent(input$vennToButtonCloseCluster, {
-                  removeModal()
+                    # enable refreshbutton
+                    shinyjs::enable(id="refresh")
+                    removeModal()
                 })
                 observeEvent(input$vennSharedButtonCluster, {
+                    # disable refreshbutton
+                    shinyjs::disable(id="refresh")
                     showModal(
                         modalDialog(
                             title=paste0("Shared chemicals"),
@@ -4454,13 +4566,15 @@ shinyServer(function(input, output, session) {
                             size="l",
                             fluidRow(
                                 column(12, 
-                                    HTML(paste0(casrnsShared, collapse="<br/>"))       
+                                    HTML(paste0(casrnsShared, collapse="<br/>"))
                                 )
                             )
                         )
                     )
                 }, ignoreNULL=TRUE, ignoreInit=TRUE)
                 observeEvent(input$vennSharedButtonCloseCluster, {
+                    # enable refreshbutton
+                    shinyjs::enable(id="refresh")
                     removeModal()
                 })
                 output$vennClusterDownloadImg <- downloadHandler(
