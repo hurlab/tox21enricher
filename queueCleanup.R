@@ -45,6 +45,9 @@ while(TRUE){
     poolClose(pool)
     if(nrow(outp) > 0){
         badTransactions <- unname(unlist(apply(outp, 1, function(x){
+            if(is.na(x["timestamp_posted"]) | is.na(x["timestamp_started"])) {
+                return(NULL)
+            }
             if(x["timestamp_started"] == "not started") {
                 return(NULL)
             }
@@ -53,7 +56,7 @@ while(TRUE){
             }
             return(NULL)
         })))
-        print("clearing the following transactions...") 
+        print("Clearing the following transactions...") 
         print(badTransactions)
         pool <- dbPool(
             drv=RPostgres::Postgres(),
@@ -65,7 +68,7 @@ while(TRUE){
             idleTimeout=3600000
         )
         lapply(badTransactions, function(x){
-            query <- sqlInterpolate(ANSI(), paste0("UPDATE queue SET finished=1, cancel=1, error='Canceled by queue cleanup.' WHERE uuid='", x, "';"), id="updateBad")
+            query <- sqlInterpolate(ANSI(), paste0("UPDATE queue SET finished=1, cancel=1, error='Cancelled by queue cleanup.' WHERE uuid='", x, "';"), id="updateBad")
             outp <- dbExecute(pool, query)
             query <- sqlInterpolate(ANSI(), paste0("UPDATE transaction SET cancel=1 WHERE uuid='", x, "';"), id="updateBad")
             outp <- dbExecute(pool, query)
@@ -85,54 +88,53 @@ while(TRUE){
         port=tox21queue$port,
         idleTimeout=3600000
     )
-    query <- sqlInterpolate(ANSI(), paste0("SELECT queue.uuid, queue.finished, queue.cancel, transaction.timestamp_posted, transaction.timestamp_started, transaction.timestamp_finished FROM queue LEFT JOIN transaction ON queue.uuid=transaction.uuid;"), id="getAllToDelete")
+    query <- sqlInterpolate(ANSI(), paste0("SELECT queue.uuid, queue.finished, queue.cancel, transaction.timestamp_posted, transaction.timestamp_started, transaction.timestamp_finished FROM queue LEFT JOIN transaction ON queue.uuid=transaction.uuid WHERE transaction.delete=0;"), id="getAllToDelete")
     outp <- dbGetQuery(pool, query)
     poolClose(pool)
     
+    # Remove result files for old transactions from the filesystem (preserve in database)
     if(nrow(outp) > 0){
         oldTransactions <- unname(unlist(apply(outp, 1, function(x){
+            if(is.na(x["timestamp_posted"]) | is.na(x["timestamp_started"])) {
+                return(NULL)
+            }
             if(x["cancel"] == 1) { # if cancel flag = 1, delete no matter what
                 return(x["uuid"])
             }
-            if(as.numeric(difftime(currentDate, as.POSIXlt(x["timestamp_posted"]), units="days")) > DELETE_TIME) {
+            if(as.numeric(difftime(currentDate, as.POSIXlt(x["timestamp_posted"]), units="days")) > DELETE_TIME) { # If posted date exceeds set date to delete
                 return(x["uuid"])
             }
             return(NULL)
         })))
         if(length(oldTransactions) > 0){
-            print("deleting the following transactions...") 
+            print("Deleting the following transaction data from the filesystem...") 
             print(oldTransactions)
-            pool <- dbPool(
-                drv=RPostgres::Postgres(),
-                dbname=tox21queue$database,
-                host=tox21queue$host,
-                user=tox21queue$uid,
-                password=tox21queue$pwd,
-                port=tox21queue$port,
-                idleTimeout=3600000
-            )
             lapply(oldTransactions, function(x){
-                # delete from database
-                query <- sqlInterpolate(ANSI(), paste0("DELETE FROM queue WHERE uuid='", x, "';"), id="deleteOld")
-                outp <- dbExecute(pool, query)
-                query <- sqlInterpolate(ANSI(), paste0("DELETE FROM transaction WHERE uuid='", x, "';"), id="deleteOld")
-                outp <- dbExecute(pool, query)
-                
                 # delete files from filesystem input and output directories
                 inDir <- paste0(APP_DIR, IN_DIR, "/", x)
                 outDir <- paste0(APP_DIR, OUT_DIR, "/", x)
                 inFiles <- Sys.glob(paste0(inDir, "/*"), dirmark=FALSE)
                 outFiles <- Sys.glob(paste0(outDir, "/*"), dirmark=FALSE)
-                lapply(inFiles, function(x){
-                    unlink(x, recursive=TRUE)
-                })
-                lapply(outFiles, function(x){
-                    unlink(x, recursive=TRUE)
-                })
+                lapply(inFiles, function(x) unlink(x, recursive=TRUE))
+                lapply(outFiles, function(x) unlink(x, recursive=TRUE))
                 unlink(inDir, recursive=TRUE)
                 unlink(outDir, recursive=TRUE)
+                
+                # set delete flag in database = 1 so this won't be reprocessed
+                # Connect to DB
+                poolDelete <- dbPool(
+                    drv=RPostgres::Postgres(),
+                    dbname=tox21queue$database,
+                    host=tox21queue$host,
+                    user=tox21queue$uid,
+                    password=tox21queue$pwd,
+                    port=tox21queue$port,
+                    idleTimeout=3600000
+                )
+                query <- sqlInterpolate(ANSI(), paste0("UPDATE transaction SET delete=1 WHERE uuid='", x, "';"), id="setDeleteFlags")
+                outp <- dbGetQuery(poolDelete, query)
+                poolClose(poolDelete)
             })
-            poolClose(pool)
         }
     }
     

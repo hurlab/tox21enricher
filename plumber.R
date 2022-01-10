@@ -36,6 +36,7 @@ IN_DIR <- tox21config$indir
 OUT_DIR <- tox21config$outdir
 PYTHON_DIR <- tox21config$python
 CORES <- tox21config$cores
+CLEANUP_TIME <- tox21queue$cleanupTime
 DELETE_TIME <- tox21queue$deleteTime
 
 # Source Python
@@ -92,7 +93,13 @@ queue <- function(mode="", enrichmentUUID="-1", annoSelectStr="MESH=checked,PHAR
 #* @param color
 #* @param timestampPosted
 #* @get /createTransaction
-createTransaction <- function(originalMode="", mode="", uuid="-1", annoSelectStr="MESH=checked,PHARMACTIONLIST=checked,ACTIVITY_CLASS=checked,ADVERSE_EFFECT=checked,INDICATION=checked,KNOWN_TOXICITY=checked,MECH_LEVEL_1=checked,MECH_LEVEL_2=checked,MECH_LEVEL_3=checked,MECHANISM=checked,MODE_CLASS=checked,PRODUCT_CLASS=checked,STRUCTURE_ACTIVITY=checked,TA_LEVEL_1=checked,TA_LEVEL_2=checked,TA_LEVEL_3=checked,THERAPEUTIC_CLASS=checked,TISSUE_TOXICITY=checked,DRUGBANK_ATC=checked,DRUGBANK_ATC_CODE=checked,DRUGBANK_CARRIERS=checked,DRUGBANK_ENZYMES=checked,DRUGBANK_TARGETS=checked,DRUGBANK_TRANSPORTERS=checked,CTD_CHEM2DISEASE=checked,CTD_CHEM2GENE_25=checked,CTD_CHEMICALS_DISEASES=checked,CTD_CHEMICALS_GENES=checked,CTD_CHEMICALS_GOENRICH_CELLCOMP=checked,CTD_CHEMICALS_GOENRICH_MOLFUNCT=checked,CTD_CHEMICALS_PATHWAYS=checked,CTD_GOSLIM_BIOPROCESS=checked,CTD_PATHWAY=checked,HTS_ACTIVE=checked,LEADSCOPE_TOXICITY=checked,MULTICASE_TOX_PREDICTION=checked,TOXCAST_ACTIVE=checked,TOXINS_TARGETS=checked,TOXPRINT_STRUCTURE=checked,TOXREFDB=checked,", cutoff=10, input, originalNames, reenrich="", color, timestampPosted){
+createTransaction <- function(originalMode="", mode="", uuid="-1", annoSelectStr="MESH=checked,PHARMACTIONLIST=checked,ACTIVITY_CLASS=checked,ADVERSE_EFFECT=checked,INDICATION=checked,KNOWN_TOXICITY=checked,MECH_LEVEL_1=checked,MECH_LEVEL_2=checked,MECH_LEVEL_3=checked,MECHANISM=checked,MODE_CLASS=checked,PRODUCT_CLASS=checked,STRUCTURE_ACTIVITY=checked,TA_LEVEL_1=checked,TA_LEVEL_2=checked,TA_LEVEL_3=checked,THERAPEUTIC_CLASS=checked,TISSUE_TOXICITY=checked,DRUGBANK_ATC=checked,DRUGBANK_ATC_CODE=checked,DRUGBANK_CARRIERS=checked,DRUGBANK_ENZYMES=checked,DRUGBANK_TARGETS=checked,DRUGBANK_TRANSPORTERS=checked,CTD_CHEM2DISEASE=checked,CTD_CHEM2GENE_25=checked,CTD_CHEMICALS_DISEASES=checked,CTD_CHEMICALS_GENES=checked,CTD_CHEMICALS_GOENRICH_CELLCOMP=checked,CTD_CHEMICALS_GOENRICH_MOLFUNCT=checked,CTD_CHEMICALS_PATHWAYS=checked,CTD_GOSLIM_BIOPROCESS=checked,CTD_PATHWAY=checked,HTS_ACTIVE=checked,LEADSCOPE_TOXICITY=checked,MULTICASE_TOX_PREDICTION=checked,TOXCAST_ACTIVE=checked,TOXINS_TARGETS=checked,TOXPRINT_STRUCTURE=checked,TOXREFDB=checked,", cutoff=10, input, casrnBox, originalNames="none", reenrich="", color, timestampPosted, reenrichFlag=FALSE){
+    # format reenrich flag
+    if(reenrichFlag == TRUE){
+        reenrichFlag <- 1
+    } else {
+        reenrichFlag <- 0
+    }
     # Connect to db
     poolTransaction <- dbPool(
         drv=RPostgres::Postgres(),
@@ -104,7 +111,7 @@ createTransaction <- function(originalMode="", mode="", uuid="-1", annoSelectStr
         idleTimeout=3600000
     )
     # Update database with transaction entry
-    query <- sqlInterpolate(ANSI(), paste0("INSERT INTO transaction(original_mode, mode, uuid, annotation_selection_string, cutoff, input, original_names, reenrich, colors, timestamp_posted) VALUES('", originalMode, "', '", mode, "', '", uuid, "', '", annoSelectStr, "', '", cutoff, "', '", input, "', '", originalNames, "', '", reenrich, "', '", color, "', '", timestampPosted, "');"), id="createTransactionEntry")
+    query <- sqlInterpolate(ANSI(), paste0("INSERT INTO transaction(original_mode, mode, uuid, annotation_selection_string, cutoff, input, casrn_box, original_names, reenrich, reenrich_flag, colors, timestamp_posted) VALUES('", originalMode, "', '", mode, "', '", uuid, "', '", annoSelectStr, "', '", cutoff, "', '", input, "', '", casrnBox, "', '", originalNames, "', '", reenrich, "', '", reenrichFlag, "', '", color, "', '", timestampPosted, "');"), id="createTransactionEntry")
     outp <- dbExecute(poolTransaction, query)
     # Close pool
     poolClose(poolTransaction)
@@ -229,6 +236,43 @@ getQueuePos <- function(transactionId="-1", mode="none"){
     return("Complete!")
 }
 
+#* Get transaction data for given enrichment request
+#* @param transactionId
+#* @get /getPrevSessionData
+getPrevSessionData <- function(transactionId="-1"){
+    # Connect to db
+    poolSessionData <- dbPool(
+        drv=RPostgres::Postgres(),
+        dbname=tox21queue$database,
+        host=tox21queue$host,
+        user=tox21queue$uid,
+        password=tox21queue$pwd,
+        port=tox21queue$port,
+        idleTimeout=3600000
+    )
+
+    # Get transaction data of request
+    query <- sqlInterpolate(ANSI(), paste0("SELECT * FROM transaction WHERE uuid='", transactionId, "';"), id="fetchTransactionData")
+    outp <- dbGetQuery(poolSessionData, query)
+    # Close pool
+    poolClose(poolSessionData)
+    if(nrow(outp) > 0){
+        return(list(
+            "original_mode"=outp[1, "original_mode"],
+            "mode"=outp[1, "mode"],
+            "annotation_selection_string"=outp[1, "annotation_selection_string"],
+            "cutoff"=outp[1, "cutoff"],
+            "input"=outp[1, "input"],
+            "casrn_box"=outp[1, "casrn_box"],
+            "original_names"=outp[1, "original_names"],
+            "reenrich"=outp[1, "reenrich"],
+            "reenrich_flag"=outp[1, "reenrich_flag"],
+            "colors"=outp[1, "colors"]
+        ))
+    }
+    return(list())
+}
+
 #* Check if enrichment process has terminated for given request
 #* @param transactionId UUID of the request
 #* @get /finishedRequest
@@ -304,6 +348,32 @@ cancelEnrichment <- function(res, req, transactionId){
     return(TRUE)
 }
 
+#* Check if a given request has been cancelled for given UUID
+#* @param transactionId UUID of the request
+#* @get /isCancel
+isCancel <- function(res, req, transactionId){
+    # Connect to db
+    poolCancel <- dbPool(
+        drv=RPostgres::Postgres(),
+        dbname=tox21queue$database,
+        host=tox21queue$host,
+        user=tox21queue$uid,
+        password=tox21queue$pwd,
+        port=tox21queue$port,
+        idleTimeout=3600000
+    )
+    # Update database to show that request was canceled
+    query <- sqlInterpolate(ANSI(), paste0("SELECT cancel FROM transaction WHERE uuid='", transactionId, "';"), id="isCancel")
+    outp <- dbGetQuery(poolCancel, query)
+    # Close pool
+    poolClose(poolCancel)
+    cancelStatus <- 1
+    if(nrow(outp) == 1){
+        cancelStatus <- outp[1, "cancel"]
+    }
+    return(cancelStatus)
+}
+
 ## SECTION 2: REQUIRED BY CLIENT APPLICATION INITIALIZATION
 
 #* Ping API
@@ -322,6 +392,12 @@ inout <- function(res, req){
 #* @get /deleteTime
 deleteTime <- function(res, req){
     return(DELETE_TIME)
+}
+
+#* Get cleanup time for old transaction. This number is the number of hours that a transaction will live for on the server. This is used when saving cookie expiry dates on the client as well as the cutoff time to delete in the queue cleanup script.
+#* @get /cleanupTime
+cleanupTime <- function(res, req){
+    return(CLEANUP_TIME)
 }
 
 #* Check Tox21 Enricher version
@@ -399,6 +475,11 @@ total <- function(res, req){
 #* @param reenrich Boolean value to let the API know if this is a re-enrichment or not
 #* @get /substructure
 substructure <- function(res, req, input, reenrich=FALSE){
+    
+    #print(">> INPUT")
+    #print(input)
+    
+    
     # Connect to db
     poolSubstructure <- dbPool(
         drv=RPostgres::Postgres(),
@@ -420,6 +501,8 @@ substructure <- function(res, req, input, reenrich=FALSE){
         substructureQuery <- sqlInterpolate(ANSI(), paste0("SELECT * FROM mols_2 WHERE casrn='", input, "';"), id="substructureResults")
     }
     substructureOutp <- dbGetQuery(poolSubstructure, substructureQuery)
+    substructureOutp$m <- unlist(lapply(substructureOutp$m, function(x) paste0(x))) # coerce mol column to string. If left as "pq_mol" data type, R wont' know how to send this in a json back to the client.
+    
     # Close pool
     poolClose(poolSubstructure)
     return(substructureOutp)
@@ -740,30 +823,85 @@ readGct <- function(res, req, transactionId, cutoff, mode, set="Set1"){
     outDir <- paste0(APP_DIR, OUT_DIR, transactionId, "/")
     gctFile <- NULL
     if(mode == "chart"){
-        gctFile <- read.table(paste0(outDir, "gct/Chart_Top", cutoff, "_ALL__P_0.05_P__ValueMatrix.gct"), skip=2, header=TRUE, sep="\t", row.names=1, comment.char="", fill=FALSE, colClasses=c("Terms"="NULL") )
+        if(!file.exists(paste0(outDir, "gct/Chart_Top", cutoff, "_ALL__P_0.05_P__ValueMatrix.gct"))){
+            return(NULL)
+        }
+        tryReadChart <- tryCatch({
+            gctFile <- read.delim(paste0(outDir, "gct/Chart_Top", cutoff, "_ALL__P_0.05_P__ValueMatrix.gct"), skip=2, header=TRUE, sep="\t", row.names=1, comment.char="", fill=FALSE, colClasses=c("Terms"="NULL") )
+            TRUE
+        }, error=function(cond){
+            return(NULL)
+        })
+        if(!tryReadChart){
+            return(NULL)
+        }
     } else if(mode == "cluster"){
-        gctFile <- read.table(paste0(outDir, "gct/Cluster_Top", cutoff, "_ALL__P_0.05_P__ValueMatrix.gct"), skip=2, header=TRUE, sep="\t", row.names=1, comment.char="", fill=FALSE, colClasses=c("Terms"="NULL") )
+        if(!file.exists(paste0(outDir, "gct/Cluster_Top", cutoff, "_ALL__P_0.05_P__ValueMatrix.gct"))){
+            return(NULL)
+        }
+        tryReadCluster <- tryCatch({
+            gctFile <- read.delim(paste0(outDir, "gct/Cluster_Top", cutoff, "_ALL__P_0.05_P__ValueMatrix.gct"), skip=2, header=TRUE, sep="\t", row.names=1, comment.char="", fill=FALSE, colClasses=c("Terms"="NULL") )
+            TRUE
+        }, error=function(cond){
+            return(NULL)
+        })
+        if(!tryReadCluster){
+            return(NULL)
+        }
     } else { # per set
-        gctFile <- read.table(paste0(outDir, "gct_per_set/", set, "__Chart.gct"), skip=2, header=TRUE, sep="\t", row.names=1, comment.char="", fill=FALSE, colClasses=c("Name"="NULL") )
+        if(!file.exists(paste0(outDir, "gct_per_set/", set, "__Chart.gct"))){
+            return(NULL)
+        }
+        tryReadChart <- tryCatch({
+            gctFile <- read.delim(paste0(outDir, "gct_per_set/", set, "__Chart.gct"), skip=2, header=TRUE, sep="\t", row.names=1, comment.char="", fill=FALSE, colClasses=c("Name"="NULL") )
+            TRUE
+        }, error=function(cond){
+            return(NULL)
+        })
+        if(!tryReadChart){
+            return(NULL)
+        }
     }
     return(gctFile)
 }
 
 #* Return Chart Simple file for given request and input set
 #* @param transactionId UUID of the request
-#* @param inputSet Current input set
+#* @param enrichmentSets names of the enrichment sets
 #* @get /bargraph
-bargraph <- function(res, req, transactionId){
+bargraph <- function(res, req, transactionId, enrichmentSets){
+    # format enrichment sets
+    enrichmentSets <- unlist(str_split(enrichmentSets, "__"))
+    # define results directory
     baseDirName <- paste0(APP_DIR, OUT_DIR, transactionId, "/")
     # Get all Chart Simple files
     allChartFiles <- Sys.glob(paste0(baseDirName, "*__ChartSimple.txt"))
-    bgChart <- lapply(allChartFiles, function(chartFile){
-        bgChartTmp <- read.table(chartFile, header=TRUE, sep="\t", comment.char="", fill=FALSE)
-        # Reformat P-Values to character vectors so they don't get truncated when being converted to json upon response
-        bgChartTmp["PValue"] <- lapply(bgChartTmp["PValue"], function(x){
-            return(as.character(x))
-        })
-        return(bgChartTmp)
+    # Extract set names from available files
+    names(allChartFiles) <- lapply(allChartFiles, function(x){
+        tmp <- unlist(str_split(x, paste0(transactionId, "/")))[2]
+        return(unlist(str_split(tmp, "__"))[1])
+    })
+    bgChart <- lapply(enrichmentSets, function(setName){
+        if(setName %in% names(allChartFiles)){
+            chartFile <- allChartFiles[setName]
+            bgChartTmp <- NULL
+            if(!file.exists(chartFile)){
+                return(list())
+            }
+            tryReadFile <- tryCatch({
+                bgChartTmp <- read.delim(chartFile, header=TRUE, sep="\t", comment.char="", fill=FALSE)
+                TRUE
+            }, error=function(cond){
+                return(list())
+            })
+            if(!tryReadFile){
+                return(list())
+            }
+            # Reformat P-Values to character vectors so they don't get truncated when being converted to json upon response
+            bgChartTmp["PValue"] <- lapply(bgChartTmp["PValue"], function(x) as.character(x))
+            return(bgChartTmp)
+        }
+        return(list())
     })
     return(bgChart)
 }
@@ -780,26 +918,58 @@ generateNetwork <- function(res, req, transactionId="-1", cutoff, mode, input, q
     chartForNetFile <- NULL
     # First, read files from /gct/ directory
     if(mode == "chart") {
-        chartForNetFile <- read.delim(paste0(baseDirName, "/gct/Chart_Top", cutoff, "_ALL__P_0.05_P__ValueMatrix.ForNet"), sep="\t", comment.char="", quote="", stringsAsFactors=FALSE, header=TRUE, fill=TRUE)
+        if(!file.exists(paste0(baseDirName, "/gct/Chart_Top", cutoff, "_ALL__P_0.05_P__ValueMatrix.ForNet"))){
+            return(NULL)
+        }
+        tryReadChart <- tryCatch({
+            chartForNetFile <- read.delim(paste0(baseDirName, "/gct/Chart_Top", cutoff, "_ALL__P_0.05_P__ValueMatrix.ForNet"), sep="\t", comment.char="", quote="", stringsAsFactors=FALSE, header=TRUE, fill=TRUE)
+            TRUE
+        }, error=function(cond){
+            return(NULL)
+        })
+        if(!tryReadChart){
+            return(NULL)
+        }
     } else { # cluster
-        chartForNetFile <- read.delim(paste0(baseDirName, "/gct/Cluster_Top", cutoff, "_ALL__P_0.05_P__ValueMatrix.ForNet"), sep="\t", comment.char="", quote="", stringsAsFactors=FALSE, header=TRUE, fill=TRUE)
+        if(!file.exists(paste0(baseDirName, "/gct/Cluster_Top", cutoff, "_ALL__P_0.05_P__ValueMatrix.ForNet"))){
+            return(NULL)
+        }
+        tryReadChart <- tryCatch({
+            chartForNetFile <- read.delim(paste0(baseDirName, "/gct/Cluster_Top", cutoff, "_ALL__P_0.05_P__ValueMatrix.ForNet"), sep="\t", comment.char="", quote="", stringsAsFactors=FALSE, header=TRUE, fill=TRUE)
+            TRUE
+        }, error=function(cond){
+            return(NULL)
+        })
+        if(!tryReadChart){
+            return(NULL)
+        }
     }
-    chartNetworkUIDs <- unlist(mclapply(seq_len(nrow(chartForNetFile)), mc.cores=CORES, function(x){
+    if(is.null(chartForNetFile)) {
+        return(NULL)
+    }
+    chartNetworkUIDs <- unlist(mclapply(seq_len(nrow(chartForNetFile)), mc.cores=CORES, mc.silent=FALSE, function(x){
         include <- lapply(input, function(y) {
             i <- gsub("\\s+", ".", y)
-            if(!is.na(chartForNetFile[x, i])) {
-                return(TRUE)
+            if(i %in% names(chartForNetFile)){
+                if(!is.na(chartForNetFile[x, i])) {
+                    return(TRUE)
+                }
+                return(NULL)
             }
             return(NULL)
         })
         include <- include[!vapply(include, is.null, FUN.VALUE=logical(1))]
+        include <- include[!vapply(include, is.na, FUN.VALUE=logical(1))]
         if(length(include) > 0) {
-            # If significant to multiple input sets
-            return(paste0(chartForNetFile[x, "UID"], collapse=","))
+            return(paste0(chartForNetFile[x, "UID"], collapse=",")) # If significant to multiple input sets
         }
         return(NULL)
     }))
     chartNetworkUIDs <- chartNetworkUIDs[!vapply(chartNetworkUIDs, is.null, FUN.VALUE=logical(1))]
+    # If no UIDs, return empty list to trigger error handline on client
+    if(length(chartNetworkUIDs) < 1) {
+        return(list())
+    }
     # Create placeholder string for querying database
     termsStringPlaceholder <- paste0(chartNetworkUIDs, collapse=",")
     # Connect to db

@@ -17,6 +17,52 @@ js_cbx <- "
     }
 "
 
+# Custom javascript for saving transaction ID in a cookie
+js_session <- "
+    shinyjs.saveSession=function(params){
+        transactionId = params[0];
+        hours = params[1];
+        // transactionId = session ID
+        // get properly-formatted expiration date
+        var formattedExpiryTime = 2; // default 48 hour live time (2 days)
+        try {
+            formattedExpiryTime = (parseInt(hours) / 24);
+        } catch (err) {
+            console.log(err);
+            console.log('Bad time value for expiry date. Defaulting to 48 hours.');
+            formattedExpiryTime = 2;
+        }
+        if(isNaN(formattedExpiryTime)) {
+            formattedExpiryTime = 2;
+        } else if (formattedExpiryTime <= 0) {
+            formattedExpiryTime = 2;
+        }
+        var date = new Date();
+        date.setTime(date.getTime() + (formattedExpiryTime * 24 * 60 * 60 * 1000));
+        // save cookie
+        document.cookie = 'previous_session_id=' + transactionId + '; expires=' + date.toUTCString() + '; path=/; SameSite=Strict; Secure';
+    }
+    shinyjs.getSession=function(){
+        // get cookie storing transaction ID if it exists
+        var prevSessionId = null;
+        var cookieList = document.cookie.split(';');
+        for(var i=0; i < cookieList.length; i++){
+            var tmp = cookieList[i].trim();
+            var tmpSplit = tmp.split('=');
+            if(tmpSplit[0] === 'previous_session_id') {
+                prevSessionId = tmpSplit[1];
+            }
+        }
+        Shiny.onInputChange('prevSessionId', prevSessionId);
+    }
+    shinyjs.clearSession=function(){
+        // delete cookie for previous session
+        var date = new Date();
+        date.setTime(date.getTime());
+        // save cookie
+        document.cookie = 'previous_session_id=; expires=' + date.toUTCString() + '; path=/; SameSite=Strict; Secure';
+    }
+"
 # Theme toggle js
 # vvv solution from here: https://stackoverflow.com/questions/61632272/r-shiny-light-dark-mode-switch vvv
 js_theme <-  "
@@ -161,30 +207,19 @@ shinyUI(function(){
                 useShinyjs(),
                 extendShinyjs(text=js_theme, functions=c('init', 'initDarkTheme')),
                 extendShinyjs(text=js_cbx, functions=c('check', 'uncheck')),
+                extendShinyjs(text=js_session, functions=c('saveSession', 'getSession', 'clearSession')),
                 p("Welcome to Tox21 Enricher! Please see this ", downloadLink(outputId="manualLink", label="link"), "for instructions on using this application and the descriptions about the chemical / biological categories. Other resources from the Tox21 toolbox can be viewed", tags$a(href="https://ntp.niehs.nih.gov/results/tox21/tbox/", "here."), "A sufficiently robust internet connection and JavaScript are required to use all of this application's features."),
                 # Display API connection status
                 uiOutput("apiConnection"),
                 # Display enrichment total count
                 uiOutput("totalEnrichments"),
+                # Settings button
+                actionButton(inputId="settingsButton", label="Settings", icon=icon("cog")),
                 # Search enrichments button
                 actionButton(inputId="searchButton", label="View previous results", icon=icon("search")),
                 # Theme toggle
                 checkboxInput(inputId="changeThemeToggle", label=HTML(paste0(icon("moon"), " Dark theme"))),
                 uiOutput("themeStatus"),
-                # Enrichment type selection
-                selectInput("enrich_from", h4("Select Input Type"),
-                    choices=list(
-                        "User-provided CASRN list"="user-provided CASRN list",
-                        "Chemicals with shared substructures"="chemicals with shared substructures",
-                        "Chemicals with structural similarity"="chemicals with structural similarity",
-                        "View annotations for Tox21 chemicals"="View annotations for Tox21 chemicals")
-                    ),
-                # Hidden buttons for View previous enrichment menu
-                hidden(
-                    fluidRow(id="searchButtonsMenu",
-                        column(12, actionButton("searchPrevButton", label="View results", icon=icon("search")))
-                    )
-                ),
                 hidden(
                     actionButton("refresh", "Start over", icon=icon("undo"))
                 )
@@ -196,11 +231,6 @@ shinyUI(function(){
                     column(id="searchForm", 12,
                         h1("View Results from Previous Request"),
                         fluidRow(
-                            hidden(
-                              column(id="warningSearchColumn", 12,
-                                  uiOutput("searchWarning")
-                              )
-                            ),
                             fluidRow(
                                 uiOutput("enrichmentTable") %>% withSpinner()
                             )
@@ -226,7 +256,19 @@ shinyUI(function(){
                     hr(),
                     fluidRow(
                         h3("Select Enrichment Cutoff"),
-                        tipify(sliderInput(inputId="nodeCutoff", label="Select enrichment cutoff", value=10, min=1, max=50, step=1, width="100%"), "This will determine the maximum number of results per data set and may affect how many nodes are generated during network generation. (default=10). Higher values may cause the enrichment process to take longer (Not available when viewing annotations for Tox21 chemicals).", placement="bottom"),
+                        tipify(sliderInput(inputId="nodeCutoff", label="Select enrichment cutoff", value=10, min=1, max=50, step=1, width="100%"), "This will determine the maximum number of results per data set and may affect how many nodes are generated during network generation. (default=10). Higher values may cause the enrichment process to take longer (Not available when viewing annotations for Tox21 chemicals).", placement="bottom")
+                    ),
+                    hr(),
+                    fluidRow(
+                        # Enrichment type selection
+                        selectInput("enrich_from", h3("Select Input Type"),
+                            choices=list(
+                                "User-provided CASRN list"="user-provided CASRN list",
+                                "Chemicals with shared substructures"="chemicals with shared substructures",
+                                "Chemicals with structural similarity"="chemicals with structural similarity",
+                                "View annotations for Tox21 chemicals"="View annotations for Tox21 chemicals"
+                            )
+                        ),
                         hidden(
                             tipify(sliderInput(inputId="tanimotoThreshold", label="Select Tanimoto similarity threshold (%)", value=50, min=1, max=100, step=1, width="100%"), "This will set the threshold for how structurally similar to the input a chemical should be to be included in enrichment.", placement="bottom")
                         )
@@ -273,13 +315,6 @@ shinyUI(function(){
                             textAreaInput(inputId="submitted_chemicals", label=NULL, rows=12, width="100%", value="", resize="both"),
                         )
                     ),
-                    hidden( # hide error box; only display if there's an error
-                        fluidRow(id="errorBox",
-                            column(12,
-                                uiOutput("error_box"),
-                            ),
-                        )
-                    ),
                     actionButton("submit", "Submit", icon=icon("arrow-alt-circle-right"))
                 ),
                 hidden(
@@ -309,9 +344,6 @@ shinyUI(function(){
                         column(12,
                             h3("Your Request"),
                             uiOutput("waitingTable") %>% withSpinner()
-                        ),
-                        column(12,
-                            uiOutput("results_error_box"),
                         )
                     )
                 )
