@@ -2292,7 +2292,7 @@ getAnnotations <- function(enrichmentUUID="-1", annoSelectStr="MESH=checked,PHAR
     # Set finish time in transaction table
     query <- sqlInterpolate(ANSI(), paste0("UPDATE transaction SET timestamp_finished='", finishTime, "' WHERE uuid='", enrichmentUUID, "';"), id="transactionUpdateFinished")
     outp <- dbExecute(poolUpdate, query)
-    
+
     # Close pool
     poolClose(poolUpdate)
     return(200)

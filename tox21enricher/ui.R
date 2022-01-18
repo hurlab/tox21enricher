@@ -40,27 +40,58 @@ js_session <- "
         var date = new Date();
         date.setTime(date.getTime() + (formattedExpiryTime * 24 * 60 * 60 * 1000));
         // save cookie
-        document.cookie = 'previous_session_id=' + transactionId + '; expires=' + date.toUTCString() + '; path=/; SameSite=Strict; Secure';
+        document.cookie = 'previous_session_id__' + transactionId + '=' + transactionId + '; expires=' + date.toUTCString() + '; path=/; SameSite=Strict; Secure';
     }
     shinyjs.getSession=function(){
         // get cookie storing transaction ID if it exists
-        var prevSessionId = null;
+        var prevSessionId = '';
         var cookieList = document.cookie.split(';');
         for(var i=0; i < cookieList.length; i++){
             var tmp = cookieList[i].trim();
             var tmpSplit = tmp.split('=');
-            if(tmpSplit[0] === 'previous_session_id') {
-                prevSessionId = tmpSplit[1];
+            if(tmpSplit[0].startsWith('previous_session_id__')) {
+                prevSessionId += (tmpSplit[1] + ';');
             }
         }
-        Shiny.onInputChange('prevSessionId', prevSessionId);
+        if(prevSessionId.length > 0){
+            Shiny.onInputChange('prevSessionId', prevSessionId);
+        }
     }
-    shinyjs.clearSession=function(){
+    shinyjs.clearSession=function(params){
+        transactionId = params[0];
         // delete cookie for previous session
         var date = new Date();
         date.setTime(date.getTime());
         // save cookie
-        document.cookie = 'previous_session_id=; expires=' + date.toUTCString() + '; path=/; SameSite=Strict; Secure';
+        document.cookie = 'previous_session_id__' + transactionId + '=; expires=' + date.toUTCString() + '; path=/; SameSite=Strict; Secure';
+    }
+    
+    // saving/getting/clearing user-defined host and port information
+    shinyjs.saveHostInfo=function(params){
+        host = params[0];
+        port = params[1];
+        // save cookie with host and port info and arbitrarily long expiration date
+        document.cookie = 'host_info=' + host + ':' + port + '; expires=Fri, 31 Dec 9999 23:59:59 GMT; path=/; SameSite=Strict; Secure';
+    }
+    shinyjs.getHostInfo=function(){
+        // get cookie storing transaction ID if it exists
+        var hostInfo = null;
+        var cookieList = document.cookie.split(';');
+        for(var i=0; i < cookieList.length; i++){
+            var tmp = cookieList[i].trim();
+            var tmpSplit = tmp.split('=');
+            if(tmpSplit[0] === 'host_info') {
+                hostInfo = tmpSplit[1];
+            }
+        }
+        Shiny.onInputChange('hostInfo', hostInfo);
+    }
+    shinyjs.clearHostInfo=function(){
+        // delete cookie for previous session
+        var date = new Date();
+        date.setTime(date.getTime());
+        // save cookie
+        document.cookie = 'host_info=; expires=' + date.toUTCString() + '; path=/; SameSite=Strict; Secure';
     }
 "
 # Theme toggle js
@@ -197,7 +228,6 @@ shinyUI(function(){
         # Application title
         title="Tox21 Enricher",
         titlePanel("Tox21 Enricher"),
-      
         # Sidebar
         sidebarLayout(
             sidebarPanel(
@@ -207,7 +237,7 @@ shinyUI(function(){
                 useShinyjs(),
                 extendShinyjs(text=js_theme, functions=c('init', 'initDarkTheme')),
                 extendShinyjs(text=js_cbx, functions=c('check', 'uncheck')),
-                extendShinyjs(text=js_session, functions=c('saveSession', 'getSession', 'clearSession')),
+                extendShinyjs(text=js_session, functions=c('saveSession', 'getSession', 'clearSession', 'saveHostInfo', 'getHostInfo', 'clearHostInfo')),
                 p("Welcome to Tox21 Enricher! Please see this ", downloadLink(outputId="manualLink", label="link"), "for instructions on using this application and the descriptions about the chemical / biological categories. Other resources from the Tox21 toolbox can be viewed", tags$a(href="https://ntp.niehs.nih.gov/results/tox21/tbox/", "here."), "A sufficiently robust internet connection and JavaScript are required to use all of this application's features."),
                 # Display API connection status
                 uiOutput("apiConnection"),
@@ -224,7 +254,6 @@ shinyUI(function(){
                     actionButton("refresh", "Start over", icon=icon("undo"))
                 )
             ),
-            
             mainPanel(id="enrichmentPanel", width=10,
                 style="width: 80%;",
                 hidden(
@@ -233,6 +262,9 @@ shinyUI(function(){
                         fluidRow(
                             fluidRow(
                                 uiOutput("enrichmentTable") %>% withSpinner()
+                            ),
+                            fluidRow(
+                                uiOutput("prevEnrichmentRecent") %>% withSpinner()
                             )
                         )
                     )

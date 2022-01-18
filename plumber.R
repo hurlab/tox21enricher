@@ -121,7 +121,7 @@ createTransaction <- function(originalMode="", mode="", uuid="-1", annoSelectStr
 #* Load details for the selected transaction
 #* @param uuid
 #* @get /loadTransaction
-loadTransaction <- function(uuid){
+loadTransaction <- function(uuid="none"){
     # Connect to db
     poolTransaction <- dbPool(
         drv=RPostgres::Postgres(),
@@ -159,8 +159,23 @@ getQueuePos <- function(transactionId="-1", mode="none"){
     outp <- dbGetQuery(poolUpdate, query)
     statusFiles <- outp[, "step"]
     names(statusFiles) <- outp[, "setname"]
+    
+    # Check if request has completed w/ errors overall (failed completely)
+    query <- sqlInterpolate(ANSI(), paste0("SELECT * FROM queue WHERE error IS NOT NULL AND uuid='", transactionId, "';"), id="fetchQueuePosition")
+    outp <- dbGetQuery(poolUpdate, query)
+    if(nrow(outp) > 0) {
+        return("<div class=\"text-danger\">Failed.</div>")
+    }
+    
+    # Check if request has completed
+    query <- sqlInterpolate(ANSI(), paste0("SELECT * FROM queue WHERE finished=0 AND uuid='", transactionId, "';"), id="fetchQueuePosition")
+    outp <- dbGetQuery(poolUpdate, query)
+    if(nrow(outp) < 1) {
+        return("Complete!")
+    }
+    
     # Get queue position of request
-    query <- sqlInterpolate(ANSI(), paste0("SELECT * FROM queue WHERE finished=0;"), id="fetchQueuePosition")
+    query <- sqlInterpolate(ANSI(), paste0("SELECT * FROM queue WHERE finished=0 AND error IS NULL AND cancel=0;"), id="fetchQueuePosition")
     outp <- dbGetQuery(poolUpdate, query)
     # Close pool
     poolClose(poolUpdate)
@@ -174,7 +189,6 @@ getQueuePos <- function(transactionId="-1", mode="none"){
             return(NULL)
         })
         queuePos <- queuePos[!vapply(queuePos, is.null, FUN.VALUE=logical(1))][1]
-    
         # Determine step for each set:
         statusList <- NULL
         if(mode != "annotation"){ # if enrichment mode
@@ -222,11 +236,11 @@ getQueuePos <- function(transactionId="-1", mode="none"){
                 }
                 return("Loading...")
             })
+            names(statusList) <- names(statusFiles)
         }
+
         if(length(statusList) > 0){
-            statusListToReturn <- lapply(seq_len(length(statusList)), function(i){
-                return(paste0(names(statusList)[i], ": \t", statusList[i]))
-            })
+            statusListToReturn <- lapply(seq_len(length(statusList)), function(i) paste0(names(statusList)[i], ": \t", statusList[i]))
             statusListToReturn <- paste0(statusListToReturn, collapse="\n")
             return(statusListToReturn) 
         } else {
@@ -382,16 +396,34 @@ ping <- function(res, req){
     return(TRUE)
 }
 
-#* Get Input/Output subdirectory names
-#* @get /inout
-inout <- function(res, req){
-    return(c(IN_DIR, OUT_DIR))
-}
-
 #* Get delete time for old transaction
 #* @get /deleteTime
 deleteTime <- function(res, req){
     return(DELETE_TIME)
+}
+
+#* Calculate cookie expiry date for previous transaction and fetch additional request information
+#* @get /getAdditionalRequestInfo
+getAdditionalRequestInfo <- function(res, req, transactionId=""){
+    # Connect to db
+    poolExp <- dbPool(
+        drv=RPostgres::Postgres(),
+        dbname=tox21queue$database,
+        host=tox21queue$host,
+        user=tox21queue$uid,
+        password=tox21queue$pwd,
+        port=tox21queue$port,
+        idleTimeout=3600000
+    )
+    expQuery <- sqlInterpolate(ANSI(), paste0("SELECT original_mode, mode, cutoff, casrn_box, timestamp_posted, timestamp_started, timestamp_finished FROM transaction WHERE uuid='", transactionId, "';"), id="getAnnotationClasses")
+    expOutp <- dbGetQuery(poolExp, expQuery)
+    # Close pool
+    poolClose(poolExp)
+    # Calculate cookie expiry date and add to DF
+    expDate <- as.POSIXct(expOutp[, "timestamp_posted"], format="%Y-%m-%d %H:%M:%S", tz="UTC") + (60 * 60 * CLEANUP_TIME)
+    fullRequestInfo <- expOutp
+    fullRequestInfo["expiry_date"] <- expDate
+    return(fullRequestInfo)
 }
 
 #* Get cleanup time for old transaction. This number is the number of hours that a transaction will live for on the server. This is used when saving cookie expiry dates on the client as well as the cutoff time to delete in the queue cleanup script.
@@ -445,17 +477,17 @@ total <- function(res, req){
     )
     totalQuery <- sqlInterpolate(ANSI(), "SELECT uuid, timestamp_started, timestamp_finished FROM transaction WHERE cancel=0;", id="getTotalEnrichment")
     totalOutp <- dbGetQuery(poolTotal, totalQuery)
-
-    # Extract current month
+    # Extract current year
     currentDate <- unlist(str_split(Sys.time(), " "))[1]
-    currentMonth <- unlist(str_split(currentDate, "-"))[2]
+    # yyyy-mm-dd format
+    currentYear <- unlist(str_split(currentDate, "-"))[1]
     # Get all finished requests for the month
     finishedRequests <- totalOutp[, "timestamp_finished"]
     finishedRequests <- unlist(lapply(finishedRequests, function(x){
         if(!is.na(x)){
             xDate <- unlist(str_split(x, " "))[1]
-            xMonth <- unlist(str_split(xDate, "-"))[2]
-            if(!is.na(xMonth) & xMonth == currentMonth){
+            xYear <- unlist(str_split(xDate, "-"))[1]
+            if(!is.na(xYear) & xYear == currentYear){
                 return(x)
             }
         }
@@ -475,11 +507,6 @@ total <- function(res, req){
 #* @param reenrich Boolean value to let the API know if this is a re-enrichment or not
 #* @get /substructure
 substructure <- function(res, req, input, reenrich=FALSE){
-    
-    #print(">> INPUT")
-    #print(input)
-    
-    
     # Connect to db
     poolSubstructure <- dbPool(
         drv=RPostgres::Postgres(),
@@ -743,9 +770,8 @@ createInput <- function(res, req, transactionId, enrichmentSets, setNames, mode,
         }, FUN.VALUE=logical(1))]
         # Format fetched data to print to file
         outString <- paste0(goodCasrns, collapse="\n")
-        errorCasrnsFormatted <- unlist(lapply(errorCasrns, function(x){ # Strip "err__" from beginning of CASRNs
-            return(unlist(str_split(x, "err__"))[2])
-        }))
+        # Strip "err__" from beginning of CASRNs
+        errorCasrnsFormatted <- unlist(lapply(errorCasrns, function(x) unlist(str_split(x, "err__"))[2]))
         errString <- paste0(errorCasrnsFormatted, collapse="\n")
         # Only write if there are matching chemicals (don't create input files for empty sets)
         if(nchar(outString) > 0){
@@ -781,13 +807,33 @@ checkSets <- function(res, req, transactionId){
 #* Check if result files exist in Input/Output directories for given request
 #* @param transactionId UUID of the request
 #* @get /exists
-exists <- function(res, req, transactionId){
+exists <- function(res, req, transactionId="none"){
+    # Check if DB records exist
+    # Connect to db
+    poolExists <- dbPool(
+        drv=RPostgres::Postgres(),
+        dbname=tox21queue$database,
+        host=tox21queue$host,
+        user=tox21queue$uid,
+        password=tox21queue$pwd,
+        port=tox21queue$port,
+        idleTimeout=3600000
+    )
+    # Update database with transaction entry
+    query <- sqlInterpolate(ANSI(), paste0("SELECT * FROM transaction WHERE uuid='", transactionId, "';"), id="loadTransaction")
+    outp <- dbGetQuery(poolExists, query)
+    # Close pool
+    poolClose(poolExists)
+    if(nrow(outp) < 1){
+        return(-1) # case: no record in database
+    }
+    # else, check if result files exist
     outDir <- paste0(APP_DIR, OUT_DIR)
     checkIfOutFile <- paste0(outDir, transactionId, "/tox21enricher_", transactionId, ".zip")
     if(file.exists(checkIfOutFile)){
-        return(TRUE)
+        return(1) # case: both database record and result files exist
     } else {
-        return(FALSE)
+        return(0) # case: record in database but missing result files on filesystem
     }
 }
 
@@ -798,16 +844,30 @@ exists <- function(res, req, transactionId){
 #* @setName if supplied, is the set name to fetch from
 #* @get /getResults
 getResults <- function(res, req, transactionId, setName="###"){
+    inDir <- paste0(APP_DIR, IN_DIR, transactionId, "/")
     outDir <- paste0(APP_DIR, OUT_DIR, transactionId, "/")
     setFiles <- NULL
     if(setName == "###") {
-        setFiles <- Sys.glob(paste0(outDir, "/*"))
+        setFilesOut <- Sys.glob(paste0(outDir, "*"))
+        setFilesIn <- Sys.glob(paste0(inDir, "*"))
+        # Format input set filenames
+        setFilesIn <- lapply(setFilesIn, function(x){
+            tmpStr <- gsub(".txt", "", x)
+            return(paste0(tmpStr, "__Input.txt"))
+        })
+        setFiles <- append(setFilesIn, setFilesOut)
     } else {
-        setFiles <- Sys.glob(paste0(outDir, setName, "*"), dirmark=FALSE) 
-        setFiles <- unlist(lapply(setFiles, function(fileName){
+        setFilesOut <- Sys.glob(paste0(outDir, setName, "*"), dirmark=FALSE) 
+        setFilesOut <- unlist(lapply(setFilesOut, function(fileName){
             tmpSplit <- unlist(str_split(fileName, outDir))
             return(paste0(OUT_DIR, transactionId, "/", tmpSplit[2]))
         }))
+        setFilesIn <- Sys.glob(paste0(inDir, setName, "*"), dirmark=FALSE) 
+        setFilesIn <- unlist(lapply(setFilesIn, function(fileName){
+            tmpSplit <- unlist(str_split(fileName, inDir))
+            return(paste0(IN_DIR, transactionId, "/", tmpSplit[2]))
+        }))
+        setFiles <- append(setFilesIn, setFilesOut)
     }
     # Add zip file
     setFiles <- append(setFiles, paste0(OUT_DIR, transactionId, "/tox21enricher_", transactionId, ".zip"))
