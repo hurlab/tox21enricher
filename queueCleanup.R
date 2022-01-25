@@ -24,6 +24,7 @@ tox21queue <- config::get("tox21enricher-queue")
 APP_DIR <- tox21config$appdir
 IN_DIR <- tox21config$indir
 OUT_DIR <- tox21config$outdir
+ARCHIVE_DIR <- tox21config$archivedir
 CLEANUP_TIME <- tox21queue$cleanupTime
 DELETE_TIME <- tox21queue$deleteTime
 
@@ -110,13 +111,22 @@ while(TRUE){
             print("Deleting the following transaction data from the filesystem...") 
             print(oldTransactions)
             lapply(oldTransactions, function(x){
-                # delete files from filesystem input and output directories
+                # define input/output/archive directories
                 inDir <- paste0(APP_DIR, IN_DIR, "/", x)
                 outDir <- paste0(APP_DIR, OUT_DIR, "/", x)
+                archiveDir <- paste0(APP_DIR, ARCHIVE_DIR)
+                
+                # move zip file to archive directory
+                zipFile <- paste0(outDir, "/tox21enricher_", x, ".zip")
+                if(file.exists(zipFile)){
+                    file.copy(zipFile, paste0(archiveDir, "/tox21enricher_", x, ".zip"), copy.date=TRUE)
+                }
+                
+                # delete files from filesystem input and output directories
                 inFiles <- Sys.glob(paste0(inDir, "/*"), dirmark=FALSE)
                 outFiles <- Sys.glob(paste0(outDir, "/*"), dirmark=FALSE)
-                lapply(inFiles, function(x) unlink(x, recursive=TRUE))
-                lapply(outFiles, function(x) unlink(x, recursive=TRUE))
+                lapply(inFiles, function(y) unlink(y, recursive=TRUE))
+                lapply(outFiles, function(y) unlink(y, recursive=TRUE))
                 unlink(inDir, recursive=TRUE)
                 unlink(outDir, recursive=TRUE)
                 
@@ -132,7 +142,7 @@ while(TRUE){
                     idleTimeout=3600000
                 )
                 query <- sqlInterpolate(ANSI(), paste0("UPDATE transaction SET delete=1 WHERE uuid='", x, "';"), id="setDeleteFlags")
-                outp <- dbGetQuery(poolDelete, query)
+                outp <- dbExecute(poolDelete, query)
                 poolClose(poolDelete)
             })
         }

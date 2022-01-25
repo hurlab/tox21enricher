@@ -38,8 +38,16 @@ PYTHON_DIR <- tox21config$python
 CORES <- tox21config$cores
 CLEANUP_TIME <- tox21queue$cleanupTime
 DELETE_TIME <- tox21queue$deleteTime
+INPUT_MAX <- tox21queue$inputMax
+if(INPUT_MAX > 16){ # Tox21 Enricher only supports a max of 16 concurrent input sets and a minimum of 1 set.
+    print("Warning: Found an inputMax value exceeding 16 in config.yml. Tox21 Enricher only supports a maximum of 16 sets. INPUT_MAX will be set to 16.")
+    INPUT_MAX <- 16
+} else if(INPUT_MAX < 1){
+    print("Warning: Found an inputMax value less than 1 in config.yml. Tox21 Enricher only supports a minimum of 1 set. INPUT_MAX will be set to 1.")
+    INPUT_MAX <- 1
+}
 
-# Source Python
+# Source Python and define function from Python file
 Sys.setenv(RETICULATE_PYTHON=PYTHON_DIR)
 use_python(PYTHON_DIR)
 source_python("calcReactiveGroups.py")
@@ -307,10 +315,13 @@ finishedRequest <- function(res, req, transactionId){
     # Close pool
     poolClose(poolQueue)
     finished <- outp[1, "finished"]
-    if(finished == 1){
-        return(TRUE)
+    if(is.na(finished)){
+        return(-1)
     }
-    return(FALSE)
+    if(finished == 1){
+        return(1)
+    }
+    return(0)
 }
 
 #* Check if error file exists for given request
@@ -432,6 +443,12 @@ cleanupTime <- function(res, req){
     return(CLEANUP_TIME)
 }
 
+#* Get the maximum number of simultaneous input sets that may be submitted in a request.
+#* @get /getInputMax
+getInputMax <- function(res, req){
+    return(INPUT_MAX)
+}
+
 #* Check Tox21 Enricher version
 #* @get /getAppVersion
 getAppVersion <- function(res, req){
@@ -451,15 +468,12 @@ initAnnotations <- function(res, req){
         port=tox21config$port,
         idleTimeout=3600000
     )
-    annoClassQuery <- sqlInterpolate(ANSI(), "SELECT annoclassname, annotype, annodesc FROM annotation_class;", id="getAnnotationClasses")
+    annoClassQuery <- sqlInterpolate(ANSI(), "SELECT annoclassname, annotype, annodesc, numberoftermids FROM annotation_class;", id="getAnnotationClasses")
     annoClassOutp <- dbGetQuery(poolAnnotations, annoClassQuery)
-    # Phase out old CTD annotations (TODO: remove these altogether)
-    annoClassOutpRemove <- c("CTD_CHEM2DISEASE", "CTD_CHEM2GENE_25", "CTD_PATHWAY")
-    annoClassOutp2 <- annoClassOutp[!(annoClassOutp$annoclassname %in% annoClassOutpRemove), ]
-    rownames(annoClassOutp2) <- seq_len(nrow(annoClassOutp2))
+    rownames(annoClassOutp) <- seq_len(nrow(annoClassOutp))
     # Close pool
     poolClose(poolAnnotations)
-    return(annoClassOutp2)
+    return(annoClassOutp)
 }
 
 #* Get total number of requests (internal use only)
@@ -522,14 +536,22 @@ substructure <- function(res, req, input, reenrich=FALSE){
         input <- convertInchi(inchi=input)
     }
     substructureQuery <- ""
+    substructureOutp <- NULL
     if(reenrich == FALSE){
         substructureQuery <- sqlInterpolate(ANSI(), paste0("SELECT * FROM mols_2 WHERE m @> CAST('", input, "' AS mol);"), id="substructureResults")
     } else {
         substructureQuery <- sqlInterpolate(ANSI(), paste0("SELECT * FROM mols_2 WHERE casrn='", input, "';"), id="substructureResults")
     }
-    substructureOutp <- dbGetQuery(poolSubstructure, substructureQuery)
-    substructureOutp$m <- unlist(lapply(substructureOutp$m, function(x) paste0(x))) # coerce mol column to string. If left as "pq_mol" data type, R wont' know how to send this in a json back to the client.
-    
+    trySubstructure <- tryCatch({
+        substructureOutp <- dbGetQuery(poolSubstructure, substructureQuery)
+        substructureOutp$m <- unlist(lapply(substructureOutp$m, function(x) paste0(x))) # coerce mol column to string. If left as "pq_mol" data type, R wont' know how to send this in a json back to the client.
+        TRUE
+    }, error=function(cond){
+        return(FALSE)
+    })
+    if(!trySubstructure){ # if error occurs when converting to mol
+        return(list())
+    }
     # Close pool
     poolClose(poolSubstructure)
     return(substructureOutp)
@@ -539,7 +561,7 @@ substructure <- function(res, req, input, reenrich=FALSE){
 #* @param input SMILES Input string
 #* @param threshold Tanimoto similarity threshold
 #* @get /similarity
-similarity <- function(res, req, input="", threshold){
+similarity <- function(res, req, input="", threshold=0.5){
     # Connect to db
     poolSimilarity <- dbPool(
         drv=RPostgres::Postgres(),
@@ -556,9 +578,18 @@ similarity <- function(res, req, input="", threshold){
     }
     # Set Tanimoto threshold for similarity cutoff
     queryTanimoto <- sqlInterpolate(ANSI(), paste0("set rdkit.tanimoto_threshold=", threshold, ";"), id="tanimotoResults")
-    outpTanimoto <- dbExecute(poolSimilarity, queryTanimoto)
     similarityQuery <- sqlInterpolate(ANSI(), paste0("SELECT * FROM get_mfp2_neighbors('", input, "');"), id="similarityResults")
-    similarityOutp <- dbGetQuery(poolSimilarity, similarityQuery)
+    similarityOutp <- NULL
+    trySimilarity <- tryCatch({
+        outpTanimoto <- dbExecute(poolSimilarity, queryTanimoto)
+        similarityOutp <- dbGetQuery(poolSimilarity, similarityQuery)
+        TRUE
+    }, error=function(cond){
+        return(FALSE)
+    })
+    if(!trySimilarity){ # if error occurs when converting to mol
+        return(list())
+    }
     # Close pool
     poolClose(poolSimilarity)
     return(similarityOutp)
@@ -661,6 +692,29 @@ generateStructures <- function(res, req, input){
     # Close pool
     poolClose(poolSvg)
     return(structures)
+}
+
+#* Get a list of CASRNs with reactive structure warnings form database.
+#* @param input
+#* @get /removeWithWarnings
+removeWithWarnings <- function(res, req, input){
+    # Connect to db
+    poolWarn <- dbPool(
+        drv=RPostgres::Postgres(),
+        dbname=tox21config$database,
+        host=tox21config$host,
+        user=tox21config$uid,
+        password=tox21config$pwd,
+        port=tox21config$port,
+        idleTimeout=3600000
+    )
+    inputSets <- unlist(str_split(input, "\\|"))
+    inputSets <- unique(unlist(lapply(inputSets, function(x) unlist(str_split(x, "__"))[1])))
+    warnQuery <- sqlInterpolate(ANSI(), paste0("SELECT casrn, cyanide, isocyanate, aldehyde, epoxide FROM mols_2 WHERE ", paste0("casrn='", inputSets, "'", collapse=" OR "), ";"), id="getWarnings")
+    warnOutp <- dbGetQuery(poolWarn, warnQuery)
+    # Close pool
+    poolClose(poolWarn)
+    return(warnOutp)
 }
 
 ## SECTION 4: FILE CREATION AND SERVING
@@ -887,7 +941,7 @@ readGct <- function(res, req, transactionId, cutoff, mode, set="Set1"){
             return(NULL)
         }
         tryReadChart <- tryCatch({
-            gctFile <- read.delim(paste0(outDir, "gct/Chart_Top", cutoff, "_ALL__P_0.05_P__ValueMatrix.gct"), skip=2, header=TRUE, sep="\t", row.names=1, comment.char="", fill=FALSE, colClasses=c("Terms"="NULL") )
+            gctFile <- read.delim(paste0(outDir, "gct/Chart_Top", cutoff, "_ALL__P_0.05_P__ValueMatrix.gct"), skip=2, header=TRUE, sep="\t", row.names=1, comment.char="", fill=FALSE, colClasses=c("Terms"="NULL"), check.names=FALSE)
             TRUE
         }, error=function(cond){
             return(NULL)
@@ -900,7 +954,7 @@ readGct <- function(res, req, transactionId, cutoff, mode, set="Set1"){
             return(NULL)
         }
         tryReadCluster <- tryCatch({
-            gctFile <- read.delim(paste0(outDir, "gct/Cluster_Top", cutoff, "_ALL__P_0.05_P__ValueMatrix.gct"), skip=2, header=TRUE, sep="\t", row.names=1, comment.char="", fill=FALSE, colClasses=c("Terms"="NULL") )
+            gctFile <- read.delim(paste0(outDir, "gct/Cluster_Top", cutoff, "_ALL__P_0.05_P__ValueMatrix.gct"), skip=2, header=TRUE, sep="\t", row.names=1, comment.char="", fill=FALSE, colClasses=c("Terms"="NULL"), check.names=FALSE)
             TRUE
         }, error=function(cond){
             return(NULL)
@@ -913,7 +967,7 @@ readGct <- function(res, req, transactionId, cutoff, mode, set="Set1"){
             return(NULL)
         }
         tryReadChart <- tryCatch({
-            gctFile <- read.delim(paste0(outDir, "gct_per_set/", set, "__Chart.gct"), skip=2, header=TRUE, sep="\t", row.names=1, comment.char="", fill=FALSE, colClasses=c("Name"="NULL") )
+            gctFile <- read.delim(paste0(outDir, "gct_per_set/", set, "__Chart.gct"), skip=2, header=TRUE, sep="\t", row.names=1, comment.char="", fill=FALSE, colClasses=c("Name"="NULL"), check.names=FALSE)
             TRUE
         }, error=function(cond){
             return(NULL)

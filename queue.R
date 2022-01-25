@@ -444,7 +444,7 @@ process_variable_DAVID_CHART_directories_individual_file <- function(inputDirNam
 
     # Step0. Get only the files that actually have contents
     infiles <- lapply(infilesAll, function(infile) {
-        infileDF <- read.table(infile, sep="\t", header=TRUE, comment.char="", fill=TRUE, stringsAsFactors=FALSE)
+        infileDF <- read.delim(infile, sep="\t", header=TRUE, comment.char="", fill=TRUE, stringsAsFactors=FALSE)
         if(nrow(infileDF) < 1){
             return(NULL)
         }
@@ -1108,7 +1108,7 @@ process_variable_DAVID_CHART_directories <- function(dirName, outputDir, extTag,
     # Load DAVID Chart files
     # Step0. Get only the files that actually have contents
     infiles <- lapply(infilesAll, function(infile) {
-        infileDF <- read.table(infile, sep="\t", header=TRUE, comment.char="", fill=TRUE, stringsAsFactors=FALSE)
+        infileDF <- read.delim(infile, sep="\t", header=TRUE, comment.char="", fill=TRUE, stringsAsFactors=FALSE)
         if(nrow(infileDF) < 1){
             return(NULL)
         }

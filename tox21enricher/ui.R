@@ -274,10 +274,11 @@ shinyUI(function(){
                     # Annotation selection
                     fluidRow(
                         h3("Select Chemical/Biological Annotation Categories"),
-                        column(2,
-                            actionButton("select_all_annotations", "Deselect all")
+                        column(4,
+                            actionButton("select_all_annotations", "Deselect all"),
+                            tipify(actionButton("selectAllLarge", "Deselect all large classes"), "Deselect/select all annotation classes with more than 1000 terms. Deselecting large classes may enhance performance.", placement="right")
                         ),
-                        column(10,
+                        column(8,
                             HTML("<p><b>Note</b>: Selecting no annotation categories will cause enrichment to just use the default categories.</p>")
                         ),
                     ),
@@ -347,7 +348,12 @@ shinyUI(function(){
                             textAreaInput(inputId="submitted_chemicals", label=NULL, rows=12, width="100%", value="", resize="both"),
                         )
                     ),
-                    actionButton("submit", "Submit", icon=icon("arrow-alt-circle-right"))
+                    column(3,
+                        actionButton(inputId="submit", "Submit", icon=icon("arrow-alt-circle-right"))
+                    ), 
+                    column(9,
+                        tipify(checkboxInput(inputId="includeChemsWithWarnings", label="Ignore chemicals with reactive structure warnings?", value=TRUE), title="A submitted chemical may contain a reactive functional group (nitrile, isocyanate, aldehyde, and/or epoxide) that does not appear in one or more similar chemicals. The opposite may also occur in which similar chemicals contain a reactive functional group not present in the submitted chemical. Checking this box will cause Tox21 Enricher to ignore all similar chemicals that have a reactive functional group discrepancy with the submitted chemical. These chemicals will not be used in enrichment.", placement="top")
+                    )
                 ),
                 hidden(
                     fluidRow(id="resultsContainer",
