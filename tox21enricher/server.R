@@ -117,7 +117,7 @@ shinyServer(function(input, output, session) {
             shinyjs::disable(id="cancelEnrichment")
         } else if (page == "waiting") {
             # Reset waiting page
-            output[["waitingTable"]] <- renderUI(HTML())
+            output[["waitingTable"]] <- renderUI(HTML(""))
             # Hide original form when done with enrichment
             shinyjs::hide(id="enrichmentForm")
             shinyjs::disable(id="enrichmentForm")
@@ -574,10 +574,10 @@ shinyServer(function(input, output, session) {
                     if(is.null(resultsButtonsReactiveList$buttons[[paste0("prevSessionLink__", transactionId)]])) {
                         resultsButtonsReactiveList$buttons[[paste0("prevSessionLink__", transactionId)]] <- observeEvent(input[[paste0("prevSessionLink__", transactionId)]], {
                             # reset waiting page
-                            output[["waitingPage"]] <- renderUI(HTML())
+                            output[["waitingPage"]] <- renderUI(HTML(""))
                             shinyjs::reset(id="waitingPage")
                             shinyjs::disable(id="waitingPage")
-                            output[["waitingTable"]] <- renderUI(HTML())
+                            output[["waitingTable"]] <- renderUI(HTML(""))
                             shinyjs::reset(id="waitingTable")
                             shinyjs::disable(id="waitingTable")
                             shinyjs::disable(id="fetchResults")
@@ -1917,6 +1917,7 @@ shinyServer(function(input, output, session) {
                 }
                 return(FALSE)
             }
+
             names(reenrichResults) <- unlist(lapply(seq_len(length(casrnBoxSplit)), function(i) paste0("Set", i)))
             reenrichResults <- reenrichResults[!vapply(reenrichResults, is.null, FUN.VALUE=logical(1))]
             if(length(reenrichResults) > 0){
@@ -2000,7 +2001,7 @@ shinyServer(function(input, output, session) {
         # Convert enrichmentSets into a form that is API-friendly 2
         enrichmentSetsSanitizedLocal <- lapply(names(enrichmentSets), function(enrichmentSet) paste0(paste0(enrichmentSets[[enrichmentSet]], collapse=paste0("__", enrichmentSet, "|")), "__", enrichmentSet))
         enrichmentSetsSanitizedLocal <- paste0(enrichmentSetsSanitizedLocal, collapse="|")
-        
+
         # Preemptively remove chemicals with reactive structure warningsif option is checked
         if (enrichmentType$enrichType == "similarity" | enrichmentType$enrichType == "substructure") {
             if(input$includeChemsWithWarnings){
@@ -2123,7 +2124,7 @@ shinyServer(function(input, output, session) {
             changePage(page="enrichment")
             return(FALSE)
         }
-        
+
         if(length(reenrichResultsList$reenrichResults) > 0){
             reenrichResultsSanitized <- unlist(lapply(seq_len(length(reenrichResultsList$reenrichResults)), function(reenrichResult){
                 rr_setname <- names(reenrichResultsList$reenrichResults)[[reenrichResult]]
@@ -2246,7 +2247,7 @@ shinyServer(function(input, output, session) {
         inputSetList$inputSet <- waitingData
         # update waitingData with cleaned output
         waitingData <- data.frame("Position"=c(initQueuePos), "Mode"=c(enrichmentDisplayType), "UUID"=c(transactionId), "Selected Annotations"=c(splitAnnotationsString), "Node Cutoff"=c(cutoff), "Input"=c(casrnBox), stringsAsFactors=FALSE)
-        
+
         # Clean up column name formatting
         colnames(waitingData) <- list("Status", "Request Mode", "Request UUID", "Selected Annotations", "Node Cutoff", "User Input")
         output[["waitingTable"]] <- renderUI(

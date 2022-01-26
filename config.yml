@@ -17,10 +17,12 @@ default:
     # The application's input/output directories
     indir: "Input/"
     outdir: "Output/"
+    # Location of the application's archive directory where it will save records of old requests
+    archivedir: "Archive/"
     # Location of your Python installation
     python: "/home/username/anaconda3/envs/my-rdkit-env/bin/python3.X"
     # Number of cores for multithreading
-    cores: 4
+    cores: 1
   tox21enricher-queue:
     ### Database information for connecting to Postgres database ###
     driver: 'Postgres'
@@ -30,7 +32,15 @@ default:
     pwd: "password_queue"
     port: 5432
     database: 'tox21queue'
-    # Number of HOURS before a transaction hanging in the queue should be cleared
-    cleanupTime: 24
+    # The number of HOURS:
+    #   - a transaction will be kept alive in the queue before being marked for deletion.
+    #   - until the expiration of the cookie on the client storing the previous request's uuid.
+    cleanupTime: 48
     # Number of DAYS before the records of an old transaction should be deleted from the database and filesystem
     deleteTime: 30
+    # The maximum number of input sets that may be processed at the same time for a single request
+    # NOTE: Do not set this larger than 16! Only 16 colors may be generated at a time for right now, and having this many enrichment
+    #       sets can make things very slow. If this is set to be larger than 16, the app will just set it to 16.
+    inputMax: 16
+    # Your API key needed to access the ipstack API to fetch user geolocation data: https://ipstack.com
+    apikey: 'xxxxxxxxxxxxxxxxxxxxxxxxxxxx'
