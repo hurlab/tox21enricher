@@ -1,4 +1,4 @@
-# performEnrichment.R
+# plumber.R
 ###############################################################
 # API for Tox21 Enricher                                      #
 # developed by Junguk Hur and                                 #               
@@ -18,7 +18,6 @@ library(parallel)
 library(plyr)
 library(pool)
 library(promises)
-library(reticulate)
 library(rjson)
 library(RPostgres)
 library(stringr)
@@ -34,7 +33,6 @@ APP_VERSION <- tox21config$appversion
 APP_DIR <- tox21config$appdir
 IN_DIR <- tox21config$indir
 OUT_DIR <- tox21config$outdir
-PYTHON_DIR <- tox21config$python
 CORES <- tox21config$cores
 CLEANUP_TIME <- tox21queue$cleanupTime
 DELETE_TIME <- tox21queue$deleteTime
@@ -46,11 +44,6 @@ if(INPUT_MAX > 16){ # Tox21 Enricher only supports a max of 16 concurrent input 
     print("Warning: Found an inputMax value less than 1 in config.yml. Tox21 Enricher only supports a minimum of 1 set. INPUT_MAX will be set to 1.")
     INPUT_MAX <- 1
 }
-
-# Source Python and define function from Python file
-Sys.setenv(RETICULATE_PYTHON=PYTHON_DIR)
-use_python(PYTHON_DIR)
-source_python("calcReactiveGroups.py")
 
 print(paste0("! Tox21 Enricher Plumber API version ", APP_VERSION, "."))
 print("! Ready to accept connections.")
@@ -64,7 +57,7 @@ print("! Ready to accept connections.")
 #* @param enrichmentUUID
 #* @param annoSelectStr
 #* @param nodeCutoff
-#* @get /queue
+#* @post /queue
 queue <- function(mode="", enrichmentUUID="-1", annoSelectStr="MESH=checked,PHARMACTIONLIST=checked,ACTIVITY_CLASS=checked,ADVERSE_EFFECT=checked,INDICATION=checked,KNOWN_TOXICITY=checked,MECH_LEVEL_1=checked,MECH_LEVEL_2=checked,MECH_LEVEL_3=checked,MECHANISM=checked,MODE_CLASS=checked,PRODUCT_CLASS=checked,STRUCTURE_ACTIVITY=checked,TA_LEVEL_1=checked,TA_LEVEL_2=checked,TA_LEVEL_3=checked,THERAPEUTIC_CLASS=checked,TISSUE_TOXICITY=checked,DRUGBANK_ATC=checked,DRUGBANK_ATC_CODE=checked,DRUGBANK_CARRIERS=checked,DRUGBANK_ENZYMES=checked,DRUGBANK_TARGETS=checked,DRUGBANK_TRANSPORTERS=checked,CTD_CHEM2DISEASE=checked,CTD_CHEM2GENE_25=checked,CTD_CHEMICALS_DISEASES=checked,CTD_CHEMICALS_GENES=checked,CTD_CHEMICALS_GOENRICH_CELLCOMP=checked,CTD_CHEMICALS_GOENRICH_MOLFUNCT=checked,CTD_CHEMICALS_PATHWAYS=checked,CTD_GOSLIM_BIOPROCESS=checked,CTD_PATHWAY=checked,HTS_ACTIVE=checked,LEADSCOPE_TOXICITY=checked,MULTICASE_TOX_PREDICTION=checked,TOXCAST_ACTIVE=checked,TOXINS_TARGETS=checked,TOXPRINT_STRUCTURE=checked,TOXREFDB=checked,", nodeCutoff=10, setNames){
     # Connect to db
     poolQueue <- dbPool(
@@ -100,7 +93,7 @@ queue <- function(mode="", enrichmentUUID="-1", annoSelectStr="MESH=checked,PHAR
 #* @param reenrich
 #* @param color
 #* @param timestampPosted
-#* @get /createTransaction
+#* @post /createTransaction
 createTransaction <- function(res, req, originalMode="", mode="", uuid="-1", annoSelectStr="MESH=checked,PHARMACTIONLIST=checked,ACTIVITY_CLASS=checked,ADVERSE_EFFECT=checked,INDICATION=checked,KNOWN_TOXICITY=checked,MECH_LEVEL_1=checked,MECH_LEVEL_2=checked,MECH_LEVEL_3=checked,MECHANISM=checked,MODE_CLASS=checked,PRODUCT_CLASS=checked,STRUCTURE_ACTIVITY=checked,TA_LEVEL_1=checked,TA_LEVEL_2=checked,TA_LEVEL_3=checked,THERAPEUTIC_CLASS=checked,TISSUE_TOXICITY=checked,DRUGBANK_ATC=checked,DRUGBANK_ATC_CODE=checked,DRUGBANK_CARRIERS=checked,DRUGBANK_ENZYMES=checked,DRUGBANK_TARGETS=checked,DRUGBANK_TRANSPORTERS=checked,CTD_CHEM2DISEASE=checked,CTD_CHEM2GENE_25=checked,CTD_CHEMICALS_DISEASES=checked,CTD_CHEMICALS_GENES=checked,CTD_CHEMICALS_GOENRICH_CELLCOMP=checked,CTD_CHEMICALS_GOENRICH_MOLFUNCT=checked,CTD_CHEMICALS_PATHWAYS=checked,CTD_GOSLIM_BIOPROCESS=checked,CTD_PATHWAY=checked,HTS_ACTIVE=checked,LEADSCOPE_TOXICITY=checked,MULTICASE_TOX_PREDICTION=checked,TOXCAST_ACTIVE=checked,TOXINS_TARGETS=checked,TOXPRINT_STRUCTURE=checked,TOXREFDB=checked,", cutoff=10, input, casrnBox, originalNames="none", reenrich="", color, timestampPosted, reenrichFlag=FALSE){
     # format reenrich flag
     if(reenrichFlag == TRUE){
@@ -128,8 +121,8 @@ createTransaction <- function(res, req, originalMode="", mode="", uuid="-1", ann
 
 #* Load details for the selected transaction
 #* @param uuid
-#* @get /loadTransaction
-loadTransaction <- function(uuid="none"){
+#* @get /getTransactionDetails
+getTransactionDetails <- function(uuid="none"){
     # Connect to db
     poolTransaction <- dbPool(
         drv=RPostgres::Postgres(),
@@ -246,7 +239,6 @@ getQueuePos <- function(transactionId="-1", mode="none"){
             })
             names(statusList) <- names(statusFiles)
         }
-
         if(length(statusList) > 0){
             statusListToReturn <- lapply(seq_len(length(statusList)), function(i) paste0(names(statusList)[i], ": \t", statusList[i]))
             statusListToReturn <- paste0(statusListToReturn, collapse="\n")
@@ -297,8 +289,8 @@ getPrevSessionData <- function(transactionId="-1"){
 
 #* Check if enrichment process has terminated for given request
 #* @param transactionId UUID of the request
-#* @get /finishedRequest
-finishedRequest <- function(res, req, transactionId){
+#* @get /isRequestFinished
+isRequestFinished <- function(res, req, transactionId){
     # Connect to db
     poolQueue <- dbPool(
         drv=RPostgres::Postgres(),
@@ -408,8 +400,8 @@ ping <- function(res, req){
 }
 
 #* Get delete time for old transaction
-#* @get /deleteTime
-deleteTime <- function(res, req){
+#* @get /getDeleteTime
+getDeleteTime <- function(res, req){
     return(DELETE_TIME)
 }
 
@@ -438,8 +430,8 @@ getAdditionalRequestInfo <- function(res, req, transactionId=""){
 }
 
 #* Get cleanup time for old transaction. This number is the number of hours that a transaction will live for on the server. This is used when saving cookie expiry dates on the client as well as the cutoff time to delete in the queue cleanup script.
-#* @get /cleanupTime
-cleanupTime <- function(res, req){
+#* @get /getCleanupTime
+getCleanupTime <- function(res, req){
     return(CLEANUP_TIME)
 }
 
@@ -456,8 +448,8 @@ getAppVersion <- function(res, req){
 }
 
 #* Get annotation classes/types (internal use only)
-#* @get /initAnnotations
-initAnnotations <- function(res, req){
+#* @get /getAnnotations
+getAnnotations <- function(res, req){
     # Connect to db
     poolAnnotations <- dbPool(
         drv=RPostgres::Postgres(),
@@ -477,8 +469,8 @@ initAnnotations <- function(res, req){
 }
 
 #* Get total number of requests (internal use only)
-#* @get /total
-total <- function(res, req){
+#* @get /getTotalRequests
+getTotalRequests <- function(res, req){
     # Connect to db
     poolTotal <- dbPool(
         drv=RPostgres::Postgres(),
@@ -519,8 +511,8 @@ total <- function(res, req){
 #* Get data for provided SMILES string (substructure) (internal use only)
 #* @param input Input string, either SMILES or CASRN (if re-enriching)
 #* @param reenrich Boolean value to let the API know if this is a re-enrichment or not
-#* @get /substructure
-substructure <- function(res, req, input, reenrich=FALSE){
+#* @get /searchBySubstructure
+searchBySubstructure <- function(res, req, input, reenrich=FALSE){
     # Connect to db
     poolSubstructure <- dbPool(
         drv=RPostgres::Postgres(),
@@ -560,8 +552,8 @@ substructure <- function(res, req, input, reenrich=FALSE){
 #* Get data for provided SMILES string (similarity) (internal use only)
 #* @param input SMILES Input string
 #* @param threshold Tanimoto similarity threshold
-#* @get /similarity
-similarity <- function(res, req, input="", threshold=0.5){
+#* @get /searchBySimilarity
+searchBySimilarity <- function(res, req, input="", threshold=0.5){
     # Connect to db
     poolSimilarity <- dbPool(
         drv=RPostgres::Postgres(),
@@ -597,8 +589,8 @@ similarity <- function(res, req, input="", threshold=0.5){
 
 #* Get additional data for provided CASRN (internal use only)
 #* @param input CASRN Input string
-#* @get /casrnData
-casrnData <- function(res, req, input){
+#* @get /getCasrnData
+getCasrnData <- function(res, req, input){
     # Connect to db
     poolCasrn <- dbPool(
         drv=RPostgres::Postgres(),
@@ -618,9 +610,55 @@ casrnData <- function(res, req, input){
 
 #* Detect if submitted chemical contains any reactive groups (internal use only)
 #* @param input
-#* @get /reactiveGroups
-reactiveGroups <- function(res, req, input){
-    return(calcReactiveGroups(input))
+#* @get /getReactiveGroups
+getReactiveGroups <- function(res, req, input){
+    has_nitrile <- 0
+    has_isocyanate <- 0
+    has_aldehyde <- 0
+    has_epoxide <- 0
+    # Connect to db
+    poolReactive <- dbPool(
+        drv=RPostgres::Postgres(),
+        dbname=tox21config$database,
+        host=tox21config$host,
+        user=tox21config$uid,
+        password=tox21config$pwd,
+        port=tox21config$port,
+        idleTimeout=3600000
+    )
+    # Convert InChI to SMILES if present in input
+    if(grepl("^InChI=", input)){
+        input <- inchiToSmiles(inchi=input)
+    }
+    # Nitrile
+    reactiveQuery <- sqlInterpolate(ANSI(), paste0("select * from mol_from_smiles('", input, "') WHERE mol_from_smiles('", input, "') @> mol_from_smarts('[NX1]#[CX2]');"), id="getReactiveGroups")
+    reactiveOutp <- dbGetQuery(poolReactive, reactiveQuery)
+    if(nrow(reactiveOutp) > 0){
+        has_nitrile <- 1
+    }
+    # Isocyanate
+    reactiveQuery <- sqlInterpolate(ANSI(), paste0("select * from mol_from_smiles('", input, "') WHERE mol_from_smiles('", input, "') @> mol_from_smarts('[NX2]=[CX2]=[OX1]');"), id="getReactiveGroups")
+    reactiveOutp <- dbGetQuery(poolReactive, reactiveQuery)
+    if(nrow(reactiveOutp) > 0){
+        has_isocyanate <- 1
+    }
+    # Aldehyde
+    reactiveQuery <- sqlInterpolate(ANSI(), paste0("select * from mol_from_smiles('", input, "') WHERE mol_from_smiles('", input, "') @> mol_from_smarts('[CX3H1](=O)[#6]');"), id="getReactiveGroups")
+    reactiveOutp <- dbGetQuery(poolReactive, reactiveQuery)
+    if(nrow(reactiveOutp) > 0){
+        has_aldehyde <- 1
+    }
+    # Epoxide
+    reactiveQuery <- sqlInterpolate(ANSI(), paste0("select * from mol_from_smiles('", input, "') WHERE mol_from_smiles('", input, "') @> mol_from_smarts('[OX2]1[CX4][CX4]1');"), id="getReactiveGroups")
+    reactiveOutp <- dbGetQuery(poolReactive, reactiveQuery)
+    if(nrow(reactiveOutp) > 0){
+        has_epoxide <- 1
+    }
+    # Put reactive groups into string to pass back to client
+    reactiveGroups <- paste0(has_nitrile, ",", has_isocyanate, ",", has_aldehyde, ",", has_epoxide)
+    # Close pool
+    poolClose(poolReactive)
+    return(reactiveGroups)
 }
 
 #* Convert provided InChI string to SMILES (internal use only)
@@ -665,8 +703,8 @@ convertInchi <- function(res, req, inchi){
 
 #* Use RDKit to generate chemical structure images from a list of molecules (internal use only)
 #* @param input
-#* @get /generateStructures
-generateStructures <- function(res, req, input){
+#* @get /getStructureImages
+getStructureImages <- function(res, req, input){
     # Connect to db
     poolSvg <- dbPool(
         drv=RPostgres::Postgres(),
@@ -694,10 +732,10 @@ generateStructures <- function(res, req, input){
     return(structures)
 }
 
-#* Get a list of CASRNs with reactive structure warnings form database.
+#* Get a list of CASRNs with reactive structure warnings from database.
 #* @param input
-#* @get /removeWithWarnings
-removeWithWarnings <- function(res, req, input){
+#* @get /getStructureWarnings
+getStructureWarnings <- function(res, req, input){
     # Connect to db
     poolWarn <- dbPool(
         drv=RPostgres::Postgres(),
@@ -762,7 +800,7 @@ checkId <- function(res, req){
 #* @param transactionId UUID for given request
 #* @param enrichmentSets User's input sets
 #* @param setNames Input set names
-#* @get /createInput
+#* @post /createInput
 createInput <- function(res, req, transactionId, enrichmentSets, setNames, mode, nodeCutoff, annoSelectStr){
     # Get enrichment sets from sent string
     enrichmentSetNames <- unlist(str_split(setNames, "\n"))
@@ -847,8 +885,8 @@ createInput <- function(res, req, transactionId, enrichmentSets, setNames, mode,
 
 #* Returns list of sets that are valid/existing for a given transaction
 #* @param transactionId UUID of the request
-#* @get /checkSets
-checkSets <- function(res, req, transactionId){
+#* @get /getInputSets
+getInputSets <- function(res, req, transactionId){
     inputDir <- paste0(APP_DIR, IN_DIR)
     inputFilesList <- Sys.glob(paste0(inputDir, transactionId, "/*.txt"))
     inputFilesList <- unlist(lapply(inputFilesList, function(x){
@@ -982,8 +1020,8 @@ readGct <- function(res, req, transactionId, cutoff, mode, set="Set1"){
 #* Return Chart Simple file for given request and input set
 #* @param transactionId UUID of the request
 #* @param enrichmentSets names of the enrichment sets
-#* @get /bargraph
-bargraph <- function(res, req, transactionId, enrichmentSets){
+#* @get /getBargraph
+getBargraph <- function(res, req, transactionId, enrichmentSets){
     # format enrichment sets
     enrichmentSets <- unlist(str_split(enrichmentSets, "__"))
     # define results directory
@@ -1025,8 +1063,8 @@ bargraph <- function(res, req, transactionId, enrichmentSets){
 #* @param cutoff Node cutoff
 #* @param mode Chart or cluster
 #* @param input Current input set
-#* @get /generateNetwork
-generateNetwork <- function(res, req, transactionId="-1", cutoff, mode, input, qval){
+#* @get /getNetwork
+getNetwork <- function(res, req, transactionId="-1", cutoff, mode, input, qval){
     input <- unlist(str_split(input, "#"))
     baseDirName <- paste0(APP_DIR, OUT_DIR, transactionId, "/")
     chartForNetFile <- NULL
@@ -1203,8 +1241,8 @@ getNodeColors <- function(res, req){
 ## SECTION 6: API CLIENT ENDPOINTS FOR OPERATING IN NO-GUI MODE
 
 #* Get list of all annotations in the database
-#* @get /annotationList
-retrieveAnnotations <- function(){
+#* @get /getAnnotationList
+getAnnotationList <- function(){
     pool <- dbPool(
         drv=RPostgres::Postgres(),
         dbname=tox21config$database,
@@ -1500,7 +1538,7 @@ function(id="-1", filename="", res) {
 
 #* Check if enrichment results exist for a given uuid
 #* @param id The UUID of the enrichment process to check.
-#* @get /completed
+#* @get /isComplete
 function(id="-1", res) {
     # async
     future_promise({

@@ -1428,7 +1428,7 @@ perform_CASRN_enrichment_analysis <- function(CASRNRef, outputBaseDir, outfileBa
     })
     funCat2SelectedProcessed_sigTerm2CASRNMatrix <- funCat2SelectedProcessed_sigTerm2CASRNMatrix[!vapply(funCat2SelectedProcessed_sigTerm2CASRNMatrix, is.null, FUN.VALUE=logical(1))]
     sigTerm2CASRNMatrix <- unlist(funCat2SelectedProcessed_sigTerm2CASRNMatrix, recursive=FALSE)
-
+    
     # Populate datArray
     funCat2SelectedProcessed_datArray <- mclapply(names(funCat2Selected), mc.cores=CORES, mc.silent=FALSE, function(funCat){
         # Calculate the CASRN counts for the given categories
@@ -1751,7 +1751,6 @@ kappa_cluster <- function(x, deg=NULL, useTerm=FALSE, cutoff=0.5, overlap=0.5, m
         print(paste0("Cancelling request: ", enrichmentUUID))
         return(FALSE)
     }
-  
     # Step#1: Calculate kappa score
     posTermCASRNCount <- lapply(names(sortedFunCatTerms), function(funCatTerm) length(sigTerm2CASRNMatrix[[funCatTerm[[1]]]]))
     # Set names

@@ -267,7 +267,7 @@ shinyServer(function(input, output, session) {
     resp <- NULL
     cleanupTime <- reactiveValues(hours=48) # default 48 hours
     tryCleanup <- tryCatch({
-        resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="cleanupTime")
+        resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="getCleanupTime")
         TRUE
     }, error=function(cond){
         return(FALSE)
@@ -342,7 +342,7 @@ shinyServer(function(input, output, session) {
     # Get list of annotation classes & types from Postgres database
     get_annotations <- function(){
         # Query API to get list of annotation classes and types
-        resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="initAnnotations")
+        resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="getAnnotations")
         if(resp$status_code != 200){
             return(list())
         }
@@ -360,7 +360,7 @@ shinyServer(function(input, output, session) {
     getEnrichmentCount <- function(){
         tryEnrichmentCount <- tryCatch({
             # Query API to get list of annotation classes and types
-            resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="total")
+            resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="getTotalRequests")
             if(resp$status_code != 200){
                 return(0)
             }
@@ -435,7 +435,7 @@ shinyServer(function(input, output, session) {
             deleteTime <- 30 # default 30 days
             cookieExpTime <- 48
             tryDelete <- tryCatch({
-                resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="deleteTime")
+                resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="getDeleteTime")
                 TRUE
             }, error=function(cond){
                 return(FALSE)
@@ -718,7 +718,7 @@ shinyServer(function(input, output, session) {
                                             # Query API to get list of annotation classes and types
                                             resp <- NULL
                                             trySubstructure <- tryCatch({
-                                                resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="substructure", query=list(input=casrn, reenrich=TRUE))
+                                                resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="searchBySubstructure", query=list(input=casrn, reenrich=TRUE))
                                                 if(resp$status_code != 200){
                                                     return(FALSE)
                                                 }
@@ -743,7 +743,7 @@ shinyServer(function(input, output, session) {
                                             threshold <- as.numeric(input$tanimotoThreshold)/100
                                             resp <- NULL
                                             trySimilarity <- tryCatch({
-                                                resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="similarity", query=list(input=originalNamesToReturn[[names(enrichmentSets)[[casrnSet]]]], threshold=threshold))
+                                                resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="searchBySimilarity", query=list(input=originalNamesToReturn[[names(enrichmentSets)[[casrnSet]]]], threshold=threshold))
                                                 TRUE
                                             }, error=function(cond){
                                                 return(FALSE)
@@ -790,7 +790,7 @@ shinyServer(function(input, output, session) {
                                         if (enrichmentType$enrichType == "substructure") {
                                             resp <- NULL
                                             trySubstructure <- tryCatch({
-                                                resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="substructure", query=list(input=setName, reenrich=FALSE))
+                                                resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="searchBySubstructure", query=list(input=setName, reenrich=FALSE))
                                                 if(resp$status_code != 200){
                                                     return(FALSE)
                                                 }
@@ -819,7 +819,7 @@ shinyServer(function(input, output, session) {
                                             threshold <- as.numeric(input$tanimotoThreshold)/100
                                             resp <- NULL
                                             trySimilarity <- tryCatch({
-                                                resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="similarity", query=list(input=setName, threshold=threshold))
+                                                resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="searchBySimilarity", query=list(input=setName, threshold=threshold))
                                                 if(resp$status_code != 200){
                                                     return(FALSE)
                                                 }  
@@ -915,7 +915,7 @@ shinyServer(function(input, output, session) {
         # Fetch selected transaction
         resp <- NULL
         tryPrevious <- tryCatch({
-            resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="loadTransaction", query=list(uuid=setToFetch))
+            resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="getTransactionDetails", query=list(uuid=setToFetch))
             TRUE
         }, error=function(cond){
             return(FALSE)
@@ -1769,7 +1769,7 @@ shinyServer(function(input, output, session) {
                             # Query API to get list of annotation classes and types
                             resp <- NULL
                             trySubstructure <- tryCatch({
-                                resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="substructure", query=list(input=casrn, reenrich=TRUE))
+                                resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="searchBySubstructure", query=list(input=casrn, reenrich=TRUE))
                                 if(resp$status_code != 200){
                                     return(FALSE)
                                 }
@@ -1794,7 +1794,7 @@ shinyServer(function(input, output, session) {
                             threshold <- as.numeric(input$tanimotoThreshold)/100
                             resp <- NULL
                             trySimilarity <- tryCatch({
-                                resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="similarity", query=list(input=originalNamesToReturn[[names(enrichmentSets)[casrnSet]]], threshold=threshold))
+                                resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="searchBySimilarity", query=list(input=originalNamesToReturn[[names(enrichmentSets)[casrnSet]]], threshold=threshold))
                                 TRUE
                             }, error=function(cond){
                                 return(FALSE)
@@ -1842,7 +1842,7 @@ shinyServer(function(input, output, session) {
                     if (enrichmentType$enrichType == "substructure") {
                         resp <- NULL
                         trySubstructure <- tryCatch({
-                            resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="substructure", query=list(input=setName, reenrich=FALSE))
+                            resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="searchBySubstructure", query=list(input=setName, reenrich=FALSE))
                             if(resp$status_code != 200){
                                 return(FALSE)
                             }
@@ -1871,7 +1871,7 @@ shinyServer(function(input, output, session) {
                         threshold <- as.numeric(input$tanimotoThreshold)/100
                         resp <- NULL
                         trySimilarity <- tryCatch({
-                            resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="similarity", query=list(input=setName, threshold=threshold))
+                            resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="searchBySimilarity", query=list(input=setName, threshold=threshold))
                             if(resp$status_code != 200){
                                 return(FALSE)
                             }  
@@ -2002,14 +2002,14 @@ shinyServer(function(input, output, session) {
         enrichmentSetsSanitizedLocal <- lapply(names(enrichmentSets), function(enrichmentSet) paste0(paste0(enrichmentSets[[enrichmentSet]], collapse=paste0("__", enrichmentSet, "|")), "__", enrichmentSet))
         enrichmentSetsSanitizedLocal <- paste0(enrichmentSetsSanitizedLocal, collapse="|")
 
-        # Preemptively remove chemicals with reactive structure warningsif option is checked
+        # Preemptively remove chemicals with reactive structure warnings if option is checked
         if (enrichmentType$enrichType == "similarity" | enrichmentType$enrichType == "substructure") {
             if(input$includeChemsWithWarnings){
                 # Get reactive structures for input
                 originalReactiveStructures <- lapply(originalNamesList$originalNames, function(x){
                     setInput <- unlist(str_split(x, "__"))[1]
                     tryReactive <- tryCatch({
-                        resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="reactiveGroups", query=list(input=setInput))
+                        resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="getReactiveGroups", query=list(input=setInput))
                         TRUE
                     }, error=function(cond){
                         return(FALSE)
@@ -2032,7 +2032,7 @@ shinyServer(function(input, output, session) {
                 names(originalReactiveStructures) <- unlist(lapply(originalNamesList$originalNames, function(x) unlist(str_split(x, "__"))[2]))
                 originalReactiveStructures <- originalReactiveStructures[!vapply(originalReactiveStructures, is.null, FUN.VALUE=logical(1))]
                 tryWarnings <- tryCatch({
-                    resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="removeWithWarnings", query=list(input=enrichmentSetsSanitizedLocal))
+                    resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="getStructureWarnings", query=list(input=enrichmentSetsSanitizedLocal))
                     TRUE
                 }, error=function(cond){
                     return(FALSE)
@@ -2097,7 +2097,7 @@ shinyServer(function(input, output, session) {
         }
         # Convert reenrichResultsList$reenrichResults into a form that is API-friendly
         reenrichResultsSanitized <- ""
-
+        
         # Show error if input chemical matches too many chemicals ( > 1500?)
         # TODO: maybe don't hardcode this to 1500 and let the server host define?
         badSets <- unlist(lapply(names(reenrichResultsList$reenrichResults), function(x) {
@@ -2155,7 +2155,7 @@ shinyServer(function(input, output, session) {
             # Send query to create transaction entry in database
             resp <- NULL
             tryTransaction <- tryCatch({
-                resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="createTransaction", query=list(originalMode=originalEnrichModeList$originalEnrichMode, mode=enrichmentType$enrichType, uuid=transactionId, annoSelectStr=annoSelectStr, cutoff=cutoff, input=enrichmentSetsSanitizedLocal, casrnBox=casrnBox, originalNames=paste0(originalNamesList$originalNames, collapse="|"), reenrich=paste0(reenrichResultsSanitized, collapse="|"), color=colorsToPrint, timestampPosted=beginTime, reenrichFlag=reenrichFlagReactive$reenrichFlagReactive))
+                resp <- POST(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="createTransaction", query=list(originalMode=originalEnrichModeList$originalEnrichMode, mode=enrichmentType$enrichType, uuid=transactionId, annoSelectStr=annoSelectStr, cutoff=cutoff, input=enrichmentSetsSanitizedLocal, casrnBox=casrnBox, originalNames=paste0(originalNamesList$originalNames, collapse="|"), reenrich=paste0(reenrichResultsSanitized, collapse="|"), color=colorsToPrint, timestampPosted=beginTime, reenrichFlag=reenrichFlagReactive$reenrichFlagReactive))
                 TRUE
             }, error=function(cond){
                 return(FALSE)
@@ -2167,7 +2167,7 @@ shinyServer(function(input, output, session) {
             # Send query to create input file
             resp <- NULL
             tryInput <- tryCatch({
-                resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="createInput", query=list(transactionId=transactionId, enrichmentSets=enrichmentSetsSanitized, setNames=paste0(names(enrichmentSets), collapse="\n"), mode=enrichmentType$enrichType, nodeCutoff=cutoff, annoSelectStr=annoSelectStr))
+                resp <- POST(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="createInput", query=list(transactionId=transactionId, enrichmentSets=enrichmentSetsSanitized, setNames=paste0(names(enrichmentSets), collapse="\n"), mode=enrichmentType$enrichType, nodeCutoff=cutoff, annoSelectStr=annoSelectStr))
                 TRUE
             }, error=function(cond){
                 return(FALSE)
@@ -2215,7 +2215,7 @@ shinyServer(function(input, output, session) {
         # Query API to put request in queue
         resp <- NULL
         tryQueue <- tryCatch({
-            resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="queue", query=list(mode=enrichmentType$enrichType, enrichmentUUID=transactionId, annoSelectStr=annoSelectStr, nodeCutoff=cutoff, setNames=paste0(names(enrichmentSets), collapse="\n")))
+            resp <- POST(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="queue", query=list(mode=enrichmentType$enrichType, enrichmentUUID=transactionId, annoSelectStr=annoSelectStr, nodeCutoff=cutoff, setNames=paste0(names(enrichmentSets), collapse="\n")))
             TRUE
         }, error=function(cond){
             return(FALSE)
@@ -2318,7 +2318,7 @@ shinyServer(function(input, output, session) {
         # Query the API to see if process is done
         resp <- NULL
         tryQueue <- tryCatch({
-            resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="finishedRequest", query=list(transactionId=transactionId))
+            resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="isRequestFinished", query=list(transactionId=transactionId))
             TRUE
         }, error=function(cond){
             return(FALSE)
@@ -2398,7 +2398,7 @@ shinyServer(function(input, output, session) {
         # Check which enrichment sets are good
         resp <- NULL
         tryCheck <- tryCatch({
-            resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="checkSets", query=list(transactionId=transactionId))
+            resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="getInputSets", query=list(transactionId=transactionId))
             TRUE
         }, error=function(cond){
             return(FALSE)
@@ -3652,7 +3652,7 @@ shinyServer(function(input, output, session) {
                     # Get SVG images from server
                     resp <- NULL
                     trySVG <- tryCatch({
-                        resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="generateStructures", query=list(input=resultImagesSVG))
+                        resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="getStructureImages", query=list(input=resultImagesSVG))
                         TRUE
                     }, error=function(cond){
                         return(FALSE)
@@ -3690,7 +3690,7 @@ shinyServer(function(input, output, session) {
                     expandedInfo <- t(vapply(reenrichResults[[i]][, "casrn"], function(casrn){
                         resp <- NULL
                         tryCasrn <- tryCatch({
-                            resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="casrnData", query=list(input=casrn))
+                            resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="getCasrnData", query=list(input=casrn))
                             TRUE
                         }, error=function(cond){
                             return(FALSE)
@@ -3854,7 +3854,7 @@ shinyServer(function(input, output, session) {
                     originalInputStr <- originalInputStr[!vapply(originalInputStr, is.null, FUN.VALUE=logical(1))]
                     resp <- NULL
                     tryReactive <- tryCatch({
-                        resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="reactiveGroups", query=list(input=originalInputStr))
+                        resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="getReactiveGroups", query=list(input=originalInputStr))
                         TRUE
                     }, error=function(cond){
                         return(FALSE)
@@ -4350,7 +4350,7 @@ shinyServer(function(input, output, session) {
             # Query API to get chart simple
             resp <- NULL
             tryBargraph <- tryCatch({
-                resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="bargraph", query=list(transactionId=transactionId, enrichmentSets=paste0(names(enrichmentSets), collapse="__")))
+                resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="getBargraph", query=list(transactionId=transactionId, enrichmentSets=paste0(names(enrichmentSets), collapse="__")))
                 TRUE
             }, error=function(cond){
                 return(FALSE)
@@ -4628,7 +4628,7 @@ shinyServer(function(input, output, session) {
         # Error handling
         resp <- NULL
         tryNetwork <- tryCatch({
-            resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="generateNetwork", query=list(transactionId=transactionId, cutoff=cutoff, mode=networkMode, input=inputNetwork, qval=qval))
+            resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="getNetwork", query=list(transactionId=transactionId, cutoff=cutoff, mode=networkMode, input=inputNetwork, qval=qval))
             TRUE
         }, error=function(cond){
             return(FALSE)
