@@ -7,6 +7,14 @@
 #    http://shiny.rstudio.com/
 #
 
+# Load user configuration
+tox21config <- config::get("tox21enricher-client")
+USER_MODE <- tox21config$mode
+if(USER_MODE != "client" & USER_MODE != "server"){ # default to 'client' mode if user enters something that isn't 'client' or 'server'
+    print(paste0("Error: Unknown configuration mode '", USER_MODE, "'. Setting to 'client' mode..."))
+    USER_MODE <- "client"
+}
+
 # Custom javascript for checking/unchecking checkboxes
 js_cbx <- "
     shinyjs.check=function(cbx){
@@ -244,7 +252,9 @@ shinyUI(function(){
                 # Display enrichment total count
                 uiOutput("totalEnrichments"),
                 # Settings button
-                actionButton(inputId="settingsButton", label="Settings", icon=icon("cog")),
+                if(USER_MODE == 'client'){
+                    actionButton(inputId="settingsButton", label="Settings", icon=icon("cog"))
+                },
                 # Search enrichments button
                 actionButton(inputId="searchButton", label="View previous results", icon=icon("search")),
                 # Theme toggle

@@ -4,3 +4,8 @@ default:
     # Location of API server
     host: 'localhost'
     port: '9000'
+    # Setup mode for application
+    #     'server' = run to be hosted on a server and accessed via web like a standard Shiny application.
+    #     'client' = run by a client to connect remotely to the API on a different host.
+    #     'client' mode is the default. If anything else if provided for 'mode', the app will default to 'client' mode.
+    mode: 'server'

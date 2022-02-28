@@ -3612,7 +3612,7 @@ submit <- function(mode="", input="", annotations="MESH,PHARMACTIONLIST,ACTIVITY
         poolClose(poolTanimoto)
     }
     # Get list of all annotation classes in database
-    annotationList <- retrieveAnnotations()
+    annotationList <- getAnnotationList()
     # Set annotations to default if missing
     if(annotations == ""){
         annotations <- paste0(annotationList, collapse=",")
@@ -3794,23 +3794,6 @@ submit <- function(mode="", input="", annotations="MESH,PHARMACTIONLIST,ACTIVITY
 #* @param id The UUID of the enrichment process to download.
 #* @get /download
 function(id="-1", res) {
-    # async
-    future_promise({
-        fName <- paste0(APP_DIR, OUT_DIR, id, "/tox21enricher_", id, ".zip")
-        if(file.exists(fName)){
-            readBin(fName, 'raw', n=file.info(fName)$size)  
-        } else {
-            return(paste0("The supplied request ", id, " does not exist or has not completed yet. Please try again later."))
-        }
-    })
-}
-
-#* Download individual enrichment result files for a given uuid
-#* @serializer contentType list(type="application/zip")
-#* @param id The UUID of the enrichment process to download.
-#* @param filename The name of the file to download.
-#* @get /downloadResultFile
-function(id="-1", filename="", res) {
     # async
     future_promise({
         fName <- paste0(APP_DIR, OUT_DIR, id, "/tox21enricher_", id, ".zip")
