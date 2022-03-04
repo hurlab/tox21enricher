@@ -425,7 +425,6 @@ performEnrichment <- function(enrichmentUUID="-1", annoSelectStr="MESH=checked,P
 }
 
 ## SUBROUTINES
-
 # Generate individual GCT files
 process_variable_DAVID_CHART_directories_individual_file <- function(inputDirName, dirName, outputDir, extTag, additionalFileName, sigColumn, sigCutOff, valueColumn, CASRN2Name) {
     # Load the input file
@@ -454,7 +453,6 @@ process_variable_DAVID_CHART_directories_individual_file <- function(inputDirNam
     
     # Step1. Get the list of significant terms
     mclapply(infiles, mc.cores=CORES, mc.silent=FALSE, function(infile){
-    #lapply(infiles, function(infile){
         tmp1 <- unlist(str_split(infile, "/"))
         tmp1[length(tmp1[[1]])] <- gsub(".txt", "", tmp1[[1]][length(tmp1[[1]])])
         tmp2 <- tmp1
@@ -492,7 +490,6 @@ process_variable_DAVID_CHART_directories_individual_file <- function(inputDirNam
             # Remove null elements
             term2pvalue <- lapply(term2pvalue, function(innerList) innerList[vapply(innerList, length, FUN.VALUE=numeric(1)) > 0])
             term2pvalue <- term2pvalue[!vapply(term2pvalue, is.null, FUN.VALUE=logical(1))]
-            
             nameListTerm2pvalue <- lapply(seq_len(nrow(DATA)), function(line){
                 tmpSplit <- vector("list", 13)
                 tmpSplit[1] <- as.character(DATA[line, "Category"])
@@ -524,20 +521,21 @@ process_variable_DAVID_CHART_directories_individual_file <- function(inputDirNam
             names(term2pvalue) <- nameListTerm2pvalue
             
             CASRN2TermMatrix_lv1 <- lapply(seq_len(nrow(DATA)), function(line){
-                tmpSplit <- vector("list", 13)
-                tmpSplit[1] <- as.character(DATA[line, "Category"])
-                tmpSplit[2] <- as.character(DATA[line, "Term"])
-                tmpSplit[3] <- as.character(DATA[line, "Count"])
-                tmpSplit[4] <- as.character(DATA[line, "X."])
-                tmpSplit[5] <- as.character(DATA[line, "PValue"])
-                tmpSplit[6] <- as.character(DATA[line, "CASRNs"])
-                tmpSplit[7] <- as.character(DATA[line, "List.Total"])
-                tmpSplit[8] <- as.character(DATA[line, "Pop.Hits"])
-                tmpSplit[9] <- as.character(DATA[line, "Pop.Total"])
-                tmpSplit[10] <- as.character(DATA[line, "Fold.Enrichment"])
-                tmpSplit[11] <- as.character(DATA[line, "Bonferroni"])
-                tmpSplit[12] <- as.character(DATA[line, "Benjamini"])
-                tmpSplit[13] <- as.character(DATA[line, "FDR"])
+                tmpSplit <- list(
+                    as.character(DATA[line, "Category"]), 
+                    as.character(DATA[line, "Term"]),
+                    as.character(DATA[line, "Count"]),
+                    as.character(DATA[line, "X."]),
+                    as.character(DATA[line, "PValue"]),
+                    as.character(DATA[line, "CASRNs"]),
+                    as.character(DATA[line, "List.Total"]),
+                    as.character(DATA[line, "Pop.Hits"]),
+                    as.character(DATA[line, "Pop.Total"]),
+                    as.character(DATA[line, "Fold.Enrichment"]),
+                    as.character(DATA[line, "Bonferroni"]),
+                    as.character(DATA[line, "Benjamini"]),
+                    as.character(DATA[line, "FDR"])
+                )
                 if ( grepl("^\\D", tmpSplit[[sigColumnIndex]]) | as.double(tmpSplit[[sigColumnIndex]]) >= sigCutOff | as.double(tmpSplit[[10]]) < 1) {
                     # skip
                 } else {
@@ -549,15 +547,12 @@ process_variable_DAVID_CHART_directories_individual_file <- function(inputDirNam
                     return(CASRN2TermMatrix_lv1_tmp)
                 }
             })
-            
             #Get not null elements
             CASRN2TermMatrix_lv2 <- CASRN2TermMatrix_lv1[!vapply(CASRN2TermMatrix_lv1, is.null, FUN.VALUE=logical(1))]
             CASRN2TermMatrix_lv2 <- unlist(CASRN2TermMatrix_lv2, recursive=FALSE)
-            
             # Merge same names
             CASRN2TermMatrix <- lapply(unique(names(CASRN2TermMatrix_lv2)), function(x) unlist(unname(CASRN2TermMatrix_lv2[names(CASRN2TermMatrix_lv2) %in% x])))
             names(CASRN2TermMatrix) <- unique(names(CASRN2TermMatrix_lv2))
-            
             # Now create new output files
             setFileName <- gsub(".txt", "", tmp2[length(tmp2)])
             OUTFILE <- file(paste0(outputDir, setFileName, ".gct"))
@@ -674,11 +669,10 @@ create_clustering_images <- function(outDir="", imageFlags="-color=BR"){
     baseSubDirs <- baseSubDirs[!vapply(baseSubDirs, is.null, FUN.VALUE=logical(1))]
     
     # Perform HClustering
-    perform_hclustering_per_directory (dirName, '', outputBaseDir, dirTypeTag, libDir, cluster_program, row_distance_measure, column_distance_measure, clustering_method, java_flags, output_format, column_size, row_size, show_grid, grid_color, show_row_description, show_row_names, row_to_highlight, row_highlight_color, color_scheme, color_palette, use_color_gradient)
+    perform_hclustering_per_directory(dirName, '', outputBaseDir, dirTypeTag, libDir, cluster_program, row_distance_measure, column_distance_measure, clustering_method, java_flags, output_format, column_size, row_size, show_grid, grid_color, show_row_description, show_row_names, row_to_highlight, row_highlight_color, color_scheme, color_palette, use_color_gradient)
     if (!is.null(baseSubDirs[1])){
-        #performHclusteringForEach <- mclapply(baseSubDirs, mc.cores=CORES, mc.silent=FALSE, function(x){
-        performHclusteringForEach <- lapply(baseSubDirs, function(x){
-            perform_hclustering_per_directory (paste0(dirName, '/', x, baseShortDirName, '/'), outputBaseDir, dirTypeTag, libDir, cluster_program, row_distance_measure, column_distance_measure, clustering_method, java_flags, output_format, column_size, row_size, show_grid, grid_color, show_row_description, show_row_names, row_to_highlight, row_highlight_color, color_scheme, color_palette, use_color_gradient)
+        performHclusteringForEach <- mclapply(baseSubDirs, mc.cores=CORES, mc.silent=FALSE, function(x){
+            perform_hclustering_per_directory(paste0(dirName, '/', x, baseShortDirName, '/'), outputBaseDir, dirTypeTag, libDir, cluster_program, row_distance_measure, column_distance_measure, clustering_method, java_flags, output_format, column_size, row_size, show_grid, grid_color, show_row_description, show_row_names, row_to_highlight, row_highlight_color, color_scheme, color_palette, use_color_gradient)
         })
     }
     print("! COMPLETE ...")
@@ -694,17 +688,13 @@ perform_hclustering_per_directory <- function(givenDirName, additionalDirName, o
     baseDirName <- tmp1[length(tmp1)]
     outputDir <- paste0(outputBaseDir, '/')
     create_sub_directory(outputDir) # create subdirectories
-    #generateImagesProcess <- mclapply (gctFiles, function(infile){
     generateImagesProcess <- lapply (gctFiles, function(infile){
         tmp1 <- unlist(str_split(infile, "/"))
         tmp1 <- tmp1[nchar(tmp1) > 0]
         tmp2 <- unlist(str_split(tmp1[length(tmp1)], ".gct"))
         tmp2 <- tmp2[nchar(tmp2) > 0]
         # Check gct file content and skip if there is less than 2 entries
-        if(!check_gct_contains_more_than_two_lines(infile)){
-            # Do nothing
-        }
-        else {
+        if(check_gct_contains_more_than_two_lines(infile)) {
             output_base_name <- paste0(outputDir, dirTypeTag, tmp2[1])
             shorter_base_name <- paste0(outputDir, dirTypeTag, tmp2[1])
             cluster_input_file <- paste0(shorter_base_name, ".txt")
@@ -783,9 +773,7 @@ create_david_chart_cluster <- function(baseDirName="", topTermLimit=10, mode="AL
         baseShortDirName <- paste0(baseNameSplit[length(baseNameSplit)], '/')
     }
     baseOutputDir <- paste0(baseDirName, '/gct/')
-    if (dir.exists(baseOutputDir)) {
-        # do nothing if directory already exists (i.e., we are regenerating the network)
-    } else {
+    if (!dir.exists(baseOutputDir)) { # Do nothing if directory already exists (i.e., we are regenerating the network)
         # else create the directory if this is the first time we are dealing with this data set
         print(paste0("No directory found for ", baseOutputDir, ". Creating..."))
         dir.create(baseOutputDir)
@@ -796,16 +784,10 @@ create_david_chart_cluster <- function(baseDirName="", topTermLimit=10, mode="AL
     classID2className <- lapply(seq_len(nrow(outpClasses)), function(line) outpClasses[line, "annoclassname"])
     names(classID2className) <- lapply(seq_len(nrow(outpClasses)), function(line) outpClasses[line, "annoclassid"])
     classID2annotationTerm2termUniqueID_lv1 <- lapply(split(outpAnnoDetail, outpAnnoDetail$annoclassid), function(x) split(x, x$annoterm))
-    classID2annotationTerm2termUniqueID <- lapply(classID2annotationTerm2termUniqueID_lv1, function(x) {
-        return(lapply(x, function(y) {
-            inner_classID2annotationTerm2termUniqueID <- lapply(y$annotermid, function(z) y$annotermid)
-            names(inner_classID2annotationTerm2termUniqueID) <- y$annotermid
-            return(inner_classID2annotationTerm2termUniqueID)
-        }))
-    })
+    classID2annotationTerm2termUniqueID <- lapply(classID2annotationTerm2termUniqueID_lv1, function(x) lapply(x, function(y) y$annotermid))
     # Enumerate all possible directories
-    process_variable_DAVID_CHART_directories (baseDirName, baseOutputDir, "", "", topTermLimit, mode, sigColumnName, sigCutoff, valueColumnName, className2classID, classID2annotationTerm2termUniqueID)
-    process_variable_DAVID_CLUSTER_directories (baseDirName, baseOutputDir, "", "", topTermLimit, mode, sigColumnName, sigCutoff, valueColumnName, className2classID, classID2annotationTerm2termUniqueID)
+    process_variable_DAVID_CHART_directories(baseDirName, baseOutputDir, "", "", topTermLimit, mode, sigColumnName, sigCutoff, valueColumnName, className2classID, classID2annotationTerm2termUniqueID)
+    process_variable_DAVID_CLUSTER_directories(baseDirName, baseOutputDir, "", "", topTermLimit, mode, sigColumnName, sigCutoff, valueColumnName, className2classID, classID2annotationTerm2termUniqueID)
 }
 
 process_variable_DAVID_CLUSTER_directories <- function(dirName, outputDir, extTag, additionalFileName, topTermLimit, mode, sigColumnName, sigCutoff, valueColumnName, className2classID, classID2annotationTerm2termUniqueID){
@@ -1818,7 +1800,7 @@ kappa_cluster <- function(x, deg=NULL, useTerm=FALSE, cutoff=0.5, overlap=0.5, m
         return(FALSE)
     }
     # Merge terms to generate final groups
-    res <- merge_term(ml, overlap)
+    res <- merge_term(ml, overlap, multipleLinkageThreshold)
     # Return null if we can't generate any clusters
     if (length(res) < 1){
         return(NULL)
@@ -1878,48 +1860,55 @@ kappa_cluster <- function(x, deg=NULL, useTerm=FALSE, cutoff=0.5, overlap=0.5, m
 }
 
 # Merge terms to create clusters
-merge_term <- function(remainingSeeds, overlap){
-    # TODO: make this more efficient 
-    if(length(remainingSeeds) > 0){
-        remainingSeedsMatrix <- expand.grid(seq_len(length(remainingSeeds)), seq_len(length(remainingSeeds)), stringsAsFactors=FALSE)
-        outer <- 0
-        remainingSeedsMatrix$newloop <- lapply(seq_len(nrow(remainingSeedsMatrix)), function(i){
-            if(remainingSeedsMatrix[i, "Var2"] != outer){
-                outer <<- remainingSeedsMatrix[i, "Var2"]
-                return(TRUE)
-            }
-            return(FALSE)
-        })
-        finalGroups <- lapply(seq_len(nrow(remainingSeedsMatrix)), function(i){
-            if(length(remainingSeeds) < 1){
+merge_term <- function(x, overlap, multipleLinkageThreshold){
+    ml <- x
+    names(ml) <- lapply(ml, function(x) x[1])
+    
+    #res <- lapply(names(ml), function(i){
+    #    curr <- ml[[i]]
+    #    lhs <- setdiff(head(names(ml), -1), i)
+    #    for(j in lhs){
+    #        ovl <- 2 * length(intersect(curr, ml[[j]])) / (length(curr) + length(ml[[j]]))
+    #        if(ovl > multipleLinkageThreshold){
+    #            curr <- union(curr, ml[[j]])
+    #            ml <<- ml[setdiff(names(ml), j)]
+    #        }
+    #    }
+    #    return(sort(curr))
+    #})
+    
+    #DEBUG
+    res <- lapply(names(ml), function(i){
+        curr <- ml[[i]]
+        lhs <- setdiff(head(names(ml), -1), i)
+        while(TRUE){
+            bestovl <- 0
+            bestindex <- unlist(lapply(lhs, function(j){
+                ovl <- 2 * length(intersect(curr, ml[[j]])) / (length(curr) + length(ml[[j]]))
+                if(ovl > multipleLinkageThreshold & ovl > bestovl){
+                    bestovl <<- ovl
+                    return(j)
+                }
                 return(NULL)
+            }))
+            bestindex <- bestindex[!vapply(bestindex, is.null, FUN.VALUE=logical(1))]
+            if(length(bestindex) < 1){
+                break
             }
-            if(remainingSeedsMatrix[i, "newloop"] == TRUE){
-                currentSeedRef <<- remainingSeeds[[1]]
-                remainingSeeds <<- remainingSeeds[-1]
-            }
-            results_get_the_best_seed <- get_the_best_seed(currentSeedRef, remainingSeeds, newSeeds, overlap)
-            # update the current reference seed ref with new seeds
-            remainingSeeds <<- results_get_the_best_seed[["remainingSeedsRef"]]
-            newSeeds <<- results_get_the_best_seed[["newSeedRef"]]
-            seedStatus <<- results_get_the_best_seed[["finished"]]
-            if(seedStatus == 0) {
-                # if there is no more merging possible, add the current seeds to the final groups
-                return(currentSeedRef)
-            } else {
-                currentSeedRef <<- newSeeds
-                return(NULL)
-            }
-        })
-        finalGroups <- unique(finalGroups[!vapply(finalGroups, is.null, FUN.VALUE=logical(1))])
-        return(finalGroups)
-    }
+            bestindex <- bestindex[length(bestindex)] # get the highest overlap group
+            curr <- union(curr, ml[[bestindex]])
+            ml <<- ml[setdiff(names(ml), bestindex)]
+        }
+        return(sort(curr))
+    })
+    res <- unname(unique(res[!vapply(res, is.null, FUN.VALUE=logical(1))]))
+    return(res)
 }
 
 calculate_Enrichment_Score <- function(x, df){
     pvalue <- df[x, "PValue"]
     esp <- ifelse(pvalue == 0, 16, (-log(pvalue) / log(10)))
-    es <- sum(esp) / length(df[x,])
+    es <- as.double(formatC((sum(esp) / length(df[x,])), format="e", digits=3))
     return(es)
 }
 
@@ -3567,7 +3556,7 @@ submit <- function(mode="", input="", annotations="MESH,PHARMACTIONLIST,ACTIVITY
         return("Error: Cutoff value is not a number.")
     }
     # Check if cutoff is not an integer
-    if(cutoff%%1 != 0){
+    if(cutoff %% 1 != 0){
         return("Error: Cutoff value is not an integer.")
     }
     # Check if cutoff is out of range
