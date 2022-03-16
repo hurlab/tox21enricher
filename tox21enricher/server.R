@@ -528,12 +528,12 @@ shinyServer(function(input, output, session) {
                 formattedModes <- unlist(lapply(seq_len(nrow(prevRequestInfoList)), function(i){
                     if(prevRequestInfoList[i, "original_mode"] == "similarity" & prevRequestInfoList[i, "mode"] == "similarity") {
                         return("Enrich from chemicals with structural similarity")
-                    } else if(prevRequestInfoList[i, "original_mode"] != "similarity" & prevRequestInfoList[i, "mode"] == "similarity") {
+                    } else if(prevRequestInfoList[i, "original_mode"] != "similarity" & prevRequestInfoList[i, "mode"] == "casrn") {
                         return("Re-enrich from chemicals with structural similarity")
                     } else if(prevRequestInfoList[i, "original_mode"] == "substructure" & prevRequestInfoList[i, "mode"] == "substructure") {
                         return("Enrich from chemicals with shared substructures")
-                    } else if(prevRequestInfoList[i, "original_mode"] != "substructure" & prevRequestInfoList[i, "mode"] == "substructure") {
-                        return("Enrich from chemicals with shared substructures")
+                    } else if(prevRequestInfoList[i, "original_mode"] != "substructure" & prevRequestInfoList[i, "mode"] == "casrn") {
+                        return("Re-enrich from chemicals with shared substructures")
                     } else if(prevRequestInfoList[i, "original_mode"] == "annotation" & prevRequestInfoList[i, "mode"] == "annotation") {
                         return("View annotations for Tox21 chemicals")
                     } else if(prevRequestInfoList[i, "original_mode"] == "casrn" & prevRequestInfoList[i, "mode"] == "casrn") {
@@ -627,7 +627,7 @@ shinyServer(function(input, output, session) {
                             } 
                             # Get initial queue position
                             initQueuePos <- -1
-                            resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="getQueuePos", query=list(transactionId=transactionId))
+                            resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="getQueuePos", query=list(transactionId=transactionId, mode="init"))
                             if(resp$status_code != 200) {
                                 showNotification("Error: Could not fetch queue position for this request.", type="error")
                             } else {
@@ -713,71 +713,59 @@ shinyServer(function(input, output, session) {
                             badConnectionFlag <- NULL
                             if(originalEnrichModeList$originalEnrichMode == "substructure" | originalEnrichModeList$originalEnrichMode == "similarity"){
                                 reenrichResults <- lapply(seq_len(length(enrichmentSets)), function(casrnSet){
-                                    innerCasrnSet <- vapply(enrichmentSets[[casrnSet]], function(casrn){
-                                        if(originalEnrichModeList$originalEnrichMode == "substructure"){
-                                            # Query API to get list of annotation classes and types
-                                            resp <- NULL
-                                            trySubstructure <- tryCatch({
-                                                resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="searchBySubstructure", query=list(input=casrn, reenrich=TRUE))
-                                                if(resp$status_code != 200){
-                                                    return(FALSE)
-                                                }
-                                                TRUE
-                                            }, error=function(cond){
-                                                return(FALSE)
-                                            })
-                                            if(!trySubstructure){
-                                                showNotification("Error: The application cannot connect to the Tox21 Enricher server. Please try again later.", type="error")
-                                                return(FALSE)
-                                            }
-                                            outputSubCasrns <- unlist(lapply(content(resp), function(x) x$casrn))
-                                            outputSubM <- unlist(lapply(content(resp), function(x) x$m))
-                                            outputSubCyanide <- unlist(lapply(content(resp), function(x) x$cyanide))
-                                            outputSubIsocyanate <- unlist(lapply(content(resp), function(x) x$isocyanate))
-                                            outputSubAldehyde <- unlist(lapply(content(resp), function(x) x$aldehyde))
-                                            outputSubEpoxide <- unlist(lapply(content(resp), function(x) x$epoxide))
-                                            outpReenrichCasrns <- c(casrn=outputSubCasrns, m=outputSubM, similarity=NA, cyanide=outputSubCyanide, isocyanate=outputSubIsocyanate, aldehyde=outputSubAldehyde, epoxide=outputSubEpoxide)
-                                            return(outpReenrichCasrns)
-                                        } else if(originalEnrichModeList$originalEnrichMode == "similarity"){
-                                            # Set Tanimoto threshold for similarity search
-                                            threshold <- as.numeric(input$tanimotoThreshold)/100
-                                            resp <- NULL
-                                            trySimilarity <- tryCatch({
-                                                resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="searchBySimilarity", query=list(input=originalNamesToReturn[[names(enrichmentSets)[[casrnSet]]]], threshold=threshold))
-                                                TRUE
-                                            }, error=function(cond){
-                                                return(FALSE)
-                                            })
-                                            if(!trySimilarity){
-                                                showNotification("Error: The application cannot connect to the Tox21 Enricher server. Please try again later.", type="error")
-                                                return(FALSE)
-                                            }
+                                    if(originalEnrichModeList$originalEnrichMode == "substructure"){
+                                        # Query API to get list of annotation classes and types
+                                        resp <- NULL
+                                        trySubstructure <- tryCatch({
+                                            resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="searchBySubstructure", query=list(input=originalNamesToReturn[[names(enrichmentSets)[casrnSet]]]))
                                             if(resp$status_code != 200){
-                                                return(NULL)
+                                                return(FALSE)
                                             }
-                                            outputSimCasrns <- unlist(lapply(content(resp), function(x) x$casrn))
-                                            outputSimM <- unlist(lapply(content(resp), function(x) x$m))
-                                            outputSimSimilarity <- unlist(lapply(content(resp), function(x) x$similarity))
-                                            outputSimCyanide <- unlist(lapply(content(resp), function(x) x$cyanide))
-                                            outputSimIsocyanate <- unlist(lapply(content(resp), function(x) x$isocyanate))
-                                            outputSimAldehyde <- unlist(lapply(content(resp), function(x) x$aldehyde))
-                                            outputSimEpoxide <- unlist(lapply(content(resp), function(x) x$epoxide))
-                                            reenrichSimilarityResults <- data.frame(casrn=outputSimCasrns, m=outputSimM, similarity=outputSimSimilarity, cyanide=outputSimCyanide, isocyanate=outputSimIsocyanate, aldehyde=outputSimAldehyde, epoxide=outputSimEpoxide, stringsAsFactors=FALSE)
-                                            reenrichSimilarityResultsReturn <- unlist(vapply(seq_len(nrow(reenrichSimilarityResults)), function(j){
-                                                if(reenrichSimilarityResults[j, "casrn"] == casrn) {
-                                                    return(reenrichSimilarityResults[j, ])
-                                                } else {
-                                                    return(list(NULL, NULL, NULL, NULL, NULL, NULL, NULL))
-                                                }
-                                            }, FUN.VALUE=list(1, 2, 3, 4, 5, 6, 7))) # 7 because that's the number of columns with similarity: casrn, m, similarity, cyanide, isocyanate, aldehyde, epoxide. Will have to not hardcode this value if we add more reactive structures
-                                            reenrichSimilarityResultsReturn <- reenrichSimilarityResultsReturn[!vapply(reenrichSimilarityResultsReturn, is.null, FUN.VALUE=logical(1))]
-                                            names(reenrichSimilarityResultsReturn) <- list("casrn", "m", "similarity", "cyanide", "isocyanate", "aldehyde", "epoxide")
-                                            return(reenrichSimilarityResultsReturn)
+                                            TRUE
+                                        }, error=function(cond){
+                                            return(FALSE)
+                                        })
+                                        if(!trySubstructure){
+                                            showNotification("Error: The application cannot connect to the Tox21 Enricher server. Please try again later.", type="error")
+                                            return(FALSE)
                                         }
-                                    }, FUN.VALUE=character(7)) # 7 because that's the number of columns with similarity: casrn, m, similarity, cyanide, isocyanate, aldehyde, epoxide. Will have to not hardcode this value if we add more reactive structures
-                                    innerCasrnSet <- as.data.frame(t(innerCasrnSet), stringsAsFactors=FALSE)
-                                    row.names(innerCasrnSet) <- seq_len(nrow(innerCasrnSet))
-                                    return(innerCasrnSet)
+                                        outputSubCasrns <- unlist(lapply(content(resp), function(x) x$casrn))
+                                        outputSubM <- unlist(lapply(content(resp), function(x) x$m))
+                                        outputSubCyanide <- unlist(lapply(content(resp), function(x) x$cyanide))
+                                        outputSubIsocyanate <- unlist(lapply(content(resp), function(x) x$isocyanate))
+                                        outputSubAldehyde <- unlist(lapply(content(resp), function(x) x$aldehyde))
+                                        outputSubEpoxide <- unlist(lapply(content(resp), function(x) x$epoxide))
+                                        reenrichSubstructureResults <- data.frame(casrn=outputSubCasrns, m=outputSubM, similarity=NA, cyanide=outputSubCyanide, isocyanate=outputSubIsocyanate, aldehyde=outputSubAldehyde, epoxide=outputSubEpoxide, stringsAsFactors=FALSE)
+                                        reenrichSubstructureResults <- reenrichSubstructureResults[reenrichSubstructureResults$casrn %in% enrichmentSets[[casrnSet]], ]
+                                        return(reenrichSubstructureResults)
+                                    } else if(originalEnrichModeList$originalEnrichMode == "similarity"){
+                                        # Set Tanimoto threshold for similarity search
+                                        threshold <- as.numeric(input$tanimotoThreshold) / 100
+                                        resp <- NULL
+                                        trySimilarity <- tryCatch({
+                                            resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="searchBySimilarity", query=list(input=originalNamesToReturn[[names(enrichmentSets)[casrnSet]]], threshold=threshold))
+                                            TRUE
+                                        }, error=function(cond){
+                                            return(FALSE)
+                                        })
+                                        if(!trySimilarity){
+                                            showNotification("Error: The application cannot connect to the Tox21 Enricher server. Please try again later.", type="error")
+                                            return(FALSE)
+                                        }
+                                        if(resp$status_code != 200){
+                                            return(NULL)
+                                        }
+                                        outputSimCasrns <- unlist(lapply(content(resp), function(x) x$casrn))
+                                        outputSimM <- unlist(lapply(content(resp), function(x) x$m))
+                                        outputSimSimilarity <- unlist(lapply(content(resp), function(x) x$similarity))
+                                        outputSimCyanide <- unlist(lapply(content(resp), function(x) x$cyanide))
+                                        outputSimIsocyanate <- unlist(lapply(content(resp), function(x) x$isocyanate))
+                                        outputSimAldehyde <- unlist(lapply(content(resp), function(x) x$aldehyde))
+                                        outputSimEpoxide <- unlist(lapply(content(resp), function(x) x$epoxide))
+                                        reenrichSimilarityResults <- data.frame(casrn=outputSimCasrns, m=outputSimM, similarity=outputSimSimilarity, cyanide=outputSimCyanide, isocyanate=outputSimIsocyanate, aldehyde=outputSimAldehyde, epoxide=outputSimEpoxide, stringsAsFactors=FALSE)
+                                        reenrichSimilarityResults <- reenrichSimilarityResults[reenrichSimilarityResults$casrn %in% enrichmentSets[[casrnSet]], ]
+                                        return(reenrichSimilarityResults)
+                                    }
                                 })
                                 names(reenrichResults) <- names(enrichmentSets)
                             } else {
@@ -790,7 +778,7 @@ shinyServer(function(input, output, session) {
                                         if (enrichmentType$enrichType == "substructure") {
                                             resp <- NULL
                                             trySubstructure <- tryCatch({
-                                                resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="searchBySubstructure", query=list(input=setName, reenrich=FALSE))
+                                                resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="searchBySubstructure", query=list(input=setName))
                                                 if(resp$status_code != 200){
                                                     return(FALSE)
                                                 }
@@ -1357,7 +1345,7 @@ shinyServer(function(input, output, session) {
             shinyjs::enable(id="nodeCutoff")
             shinyjs::enable(id="includeChemsWithWarnings")
             output[["inputInstructions"]] <- renderUI(
-                p("Enter partial or complete SMILES or InChI strings, one per line.")
+                HTML(paste0("Enter partial or complete SMILES or InChI strings, one per line. <div class='text-warning'>Warning: Chemicals that contain metals may not produce expected results.</div>"))
             )
         }
     })
@@ -1429,8 +1417,6 @@ shinyServer(function(input, output, session) {
             selectLargeStatus$option <- "deselect"
         }
     })
-    
-    
     
     # Provide CASRNs example set (single) when button is clicked
     observeEvent(input$example_casrns, {
@@ -1760,75 +1746,63 @@ shinyServer(function(input, output, session) {
                 names(enrichmentSets) <- list("Set1")
             }
             # Remove empty elements
-            enrichmentSets <- lapply(enrichmentSets, function(i) return(i[lapply(i, nchar) > 0]))
+            enrichmentSets <- lapply(enrichmentSets, function(i) i[lapply(i, nchar) > 0])
             # If re-enriching, create reenrichResults list
             if(originalEnrichModeList$originalEnrichMode == "substructure" | originalEnrichModeList$originalEnrichMode == "similarity"){
                 reenrichResults <- lapply(seq_len(length(enrichmentSets)), function(casrnSet){
-                    innerCasrnSet <- vapply(enrichmentSets[[casrnSet]], function(casrn){
-                        if(originalEnrichModeList$originalEnrichMode == "substructure"){
-                            # Query API to get list of annotation classes and types
-                            resp <- NULL
-                            trySubstructure <- tryCatch({
-                                resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="searchBySubstructure", query=list(input=casrn, reenrich=TRUE))
-                                if(resp$status_code != 200){
-                                    return(FALSE)
-                                }
-                                TRUE
-                            }, error=function(cond){
-                                return(FALSE)
-                            })
-                            if(!trySubstructure){
-                                showNotification("Error: The application cannot connect to the Tox21 Enricher server. Please try again later.", type="error")
-                                return(FALSE)
-                            }
-                            outputSubCasrns <- unlist(lapply(content(resp), function(x) x$casrn))
-                            outputSubM <- unlist(lapply(content(resp), function(x) x$m))
-                            outputSubCyanide <- unlist(lapply(content(resp), function(x) x$cyanide))
-                            outputSubIsocyanate <- unlist(lapply(content(resp), function(x) x$isocyanate))
-                            outputSubAldehyde <- unlist(lapply(content(resp), function(x) x$aldehyde))
-                            outputSubEpoxide <- unlist(lapply(content(resp), function(x) x$epoxide))
-                            outpReenrichCasrns <- c(casrn=outputSubCasrns, m=outputSubM, similarity=NA, cyanide=outputSubCyanide, isocyanate=outputSubIsocyanate, aldehyde=outputSubAldehyde, epoxide=outputSubEpoxide)
-                            return(outpReenrichCasrns)
-                        } else if(originalEnrichModeList$originalEnrichMode == "similarity"){
-                            # Set Tanimoto threshold for similarity search
-                            threshold <- as.numeric(input$tanimotoThreshold)/100
-                            resp <- NULL
-                            trySimilarity <- tryCatch({
-                                resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="searchBySimilarity", query=list(input=originalNamesToReturn[[names(enrichmentSets)[casrnSet]]], threshold=threshold))
-                                TRUE
-                            }, error=function(cond){
-                                return(FALSE)
-                            })
-                            if(!trySimilarity){
-                                showNotification("Error: The application cannot connect to the Tox21 Enricher server. Please try again later.", type="error")
-                                return(FALSE)
-                            }
+                    if(originalEnrichModeList$originalEnrichMode == "substructure"){
+                        # Query API to get list of annotation classes and types
+                        resp <- NULL
+                        trySubstructure <- tryCatch({
+                            resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="searchBySubstructure", query=list(input=originalNamesToReturn[[names(enrichmentSets)[casrnSet]]]))
                             if(resp$status_code != 200){
-                                return(NULL)
+                                return(FALSE)
                             }
-                            outputSimCasrns <- unlist(lapply(content(resp), function(x) x$casrn))
-                            outputSimM <- unlist(lapply(content(resp), function(x) x$m))
-                            outputSimSimilarity <- unlist(lapply(content(resp), function(x) x$similarity))
-                            outputSimCyanide <- unlist(lapply(content(resp), function(x) x$cyanide))
-                            outputSimIsocyanate <- unlist(lapply(content(resp), function(x) x$isocyanate))
-                            outputSimAldehyde <- unlist(lapply(content(resp), function(x) x$aldehyde))
-                            outputSimEpoxide <- unlist(lapply(content(resp), function(x) x$epoxide))
-                            reenrichSimilarityResults <- data.frame(casrn=outputSimCasrns, m=outputSimM, similarity=outputSimSimilarity, cyanide=outputSimCyanide, isocyanate=outputSimIsocyanate, aldehyde=outputSimAldehyde, epoxide=outputSimEpoxide, stringsAsFactors=FALSE)
-                            reenrichSimilarityResultsReturn <- unlist(vapply(seq_len(nrow(reenrichSimilarityResults)), function(j){
-                                if(reenrichSimilarityResults[j, "casrn"] == casrn) {
-                                    return(reenrichSimilarityResults[j, ])
-                                } else {
-                                    return(list(NULL, NULL, NULL, NULL, NULL, NULL, NULL))
-                                }
-                            }, FUN.VALUE=list(1, 2, 3, 4, 5, 6, 7))) # 7 because that's the number of columns with similarity: casrn, m, similarity, cyanide, isocyanate, aldehyde, epoxide. Will have to not hardcode this value if we add more reactive structures
-                            reenrichSimilarityResultsReturn <- reenrichSimilarityResultsReturn[!vapply(reenrichSimilarityResultsReturn, is.null, FUN.VALUE=logical(1))]
-                            names(reenrichSimilarityResultsReturn) <- list("casrn", "m", "similarity", "cyanide", "isocyanate", "aldehyde", "epoxide")
-                            return(reenrichSimilarityResultsReturn)
+                            TRUE
+                        }, error=function(cond){
+                            return(FALSE)
+                        })
+                        if(!trySubstructure){
+                            showNotification("Error: The application cannot connect to the Tox21 Enricher server. Please try again later.", type="error")
+                            return(FALSE)
                         }
-                    }, FUN.VALUE=character(7)) # 7 because that's the number of columns with similarity: casrn, m, similarity, cyanide, isocyanate, aldehyde, epoxide. Will have to not hardcode this value if we add more reactive structures
-                    innerCasrnSet <- as.data.frame(t(innerCasrnSet), stringsAsFactors=FALSE)
-                    row.names(innerCasrnSet) <- seq_len(nrow(innerCasrnSet))
-                    return(innerCasrnSet)
+                        outputSubCasrns <- unlist(lapply(content(resp), function(x) x$casrn))
+                        outputSubM <- unlist(lapply(content(resp), function(x) x$m))
+                        outputSubCyanide <- unlist(lapply(content(resp), function(x) x$cyanide))
+                        outputSubIsocyanate <- unlist(lapply(content(resp), function(x) x$isocyanate))
+                        outputSubAldehyde <- unlist(lapply(content(resp), function(x) x$aldehyde))
+                        outputSubEpoxide <- unlist(lapply(content(resp), function(x) x$epoxide))
+                        reenrichSubstructureResults <- data.frame(casrn=outputSubCasrns, m=outputSubM, similarity=NA, cyanide=outputSubCyanide, isocyanate=outputSubIsocyanate, aldehyde=outputSubAldehyde, epoxide=outputSubEpoxide, stringsAsFactors=FALSE)
+                        reenrichSubstructureResults <- reenrichSubstructureResults[reenrichSubstructureResults$casrn %in% enrichmentSets[[casrnSet]], ]
+                        return(reenrichSubstructureResults)
+                    } else if(originalEnrichModeList$originalEnrichMode == "similarity"){
+                        # Set Tanimoto threshold for similarity search
+                        threshold <- as.numeric(input$tanimotoThreshold) / 100
+                        resp <- NULL
+                        trySimilarity <- tryCatch({
+                            resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="searchBySimilarity", query=list(input=originalNamesToReturn[[names(enrichmentSets)[casrnSet]]], threshold=threshold))
+                            TRUE
+                        }, error=function(cond){
+                            return(FALSE)
+                        })
+                        if(!trySimilarity){
+                            showNotification("Error: The application cannot connect to the Tox21 Enricher server. Please try again later.", type="error")
+                            return(FALSE)
+                        }
+                        if(resp$status_code != 200){
+                            return(NULL)
+                        }
+                        outputSimCasrns <- unlist(lapply(content(resp), function(x) x$casrn))
+                        outputSimM <- unlist(lapply(content(resp), function(x) x$m))
+                        outputSimSimilarity <- unlist(lapply(content(resp), function(x) x$similarity))
+                        outputSimCyanide <- unlist(lapply(content(resp), function(x) x$cyanide))
+                        outputSimIsocyanate <- unlist(lapply(content(resp), function(x) x$isocyanate))
+                        outputSimAldehyde <- unlist(lapply(content(resp), function(x) x$aldehyde))
+                        outputSimEpoxide <- unlist(lapply(content(resp), function(x) x$epoxide))
+                        reenrichSimilarityResults <- data.frame(casrn=outputSimCasrns, m=outputSimM, similarity=outputSimSimilarity, cyanide=outputSimCyanide, isocyanate=outputSimIsocyanate, aldehyde=outputSimAldehyde, epoxide=outputSimEpoxide, stringsAsFactors=FALSE)
+                        reenrichSimilarityResults <- reenrichSimilarityResults[reenrichSimilarityResults$casrn %in% enrichmentSets[[casrnSet]], ]
+                        return(reenrichSimilarityResults)
+                    }
                 })
                 names(reenrichResults) <- names(enrichmentSets)
             }
@@ -1842,7 +1816,7 @@ shinyServer(function(input, output, session) {
                     if (enrichmentType$enrichType == "substructure") {
                         resp <- NULL
                         trySubstructure <- tryCatch({
-                            resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="searchBySubstructure", query=list(input=setName, reenrich=FALSE))
+                            resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="searchBySubstructure", query=list(input=setName))
                             if(resp$status_code != 200){
                                 return(FALSE)
                             }
@@ -1868,7 +1842,7 @@ shinyServer(function(input, output, session) {
                         outpSmiles <- data.frame(casrn=outputSubCasrns, m=outputSubM, cyanide=outputSubCyanide, isocyanate=outputSubIsocyanate, aldehyde=outputSubAldehyde, epoxide=outputSubEpoxide, stringsAsFactors=FALSE)
                     } else {
                         # Set Tanimoto threshold for similarity search
-                        threshold <- as.numeric(input$tanimotoThreshold)/100
+                        threshold <- as.numeric(input$tanimotoThreshold) / 100
                         resp <- NULL
                         trySimilarity <- tryCatch({
                             resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="searchBySimilarity", query=list(input=setName, threshold=threshold))
@@ -1994,7 +1968,7 @@ shinyServer(function(input, output, session) {
         annoSelectStrOther <- lapply (input$checkboxOther, function(i) paste0(i, "=checked,"))
         annoSelectStrOther <- paste0(annoSelectStrOther, collapse="")
         annoSelectStr <- paste0(annoSelectStrPubChem, annoSelectStrDrugMatrix, annoSelectStrDrugBank, annoSelectStrCTD, annoSelectStrOther)
-
+        
         # Convert enrichmentSets into a form that is API-friendly
         enrichmentSetsSanitized <- lapply(names(enrichmentSets), function(enrichmentSet) paste0(paste0(enrichmentSets[[enrichmentSet]], collapse=paste0("__", enrichmentSet, "\n")), "__", enrichmentSet))
         enrichmentSetsSanitized <- paste0(enrichmentSetsSanitized, collapse="\n")
@@ -2048,7 +2022,7 @@ shinyServer(function(input, output, session) {
                     enrichmentSets <- unlist(lapply(names(enrichmentSets), function(setName){
                         currentSet <- enrichmentSets[[setName]]
                         currentSetWarnings <- originalReactiveStructures[[setName]]
-                        relevantWarnings <- warningDF %>% filter(casrn %in% currentSet)
+                        relevantWarnings <- warningDF %>% filter(warningDF$casrn %in% currentSet)
                         rownames(relevantWarnings) <- relevantWarnings$casrn
                         relevantWarnings$casrn <- NULL # remove casrn column and set now names to casrns
                         CASRNsToKeep <- unlist(lapply(rownames(relevantWarnings), function(x){
@@ -2150,7 +2124,6 @@ shinyServer(function(input, output, session) {
         # Clean up colors to put into local file
         colorsToPrint <- lapply(seq_len(length(colorsAllSets)), function(i) paste0(names(colorsAllSets)[i], "__", colorsAllSets[i]))
         colorsToPrint <- paste0(colorsToPrint, collapse="|")
-
         if(length(enrichmentSets) > 0){ # only create input file and database entry if at least one good set
             # Send query to create transaction entry in database
             resp <- NULL
@@ -2234,7 +2207,7 @@ shinyServer(function(input, output, session) {
         
         # Get initial queue position
         initQueuePos <- -1
-        resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="getQueuePos", query=list(transactionId=transactionId))
+        resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="getQueuePos", query=list(transactionId=transactionId, mode="init"))
         if(resp$status_code != 200) {
             showNotification("Error: Could not fetch queue position for this request.", type="error")
         } else {
@@ -2465,7 +2438,6 @@ shinyServer(function(input, output, session) {
                     )
                 )
             })
-            
             # Fetch setFiles from server via API
             resp <- NULL
             tryResults <- tryCatch({
@@ -2867,7 +2839,8 @@ shinyServer(function(input, output, session) {
                                     value=paste0(i),
                                     uiOutput(paste0("outTab_", i)),
                                 )
-                            })))
+                                
+                            }))),
                         )
                     ),
                     fluidRow(
@@ -2932,7 +2905,7 @@ shinyServer(function(input, output, session) {
                 gctFile <- NULL
                 if(length(content(resp)) > 0){
                     # TODO: Clean this up!
-                    colLength <- length(content(resp)[[1]])-1 # number of columns -1 to remove column name
+                    colLength <- length(content(resp)[[1]]) - 1 # number of columns -1 to remove column name
                     gctFile <- vapply(content(resp), function(x){
                         gctFileInner <- unlist(vapply(names(x), function(y) {
                             if(y != "_row"){
@@ -2969,20 +2942,19 @@ shinyServer(function(input, output, session) {
                         gctFileInner <- gctFileInner[!vapply(gctFileInner, is.null, FUN.VALUE=logical(1))]
                         return(gctFileInner)
                     })))
-                    # coerce to data frame so we can name cols and rows
+                    # Coerce to data frame so we can name cols and rows and then transpose
                     gctFile <- as.data.frame(gctFile, stringsAsFactors=FALSE, check.names=FALSE)
-                    # only translate if more than 1 row
+                    # Only do this if more than 1 col
                     if(ncol(gctFile) > 1){
                         gctFile <- t(gctFile)
                     }
-                    # reformat columns (annotations) to put pvalues in scientific notation
+                    # Reformat columns (annotations) to put pvalues in scientific notation
                     colnames(gctFile) <- unlist(lapply(gctFileColNames, function(x){
                         colNameSplit <- unlist(str_split(x, " \\| ")) # split on vertical bar to separate term [1], annotation class [2], and pvalue [3]
                         return(paste0(colNameSplit[1], " | ", colNameSplit[2], " | ", formatC(as.numeric(colNameSplit[3]), format="e", digits=2)))
                     }))
                     rownames(gctFile) <- gctFileRowNames
                 }
-                
                 if(!is.null(gctFile)){
                     gctFileMatrix <- data.matrix(gctFile)
                     gctCASRNNames <- rownames(gctFile)
@@ -3508,7 +3480,6 @@ shinyServer(function(input, output, session) {
                         shinyjs::enable(id="refresh")
                         removeModal()
                     })
-                    
                     # Render result file links
                     output[[paste0("outTab_", i)]] <- renderUI(
                         column(12,
@@ -3598,7 +3569,6 @@ shinyServer(function(input, output, session) {
                         })
                         originalInputToDisplay <- originalInputToDisplay[!vapply(originalInputToDisplay, is.null, FUN.VALUE=logical(1))][1]
                     }
-                    
                     output[[paste0("outTab_", i)]] <- renderUI(
                         column(12,
                             tabPanel(paste0("tab_", i), 
@@ -3620,15 +3590,12 @@ shinyServer(function(input, output, session) {
                     )
                 }
             })
-            
             # Render reenrichment if Substructure or Similarity
             reenrichResultsTotalLength <- length(unlist(lapply(names(reenrichResults), function(i) unlist(reenrichResults[[i]][, "casrn"]))))
             reenrichResultsTotalLength <- reenrichResultsTotalLength + sum(unlist(lapply(names(reenrichResults), function(i) nrow(reenrichResults[[i]]))))
-            
             # Checkbox input to select chemicals for re-enrichment
             reenrichChoices <- lapply(names(reenrichResults), function(i) reenrichResults[[i]][, "casrn"])
             names(reenrichChoices) <- names(reenrichResults)
-          
             checkboxes <- lapply(names(reenrichChoices), function(reenrichSet){
                 tmp_checkboxes <- lapply(reenrichChoices[[reenrichSet]], function(x) checkboxInput(inputId=paste0(x, "__", reenrichSet), value=TRUE, label=NULL, width="4px"))
                 names(tmp_checkboxes) <- lapply(reenrichChoices[[reenrichSet]], function(x) paste0(x, "__", reenrichSet))
@@ -3638,7 +3605,7 @@ shinyServer(function(input, output, session) {
 
             # Set reactive value so we can access these checkboxes later
             checkboxList$checkboxes <- checkboxes
-            
+
             # Initialize empty list of svg images
             svgImagesList <- list()
             if (originalEnrichMode != "casrn") {
@@ -3688,21 +3655,21 @@ shinyServer(function(input, output, session) {
 
                     # Get additional information for each CASRN from database and add to table
                     expandedInfo <- t(vapply(reenrichResults[[i]][, "casrn"], function(casrn){
+                        dummy <- c("", "", "", "", "", "", "", "") # dummy list to return in case we have errors fetching data
                         resp <- NULL
                         tryCasrn <- tryCatch({
                             resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="getCasrnData", query=list(input=casrn))
                             TRUE
                         }, error=function(cond){
-                            return(FALSE)
+                            return(dummy)
                         })
                         if(!tryCasrn){
                             showNotification("Error: The application cannot connect to the Tox21 Enricher server. Please try again later.", type="error")
-                            return(FALSE)
+                            return(dummy)
                         }
                         if(resp$status_code != 200){
-                            return(NULL)
+                            return(dummy)
                         }
-                      
                         # Dynamically create matching observers for zoomed in views of chemical structures
                         chemDetail <- unlist(content(resp), recursive=FALSE)
                         outputTestsubstanceChemname <- chemDetail[["testsubstance_chemname"]]
@@ -3772,7 +3739,7 @@ shinyServer(function(input, output, session) {
                                         ),
                                         fluidRow(
                                             column(3, HTML("<b>Molecular Weight</b>")),
-                                            column(9, HTML(outputWeight))
+                                            column(9, HTML(round(as.numeric(outputWeight), digits=2)))
                                         ),
                                         fluidRow(
                                             column(3, HTML(paste0("<a href=\"https://comptox.epa.gov/dashboard/dsstoxdb/results?search=", outputDtxsid, "&abbreviation=TOX21SL\">View at EPA</a>"))),
@@ -3790,9 +3757,10 @@ shinyServer(function(input, output, session) {
                         infoOutp <- c("iupac_name"=outputIupac, "smiles"=outputSmiles, "dtxsid"=outputDtxsid, "dtxrid"=outputDtxrid, "mol_formula"=outputFormula, "mol_weight"=outputWeight, "inchis"=outputInchi, "inchikey"=outputInchikey)
                         return(infoOutp)
                     }, FUN.VALUE=character(8)))
-                    expandedInfo <- data.frame(expandedInfo)
+                    expandedInfo <- data.frame(expandedInfo, stringsAsFactors=FALSE)
                     row.names(expandedInfo) <- t(vapply(reenrichResults[[i]][, "casrn"], function(casrn) casrn, FUN.VALUE=character(1)))
-
+                    # Remove anything with missing information
+                    expandedInfo <- expandedInfo %>% filter(expandedInfo != "")
                     # Create final data frame
                     fullTableTmp <- t(vapply(row.names(expandedInfo), function(casrn){
                         fullTableTmpInner <- lapply(seq_len(nrow(reenrichResults[[i]])), function(row){
@@ -3871,9 +3839,9 @@ shinyServer(function(input, output, session) {
                     # Simplify reactive structure columns into one warning column
                     fullTableWarnings <- lapply(seq_len(nrow(fullTableTmp)), function(tableRow){
                         warningToDisplay <- ""
-                        nitrileCol <- fullTableTmp[tableRow, (ncol(fullTableTmp)-3)]
-                        isocyanateCol <- fullTableTmp[tableRow, (ncol(fullTableTmp)-2)]
-                        aldehydeCol <- fullTableTmp[tableRow, (ncol(fullTableTmp)-1)]
+                        nitrileCol <- fullTableTmp[tableRow, (ncol(fullTableTmp) - 3)]
+                        isocyanateCol <- fullTableTmp[tableRow, (ncol(fullTableTmp) - 2)]
+                        aldehydeCol <- fullTableTmp[tableRow, (ncol(fullTableTmp) - 1)]
                         epoxideCol <- fullTableTmp[tableRow, (ncol(fullTableTmp))]
                         if(toString(nitrileCol) != toString(originalInputStrReactive[1])) {
                             warningToDisplay <- paste0(tipify(div( HTML(paste0(warningToDisplay, imgPath1, 'nitrile.png"', imgPath2))), "Nitrile (Cyanide) group.", placement="left"))
@@ -3900,7 +3868,7 @@ shinyServer(function(input, output, session) {
                     } else if(mode == "substructure" | originalEnrichMode == "substructure") { # Substructure (no similarity column)
                         fullTable <- fullTableTmp[, seq_len(9)]
                     }
-                  
+
                     # Check if any warnings were generated
                     warningCheck <- lapply(fullTableWarnings, function(x){
                         if(x == "<p>None</p>"){
@@ -3908,12 +3876,11 @@ shinyServer(function(input, output, session) {
                         }
                         return(TRUE)
                     })
-                    warningCheck <- warningCheck[!vapply(warningCheck, is.null, FUN.VALUE=logical(1))]
+                    warningCheck <- unique(warningCheck[!vapply(warningCheck, is.null, FUN.VALUE=logical(1))])
                     # Save warningCheck to reactive value so we can reference outside of this scope
                     warningList$warnings[[i]] <- warningCheck
                     # Create checkbox column to display
                     selectList <- lapply(checkboxes[[i]], function(x) paste0(x))
-                  
                     if(length(warningCheck) > 0){
                         # If we have warnings, then include the warning column
                         fullTable$warning=fullTableWarnings  
@@ -3987,6 +3954,7 @@ shinyServer(function(input, output, session) {
                     }
                     # Remove dataframe row names so they will just be numbered
                     rownames(fullTable) <- seq_len(nrow(fullTable))
+                    
                     # Check if chemicals with warnings exist
                     if(length(unlist(warningList$warnings[[i]], recursive=FALSE)) > 0){
                         haveWarnings$warnings <<- TRUE
@@ -4002,7 +3970,7 @@ shinyServer(function(input, output, session) {
                                     style="bootstrap",
                                     select="none",
                                     options=list( 
-                                        paging=TRUE,
+                                        paging=FALSE,
                                         preDrawCallback=JS('function() { Shiny.unbindAll(this.api().table().node()); }'), 
                                         drawCallback=JS('function() { Shiny.bindAll(this.api().table().node()); } '),
                                         dom="Bfrtip",
@@ -4011,11 +3979,11 @@ shinyServer(function(input, output, session) {
                                         #                                                           ^^ this is so we always keep the select checkboxes in the table (user can't hide them)
                                     ),
                                     extensions="Buttons"
-                                )
+                                ) %>% formatRound(columns=c("Molecular Weight"), digits=2)
                             )
                         )
                         outputOptions(output, paste0("table_", i), suspendWhenHidden=FALSE)
-                    } 
+                    }
                 })
             }
             # Render re-enrich cutoff slider
@@ -4139,7 +4107,6 @@ shinyServer(function(input, output, session) {
                     gctFileChartInner <- gctFileChartInner[!vapply(gctFileChartInner, is.null, FUN.VALUE=logical(1))]
                     return(gctFileChartInner)
                 })))
-    
                 colnames(gctFileChart) <- gctFileChartColNames
                 row.names(gctFileChart) <- gctFileChartRowNames
                 gctFileChartMatrix <- data.matrix(gctFileChart)
@@ -4183,7 +4150,6 @@ shinyServer(function(input, output, session) {
                 if(ncol(gctFileCluster) > 1){
                     gctFileCluster <- t(gctFileCluster)
                 }
-              
                 gctFileClusterColNames <- unique(unlist(lapply(content(resp), function(x){
                     gctFileClusterInner <- unlist(lapply(names(x), function(y) {
                         if(y != "_row"){
@@ -4221,7 +4187,6 @@ shinyServer(function(input, output, session) {
                 gctFileClusterMatrix <- t(gctFileClusterMatrix)
                 clusterClasses <- unique(unlist(lapply(colnames(gctFileClusterMatrix), function(x) unlist(str_split(x, " \\| "))[1])))
             }
-            
             # Generate networks for chart & cluster
             chartFullNetwork <- generateNetwork(transactionId=transactionId, cutoff=cutoff, networkMode="chart", inputNetwork=names(enrichmentSets), qval=0.05, physicsEnabled=FALSE, smoothCurve=TRUE, keep=chartClasses)
             clusterFullNetwork <- generateNetwork(transactionId=transactionId, cutoff=cutoff, networkMode="cluster", inputNetwork=names(enrichmentSets), qval=0.05, physicsEnabled=FALSE, smoothCurve=TRUE, keep=clusterClasses)
@@ -4243,7 +4208,7 @@ shinyServer(function(input, output, session) {
                                 fluidRow(
                                     column(3, 
                                         h4("Edge Selection Criteria"),
-                                        numericInput(inputId="chartqval", label="Q-value", value=0.05, step=0.01, max=1.00, min=0.00),
+                                        numericInput(inputId="chartqval", label="q-value", value=0.05, step=0.01, max=1.00, min=0.01),
                                         checkboxGroupInput(label="Selected Input Sets", inputId="chartNetworkChoices", choices=names(enrichmentSets), selected=names(enrichmentSets)),
                                         checkboxGroupInput(label="Selected Annotation Classes", inputId="chartNetworkClasses", choices=chartClasses, selected=chartClasses),
                                         HTML("<h5><b>Other Options</b></h5>"),
@@ -4301,7 +4266,7 @@ shinyServer(function(input, output, session) {
                                 fluidRow(
                                     column(3, 
                                         h4("Edge Selection Criteria"),
-                                        numericInput(inputId="clusterqval", label="Q-value", value=0.05, step=0.01, max=1.00, min=0.00),
+                                        numericInput(inputId="clusterqval", label="q-value", value=0.05, step=0.01, max=1.00, min=0.01),
                                         checkboxGroupInput( label="Selected Input Sets", inputId="clusterNetworkChoices", choices=names(enrichmentSets), selected=names(enrichmentSets) ),
                                         checkboxGroupInput( label="Selected Annotation Classes", inputId="clusterNetworkClasses", choices=clusterClasses, selected=clusterClasses ),
                                         HTML("<h5><b>Other Options</b></h5>"),
@@ -4684,7 +4649,6 @@ shinyServer(function(input, output, session) {
         classes2 <- lapply(seq_len(nrow(outpNetwork)), function(x) paste0(outpNetwork[[x, "class2"]]))
         classes <- list(unlist(classes1), unlist(classes2))
         classes <- unique(unlist(classes, recursive=FALSE))
-        
         # Generate list of nodes for network
         networkFullNodes <- t(vapply(rowsSet, function(x){
             rowsSetSplit <- unlist(str_split(x, "_@_"))
@@ -4694,12 +4658,12 @@ shinyServer(function(input, output, session) {
             rgbCss <- rowsSetSplit[4]
             # Put blank row if the class is not in the "keep" list
             if(!(rowsSetSplit[2] %in% keep)) {
-                nodeList <- c(id=NA, label=NA, group=NA, shape=NA, url=NA, color=NA)
+                nodeList <- c(id="", label="", group="", shape="", url="", color="")
                 return(nodeList)
             }
             nodeList <- c(id=id, label=rowsSetSplit[1], group=rowsSetSplit[2], shape="ellipse", url=url, color=rgbCss)
             return(nodeList)
-        }, FUN.VALUE=character(6))) # 6 because of the numnber of columns: id, label, group, shape, url, color
+        }, FUN.VALUE=character(6))) # 6 because of the number of columns: id, label, group, shape, url, color
         networkFullNodes <- data.frame(matrix(unlist(networkFullNodes), nrow=nrow(networkFullNodes)), stringsAsFactors=FALSE)
         rownames(networkFullNodes) <- seq_len(nrow(networkFullNodes))
         colnames(networkFullNodes) <- list("id", "label", "group", "shape", "url", "color")
@@ -4707,6 +4671,8 @@ shinyServer(function(input, output, session) {
         networkFullNodes <- networkFullNodes[!duplicated(networkFullNodes), ]
         # Remove nodes if their class is not in the "keep" list
         networkFullNodes <- networkFullNodes[complete.cases(networkFullNodes), ]
+        # Remove anything with missing information
+        networkFullNodes <- networkFullNodes %>% filter(networkFullNodes != "")
         # Generate list of edges for network
         networkFullEdges <- t(vapply(seq_len(nrow(outpNetwork)), function(p){
             if( (outpNetwork[[p, "class1"]] %in% keep) & (outpNetwork[[p, "class2"]] %in% keep) ){
@@ -4716,7 +4682,7 @@ shinyServer(function(input, output, session) {
                 return(edgeList)
             }
             # If one node has a class not in the "keep" list, discard it
-            edgeList <- c(from=NA, to=NA, jaccard=NA, color=NA, id=NA)
+            edgeList <- c(from="", to="", jaccard="", color="", id="")
             return(edgeList)
         }, FUN.VALUE=character(5))) # 5 because of the number of columns: from, to, jaccard, color, id
         networkFullEdges <- data.frame(matrix(unlist(networkFullEdges), nrow=nrow(networkFullEdges)), stringsAsFactors=FALSE)
@@ -4724,6 +4690,8 @@ shinyServer(function(input, output, session) {
         colnames(networkFullEdges) <- list("from", "to", "jaccard", "color", "id")
         # Remove edges if either node's class is not in the "keep" list
         networkFullEdges <- networkFullEdges[complete.cases(networkFullEdges), ]
+        # Remove anything with missing information
+        networkFullEdges <- networkFullEdges %>% filter(networkFullEdges != "")
         fullNetwork <- visNetwork(networkFullNodes, networkFullEdges, height="500px", width="100%") %>%
             visOptions(highlightNearest=TRUE, nodesIdSelection=TRUE, selectedBy=list(variable="group", multiple=TRUE)) %>%
             visLayout(randomSeed=runif(1)) %>%
@@ -4738,7 +4706,6 @@ shinyServer(function(input, output, session) {
                     function(properties) {Shiny.setInputValue("selectNode", properties, {priority:"event"});}'
             )
         # Add groups for legend
-        # TODO: find a way to do this with lapply?
         for (x in classes) {
             groupColor <- paste0("rgb(", paste0(classColors[[x]], collapse=", "), ")")
             fullNetwork <- fullNetwork %>% visGroups(groupname=x, color=groupColor)
@@ -5355,17 +5322,10 @@ shinyServer(function(input, output, session) {
                                     paging=TRUE,
                                     dom="Bfrtip",
                                     pageLength=10,
-                                    buttons=list("copy", "csv", "excel", "pdf", "print"),
-                                    rowCallback=JS(
-                                        "function(row, data) {
-                                            for (i=1; i < data.length; i++) {
-                                                $('td:eq('+i+')', row).html(data[i].toExponential(1));
-                                            }
-                                        }"
-                                    )
+                                    buttons=list("copy", "csv", "excel", "pdf", "print")
                                 ),
                                 extensions="Buttons"
-                            ) %>% formatRound(columns=colnames(subset(dataTableBgValues, select=-c(Annotation))), digits=4)
+                            ) %>% formatRound(columns=colnames(subset(dataTableBgValues, select=-c(Annotation))), digits=2)
                         )
                     )
                 ))

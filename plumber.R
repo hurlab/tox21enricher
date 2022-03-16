@@ -369,9 +369,8 @@ performEnrichment <- function(enrichmentUUID="-1", annoSelectStr="MESH=checked,P
     dir.create(baseOutputDir)
     
     # Load CASRN names
-    CASRN2Name <- lapply(seq_len(nrow(outpChemDetail)), function(x) outpChemDetail[x, "testsubstance_chemname"])
-    names(CASRN2Name) <- lapply(seq_len(nrow(outpChemDetail)), function(x) outpChemDetail[x, "casrn"])
-    
+    CASRN2Name <- outpChemDetail$testsubstance_chemname
+    names(CASRN2Name) <- outpChemDetail$casrn
     # Generate individual gct files
     process_variable_DAVID_CHART_directories_individual_file(baseinputDirName, baseDirName, baseOutputDir, '', '', "P", 0.05, "P", CASRN2Name)
     # Generate clustering images (heatmaps)
@@ -380,7 +379,6 @@ performEnrichment <- function(enrichmentUUID="-1", annoSelectStr="MESH=checked,P
     create_david_chart_cluster(baseDirName, nodeCutoff, "ALL", "P", 0.05, "P")
     # Generate heatmaps for multiple sets
     create_clustering_images(baseOutputDirGct, "-color=BR")
-    
     # zip result files
     if(dir.exists(baseDirName)){
         zipDir <- dir(baseDirName, recursive=TRUE, include.dirs=TRUE)
@@ -516,10 +514,9 @@ process_variable_DAVID_CHART_directories_individual_file <- function(inputDirNam
             # Remove null elements
             nameListTerm2pvalue <- lapply(nameListTerm2pvalue, function(innerList) innerList[vapply(innerList, length, FUN.VALUE=numeric(1)) > 0])
             nameListTerm2pvalue <- nameListTerm2pvalue[!vapply(nameListTerm2pvalue, is.null, FUN.VALUE=logical(1))]
-            
             # Set names of term2pvalue
             names(term2pvalue) <- nameListTerm2pvalue
-            
+
             CASRN2TermMatrix_lv1 <- lapply(seq_len(nrow(DATA)), function(line){
                 tmpSplit <- list(
                     as.character(DATA[line, "Category"]), 
@@ -616,7 +613,7 @@ create_clustering_images <- function(outDir="", imageFlags="-color=BR"){
         dirTypeTag <- "CLUSTER__"
     } else if(grepl("CHART", dirNameSplit[1], fixed=TRUE)) { 
         dirTypeTag <- "CHART__"
-    } else if (grepl("PRESELECTED", dirNameSplit[1], fixed=TRUE)){
+    } else if(grepl("PRESELECTED", dirNameSplit[1], fixed=TRUE)){
         dirTypeTag <- "PRESELECTED__"
     }
     
@@ -656,8 +653,7 @@ create_clustering_images <- function(outDir="", imageFlags="-color=BR"){
     } else {
         baseShortDirName <- paste0(baseNameSplit[length(baseNameSplit)], '/')
     }
-    DIR <- list.files(dirName)
-    tmpDirs <- DIR
+    tmpDirs <- list.files(dirName)
     
     # Remove current directory and previous directory
     baseSubDirs <- lapply(tmpDirs, function(x){
@@ -667,7 +663,6 @@ create_clustering_images <- function(outDir="", imageFlags="-color=BR"){
         return(NULL)
     })
     baseSubDirs <- baseSubDirs[!vapply(baseSubDirs, is.null, FUN.VALUE=logical(1))]
-    
     # Perform HClustering
     perform_hclustering_per_directory(dirName, '', outputBaseDir, dirTypeTag, libDir, cluster_program, row_distance_measure, column_distance_measure, clustering_method, java_flags, output_format, column_size, row_size, show_grid, grid_color, show_row_description, show_row_names, row_to_highlight, row_highlight_color, color_scheme, color_palette, use_color_gradient)
     if (!is.null(baseSubDirs[1])){
@@ -698,24 +693,21 @@ perform_hclustering_per_directory <- function(givenDirName, additionalDirName, o
             output_base_name <- paste0(outputDir, dirTypeTag, tmp2[1])
             shorter_base_name <- paste0(outputDir, dirTypeTag, tmp2[1])
             cluster_input_file <- paste0(shorter_base_name, ".txt")
-            if (convert_gct_to_cluster_input_file(infile, cluster_input_file, outputDir)){
-                system2(paste0(libDir, cluster_program), paste0(" -f ", cluster_input_file, " -g ", row_distance_measure, " -e ", column_distance_measure, " -m ", clustering_method))
-                cdtFile <- paste0(output_base_name, ".cdt")
-                gtrFile <- paste0(output_base_name, ".gtr")
-                atrFile <- paste0(output_base_name, ".atr")
-                gtrCmd <- ""
-                atrCmd <- ""
-                if (row_distance_measure != 0){ 
-                    gtrCmd <- paste0(" -x\"", gtrFile, "\"")
-                }
-                if (column_distance_measure != 0){ 
-                    atrCmd <- paste0(" -y\"", atrFile, "\"")
-                }
-                # Create heatmap image
-                system2("java", paste0(java_flags, " -DlibDir=", libDir, " -jar ", libDir, "hclimage-o.jar \"", cdtFile, "\" \"", output_base_name, "\" ", output_format, " -c", column_size, " -r", row_size, " -g", show_grid, " -l", grid_color, " -a", show_row_description, " -s", show_row_names, " -n", color_scheme, " -m", color_palette, " -u", use_color_gradient))
-            } else {
-                print(paste0("Conversion failed for ", infile, "\n"))
+            convert_gct_to_cluster_input_file(infile, cluster_input_file, outputDir)
+            system2(paste0(libDir, cluster_program), paste0(" -f ", cluster_input_file, " -g ", row_distance_measure, " -e ", column_distance_measure, " -m ", clustering_method))
+            cdtFile <- paste0(output_base_name, ".cdt")
+            gtrFile <- paste0(output_base_name, ".gtr")
+            atrFile <- paste0(output_base_name, ".atr")
+            gtrCmd <- ""
+            atrCmd <- ""
+            if (row_distance_measure != 0){ 
+                gtrCmd <- paste0(" -x\"", gtrFile, "\"")
             }
+            if (column_distance_measure != 0){ 
+                atrCmd <- paste0(" -y\"", atrFile, "\"")
+            }
+            # Create heatmap image
+            system2("java", paste0(java_flags, " -DlibDir=", libDir, " -jar ", libDir, "hclimage-o.jar \"", cdtFile, "\" \"", output_base_name, "\" ", output_format, " -c", column_size, " -r", row_size, " -g", show_grid, " -l", grid_color, " -a", show_row_description, " -s", show_row_names, " -n", color_scheme, " -m", color_palette, " -u", use_color_gradient))
         }
     })
 }
@@ -741,7 +733,6 @@ convert_gct_to_cluster_input_file <- function(gctFile, clusterInputFile, outputD
     })
     write(paste0(newHeader, "\n", paste0(newContent, collapse="\n")), CLUSTER, append=TRUE)
     close(CLUSTER)
-    return(1)
 }
 
 create_sub_directory <- function(outputDir){
@@ -779,12 +770,12 @@ create_david_chart_cluster <- function(baseDirName="", topTermLimit=10, mode="AL
         dir.create(baseOutputDir)
     }
     # Load term annotation data
-    className2classID <- lapply(seq_len(nrow(outpClasses)), function(line) outpClasses[line, "annoclassid"])
-    names(className2classID) <- lapply(seq_len(nrow(outpClasses)), function(line) outpClasses[line, "annoclassname"])
-    classID2className <- lapply(seq_len(nrow(outpClasses)), function(line) outpClasses[line, "annoclassname"])
-    names(classID2className) <- lapply(seq_len(nrow(outpClasses)), function(line) outpClasses[line, "annoclassid"])
-    classID2annotationTerm2termUniqueID_lv1 <- lapply(split(outpAnnoDetail, outpAnnoDetail$annoclassid), function(x) split(x, x$annoterm))
-    classID2annotationTerm2termUniqueID <- lapply(classID2annotationTerm2termUniqueID_lv1, function(x) lapply(x, function(y) y$annotermid))
+    className2classID <- outpClasses$annoclassid
+    names(className2classID) <- outpClasses$annoclassname
+    classID2className <- outpClasses$annoclassname
+    names(classID2className) <- outpClasses$annoclassid
+    classID2annotationTerm2termUniqueID_lv1 <- mclapply(split(outpAnnoDetail, outpAnnoDetail$annoclassid), mc.cores=CORES, mc.silent=FALSE, function(x) split(x, x$annoterm))
+    classID2annotationTerm2termUniqueID <- mclapply(classID2annotationTerm2termUniqueID_lv1, mc.cores=CORES, mc.silent=FALSE, function(x) lapply(x, function(y) y$annotermid))
     # Enumerate all possible directories
     process_variable_DAVID_CHART_directories(baseDirName, baseOutputDir, "", "", topTermLimit, mode, sigColumnName, sigCutoff, valueColumnName, className2classID, classID2annotationTerm2termUniqueID)
     process_variable_DAVID_CLUSTER_directories(baseDirName, baseOutputDir, "", "", topTermLimit, mode, sigColumnName, sigCutoff, valueColumnName, className2classID, classID2annotationTerm2termUniqueID)
@@ -812,91 +803,44 @@ process_variable_DAVID_CLUSTER_directories <- function(dirName, outputDir, extTa
         summaryFileNameBase <- paste0(summaryFileNameBase, "Cluster_Top", topTermLimit, "_", mode, "__", sigColumnName, "_", sigCutoff, "_", valueColumnName)
         summaryFileNameExt <- paste0(summaryFileNameExt,  "Cluster_Top", topTermLimit, "_", mode, "__", sigColumnName, "_", sigCutoff, "_", valueColumnName)
     }
-    
+
     # Load DAVID cluster files
     # Step1. Get the list of significant terms
     if(length(infiles) < 1){
         return(FALSE)
     }
-    getSigTerms <- lapply(infiles, function(infile) {
+    
+    getSigTerms <- mclapply(infiles, mc.cores=CORES, mc.silent=FALSE, function(infile) {
         tmp1 <- unlist(str_split(infile, "/"))
         tmpNameSplit <- unlist(str_split(tmp1[length(tmp1)], "__Cluster.txt"))
         shortFileBaseName <- tmpNameSplit[1]
         originalSourceFile <- paste0(dirInputName, "/", shortFileBaseName, ".txt")
-        lines <- read.delim(infile, sep="\t", comment.char="", quote="", stringsAsFactors=FALSE, header=FALSE, fill=TRUE, col.names=c("Category", "Term", "Count", "%", "PValue", "CASRNs", "List", "Total", "Pop Hits", "Pop Total", "Fold Enrichment", "Bonferroni", "Benjamini", "FDR"))
+        lines <- read.delim(infile, sep="\t", comment.char="", quote="", stringsAsFactors=FALSE, header=FALSE, fill=TRUE, col.names=c("Category", "Term", "Count", "%", "PValue", "CASRNs", "List Total", "Pop Hits", "Pop Total", "Fold Enrichment", "Bonferroni", "Benjamini", "FDR"))
         if(nrow(lines) < 1){
             return(FALSE)
         }
         tmpIDList <- lapply(seq_len(nrow(lines)), function(i){
-            tmpSplit <- lapply(lines[i, ], function(lineItem) {
-                return(lineItem)
-            })
+            tmpSplit <- lines[i, ]
             if(grepl("^Annotation Cluster", tmpSplit[[1]])) {
                 firstClusterIndex <- i + 2
-                tmpSplitInner <- lapply(lines[firstClusterIndex, ], function(lineItem) lineItem)
+                tmpSplitInner <- lines[firstClusterIndex, ]
                 if (tmpSplitInner[[sigColumnIndex]] == "" | is.na(tmpSplitInner[[sigColumnIndex]]) | grepl("^\\D", tmpSplitInner[[sigColumnIndex]]) | as.double(tmpSplitInner[[sigColumnIndex]]) >= sigCutoff | as.double(tmpSplitInner[[10]]) < 1) {
                     return(NULL)
                 } else {
-                    tmpID <- paste0(tmpSplitInner[[1]], " | ", tmpSplitInner[[2]])
-                    return(tmpID)
+                    return(paste0(tmpSplitInner[[1]], " | ", tmpSplitInner[[2]]))
                 }
             }
         })
-        
         #Get not null elements
         tmpIDList <- tmpIDList[!vapply(tmpIDList, is.null, FUN.VALUE=logical(1))]
         tmpIDList <- unlist(tmpIDList, recursive=FALSE)
-        
         # Cut off entries over the limit
         if(length(tmpIDList) > as.double(topTermLimit)){
             tmpIDList <- tmpIDList[seq_len((as.double(topTermLimit)))]
         }
-        
-        tmp_ID2Term <- lapply(seq_len(nrow(lines)), function(i){
-            tmpSplit <- lapply(lines[i, ], function(lineItem) lineItem)
-            if(grepl("^Annotation Cluster", tmpSplit[[1]])) {
-                firstClusterIndex <- i + 2
-                tmpSplitInner <- lapply(lines[firstClusterIndex, ], function(lineItem) lineItem)
-                if (tmpSplitInner[[sigColumnIndex]] == "" | is.na(tmpSplitInner[[sigColumnIndex]]) | grepl("^\\D", tmpSplitInner[[sigColumnIndex]]) | as.double(tmpSplitInner[[sigColumnIndex]]) >= sigCutoff | as.double(tmpSplitInner[[10]]) < 1) {
-                    return(NULL)
-                } else {
-                    tmpTerm <- paste0(tmpSplitInner[[1]], " | ", tmpSplitInner[[2]])
-                    return(tmpTerm)
-                }
-            }
-            return(NULL)
-        })
-        #Get not null elements
-        tmp_ID2Term <- tmp_ID2Term[!vapply(tmp_ID2Term, is.null, FUN.VALUE=logical(1))]
-        tmp_ID2Term <- unlist(tmp_ID2Term, recursive=FALSE)
-        
-        # Cut off entries over the limit
-        if(length(tmp_ID2Term) > as.double(topTermLimit)){
-            tmp_ID2Term <- tmp_ID2Term[seq_len((as.double(topTermLimit)))]
-        }
-        
-        tmp_ID2Class <- lapply(seq_len(nrow(lines)), function(i){
-            tmpSplit <- lapply(lines[i, ], function(lineItem) lineItem)
-            if(grepl("^Annotation Cluster", tmpSplit[[1]])) {
-                firstClusterIndex <- i + 2
-                tmpSplitInner <- lapply(lines[firstClusterIndex, ], function(lineItem) lineItem)
-                if (tmpSplitInner[[sigColumnIndex]] == "" | is.na(tmpSplitInner[[sigColumnIndex]]) | grepl("^\\D", tmpSplitInner[[sigColumnIndex]]) | as.double(tmpSplitInner[[sigColumnIndex]]) >= sigCutoff | as.double(tmpSplitInner[[10]]) < 1) {
-                    return(NULL)
-                } else {
-                    return(tmpSplitInner[[1]])
-                }
-            }
-            return(NULL)
-        })
-        #Get not null elements
-        tmp_ID2Class <- tmp_ID2Class[!vapply(tmp_ID2Class, is.null, FUN.VALUE=logical(1))]
-        tmp_ID2Class <- unlist(tmp_ID2Class, recursive=FALSE)
-        
-        # Cut off entries over the limit
-        if(length(tmp_ID2Class) > as.double(topTermLimit)){
-            tmp_ID2Class <- tmp_ID2Class[seq_len((as.double(topTermLimit)))]
-        }
+        tmp_ID2Term <- tmpIDList
         names(tmp_ID2Term) <- tmpIDList
+        tmp_ID2Class <- unlist(lapply(tmpIDList, function(x) unlist(str_split(x, " \\| "))[1]))
         names(tmp_ID2Class) <- tmpIDList
         return(list(ID2Term=tmp_ID2Term, ID2Class=tmp_ID2Class))
     })
@@ -907,7 +851,6 @@ process_variable_DAVID_CLUSTER_directories <- function(dirName, outputDir, extTa
     # remove NA
     ID2Term <- ID2Term[!vapply(ID2Term, is.na, FUN.VALUE=logical(1))]
     ID2Class <- ID2Class[!vapply(ID2Class, is.na, FUN.VALUE=logical(1))]
-    
     # For cluster, we want to append the class name before the term as a given term may appear in multiple classes. If that happens, heatmap generation will be messed up.
     IDs <- ID2Term
     fileHeaderNames <- lapply(infiles, function(infile) {
@@ -921,7 +864,6 @@ process_variable_DAVID_CLUSTER_directories <- function(dirName, outputDir, extTa
         tmp3 <- unlist(str_split(tmp2[1], "__Cluster"))
         return(tmp3[1])
     })
-    
     mergedData <- lapply(infiles, function(infile) {
         tmp1 <- unlist(str_split(infile, "/"))
         tmpNameSplit <- str_split(tmp1[length(tmp1)], "__Cluster.txt")
@@ -932,10 +874,13 @@ process_variable_DAVID_CLUSTER_directories <- function(dirName, outputDir, extTa
         }
         tmp3 <- unlist(str_split(tmp2[1], "__Cluster"))
         # Check term file and load
-        DATA <- tryCatch(read.delim(infile, sep="\t", comment.char="", quote="", stringsAsFactors=FALSE, header=TRUE, fill=TRUE, skip=1), error=function(cond) {
-            print("No lines in input file.")
+        # Also, enforce column data types, sometimes they get messed up when reading in
+        DATA <- tryCatch(read.delim(infile, sep="\t", comment.char="", quote="", stringsAsFactors=FALSE, header=TRUE, fill=TRUE, skip=1, colClasses=c("character", "character", "character", "character", "character", "character", "character", "character", "character", "character", "character", "character", "character")), error=function(cond) {
             return(NULL)
         })
+        if (is.null(DATA)){
+            return(NULL)
+        }
         if (nrow(DATA) > 0){
             # remove "annotation cluster" lines
             DATA <- DATA %>% filter(!grepl("^Annotation Cluster", Category)) %>% filter(!grepl("^Category", Category))
@@ -972,7 +917,7 @@ process_variable_DAVID_CLUSTER_directories <- function(dirName, outputDir, extTa
     })
     names(pvalueMatrix) <- names(mergedData)
     pvalueMatrix <- pvalueMatrix[!vapply(pvalueMatrix, is.null, FUN.VALUE=logical(1))]
-    
+
     # Create a summary file
     summaryFileName <- paste0(summaryFileNameBase, "__ValueMatrix.txt")
     file.create(paste0(outputDir, summaryFileName))
@@ -1005,7 +950,7 @@ process_variable_DAVID_CLUSTER_directories <- function(dirName, outputDir, extTa
     writeToSummary <- paste0(writeToSummary, collapse="\n")
     write(paste0(writeToSummaryHeader, writeToSummary), SUMMARY, append=TRUE)
     close(SUMMARY)
-    
+
     # Create a network summary file for Cluster
     ForNetworkFile <- paste0(summaryFileNameBase, "__ValueMatrix.ForNet")
     file.create(paste0(outputDir, ForNetworkFile))
@@ -1101,7 +1046,7 @@ process_variable_DAVID_CHART_directories <- function(dirName, outputDir, extTag,
     }
     
     # Step1. Get the list of significant terms
-    getSigTerms <- lapply(infiles, function(infile) {
+    getSigTerms <- mclapply(infiles, mc.cores=CORES, mc.silent=FALSE, function(infile) {
         tmp1 <- unlist(str_split(infile, "/"))
         tmpNameSplit <- unlist(str_split(tmp1[length(tmp1)], "__Chart.txt"))
         shortFileBaseName <- tmpNameSplit[1]
@@ -1112,58 +1057,25 @@ process_variable_DAVID_CHART_directories <- function(dirName, outputDir, extTag,
             return(FALSE)
         }
         tmpIDList <- lapply(seq_len(nrow(lines)), function(i){
-            tmpSplit <- lapply(lines[i, ], function(lineItem) lineItem)
+            tmpSplit <- lines[i, ]
             if (tmpSplit[[sigColumnIndex]] == "" | is.na(tmpSplit[[sigColumnIndex]]) | grepl("^\\D", tmpSplit[[sigColumnIndex]]) | tmpSplit[[sigColumnIndex]] >= sigCutoff | tmpSplit[[10]] < 1) {
                 return(NULL)
             } else {
-                return(paste0(tmpSplit[[2]]))
+                return(paste0(tmpSplit[[1]], "|", tmpSplit[[2]]))
             }
             return(NULL)
         })
-        
         #Get not null elements
         tmpIDList <- tmpIDList[!vapply(tmpIDList, is.null, FUN.VALUE=logical(1))]
         tmpIDList <- unlist(tmpIDList, recursive=FALSE)
-        
         # Cut off entries over the limit
         if(length(tmpIDList) > as.double(topTermLimit)){
             tmpIDList <- tmpIDList[seq_len(as.double(topTermLimit))]
         }
-        
-        tmp_ID2Term <- lapply(seq_len(nrow(lines)), function(i){
-            tmpSplit <- lapply(lines[i, ], function(lineItem) lineItem)
-            if (tmpSplit[[sigColumnIndex]] == "" | is.na(tmpSplit[[sigColumnIndex]]) | grepl("^\\D", tmpSplit[[sigColumnIndex]]) | tmpSplit[[sigColumnIndex]] >= sigCutoff | tmpSplit[[10]] < 1) {
-                return(NULL)
-            } else {
-                tmpTerm <- paste0(tmpSplit[[1]], "|", tmpSplit[[2]])
-                return(tmpTerm)
-            }
-        })
-        #Get not null elements
-        tmp_ID2Term <- tmp_ID2Term[!vapply(tmp_ID2Term, is.null, FUN.VALUE=logical(1))]
-        tmp_ID2Term <- unlist(tmp_ID2Term, recursive=FALSE)
-        # Cut off entries over the limit
-        if(length(tmp_ID2Term) > as.double(topTermLimit)){
-            tmp_ID2Term <- tmp_ID2Term[seq_len(as.double(topTermLimit))]
-        }
-        
-        tmp_ID2Class <- lapply(seq_len(nrow(lines)), function(i){
-            tmpSplit <- lapply(lines[i, ], function(lineItem) lineItem)
-            if (tmpSplit[[sigColumnIndex]] == "" | is.na(tmpSplit[[sigColumnIndex]]) | grepl("^\\D", tmpSplit[[sigColumnIndex]]) | tmpSplit[[sigColumnIndex]] >= sigCutoff | tmpSplit[[10]] < 1) {
-                return(NULL)
-            } else {
-                return(tmpSplit[[1]])
-            }
-        })
-        #Get not null elements
-        tmp_ID2Class <- tmp_ID2Class[!vapply(tmp_ID2Class, is.null, FUN.VALUE=logical(1))]
-        tmp_ID2Class <- unlist(tmp_ID2Class, recursive=FALSE)
-        # Cut off entries over the limit
-        if(length(tmp_ID2Class) > as.double(topTermLimit)){
-            tmp_ID2Class <- tmp_ID2Class[seq_len(as.double(topTermLimit))]
-        }
-        names(tmp_ID2Term) <- tmpIDList
-        names(tmp_ID2Class) <- tmpIDList
+        tmp_ID2Term <- tmpIDList
+        names(tmp_ID2Term) <- lapply(tmpIDList, function(x) unlist(str_split(x, "\\|"))[2])
+        tmp_ID2Class <- unlist(lapply(tmpIDList, function(x) unlist(str_split(x, "\\|"))[1]))
+        names(tmp_ID2Class) <- names(tmp_ID2Term)
         return(list(ID2Term=tmp_ID2Term, ID2Class=tmp_ID2Class))
     })
     getSigTermsFilteredTerms <- lapply(seq_len(length(getSigTerms)), function(i) getSigTerms[[i]]["ID2Term"])
@@ -1206,7 +1118,7 @@ process_variable_DAVID_CHART_directories <- function(dirName, outputDir, extTag,
         })
         if (nrow(DATA) > 0){
             annotationNamesFull <- unlist(lapply(seq_len(nrow(DATA)), function(line) {
-                tmpSplit <- lapply(DATA[line, ], function(lineItem) lineItem)
+                tmpSplit <- DATA[line, ]
                 return(paste0(tmpSplit[[1]], " | ", tmpSplit[[2]]))
             }))
             return(data.frame("Set"=tmp3[1], "Annotation"=annotationNamesFull, DATA, stringsAsFactors=FALSE))
@@ -1220,7 +1132,7 @@ process_variable_DAVID_CHART_directories <- function(dirName, outputDir, extTag,
             if (x[y, "PValue"] == "" | is.null(x[y, "PValue"]) | is.null(x[y, "Fold.Enrichment"]) | grepl("^\\D", x[y, "PValue"]) | (mode == "ALL" & x[y, "PValue"] >= sigCutoff) | x[y, "Fold.Enrichment"] < 1) {
                 return(NULL)
             }
-            return(-1*log10(as.double(x[y, "PValue"])))
+            return(-1 * log10(as.double(x[y, "PValue"])))
         }))
         if(is.null(pvalueMatrix_inner)) {
             return(NULL)
@@ -1472,23 +1384,32 @@ perform_CASRN_enrichment_analysis <- function(CASRNRef, outputBaseDir, outfileBa
 
     # Save the data file -> create "RINPUT" but as a data frame here
     RINPUT_df <- do.call(rbind, datArray)
-    rownames(RINPUT_df) <- seq_len(nrow(RINPUT_df))
-    colnames(RINPUT_df) <- c("X1", "X2", "X3", "X4")
-    
     # Handle if bad RINPUT file
-    if(nrow(RINPUT_df) < 2){
+    if(is.null(RINPUT_df)){
         # Write blank files to chart, simple, and matrix
         writeLines(chartHeader, OUTFILE)
         writeLines(simpleHeader, SIMPLE)
         writeLines(paste0(""), MATRIX)
         close(OUTFILE)
         close(SIMPLE)
-        close(MATRIX)
+        # Open and create a blank cluster file
+        outfileCluster <- paste0(outputBaseDir, outfileBase, "__Cluster.txt")
+        file.create(outfileCluster)
+        return(FALSE)
+    } else if(nrow(RINPUT_df) < 2){
+        # Write blank files to chart, simple, and matrix
+        writeLines(chartHeader, OUTFILE)
+        writeLines(simpleHeader, SIMPLE)
+        writeLines(paste0(""), MATRIX)
+        close(OUTFILE)
+        close(SIMPLE)
         # Open and create a blank cluster file
         outfileCluster <- paste0(outputBaseDir, outfileBase, "__Cluster.txt")
         file.create(outfileCluster)
         return(FALSE)
     }
+    rownames(RINPUT_df) <- seq_len(nrow(RINPUT_df))
+    colnames(RINPUT_df) <- c("X1", "X2", "X3", "X4")
     
     # Calculate results of the fisher test - P-value, Bonferroni, BY, and FDR
     p.value <- apply(RINPUT_df, 1, function(x) fisher.test(matrix(unlist(x), nrow=2))$p.value)
@@ -1839,7 +1760,7 @@ kappa_cluster <- function(x, deg=NULL, useTerm=FALSE, cutoff=0.5, overlap=0.5, m
     names(es) <- names(res)
     es <- es[order(unlist(es), decreasing=TRUE)]
     clusterDF <- data.frame(cluster_num=seq_len(length(es)), cluster_name=names(es), enrichment_score=unlist(es), stringsAsFactors=FALSE)
-
+    clusterDF$enrichment_score <- unlist(lapply(es, function(score) formatC(score, format="e", digits=2, drop0trailing=TRUE)))
     # Define cluster file path
     outfileCluster <- paste0(outputBaseDir, outfileBase, "__Cluster.txt")
     CLUSTER <- file(outfileCluster)
@@ -1863,21 +1784,6 @@ kappa_cluster <- function(x, deg=NULL, useTerm=FALSE, cutoff=0.5, overlap=0.5, m
 merge_term <- function(x, overlap, multipleLinkageThreshold){
     ml <- x
     names(ml) <- lapply(ml, function(x) x[1])
-    
-    #res <- lapply(names(ml), function(i){
-    #    curr <- ml[[i]]
-    #    lhs <- setdiff(head(names(ml), -1), i)
-    #    for(j in lhs){
-    #        ovl <- 2 * length(intersect(curr, ml[[j]])) / (length(curr) + length(ml[[j]]))
-    #        if(ovl > multipleLinkageThreshold){
-    #            curr <- union(curr, ml[[j]])
-    #            ml <<- ml[setdiff(names(ml), j)]
-    #        }
-    #    }
-    #    return(sort(curr))
-    #})
-    
-    #DEBUG
     res <- lapply(names(ml), function(i){
         curr <- ml[[i]]
         lhs <- setdiff(head(names(ml), -1), i)
@@ -1908,8 +1814,7 @@ merge_term <- function(x, overlap, multipleLinkageThreshold){
 calculate_Enrichment_Score <- function(x, df){
     pvalue <- df[x, "PValue"]
     esp <- ifelse(pvalue == 0, 16, (-log(pvalue) / log(10)))
-    es <- as.double(formatC((sum(esp) / length(df[x,])), format="e", digits=3))
-    return(es)
+    return(sum(esp) / length(df[x,]))
 }
 
 get_the_best_seed <- function(currentSeedRef, remainingSeedsRef, newSeedRef=list(), multipleLinkageThreshold) {
@@ -2245,7 +2150,34 @@ getAnnotationsFunc <- function(enrichmentUUID="-1", annoSelectStr="MESH=checked,
 #* @param annoSelectStr
 #* @param nodeCutoff
 #* @post /queue
-queue <- function(mode="", enrichmentUUID="-1", annoSelectStr="MESH=checked,PHARMACTIONLIST=checked,ACTIVITY_CLASS=checked,ADVERSE_EFFECT=checked,INDICATION=checked,KNOWN_TOXICITY=checked,MECH_LEVEL_1=checked,MECH_LEVEL_2=checked,MECH_LEVEL_3=checked,MECHANISM=checked,MODE_CLASS=checked,PRODUCT_CLASS=checked,STRUCTURE_ACTIVITY=checked,TA_LEVEL_1=checked,TA_LEVEL_2=checked,TA_LEVEL_3=checked,THERAPEUTIC_CLASS=checked,TISSUE_TOXICITY=checked,DRUGBANK_ATC=checked,DRUGBANK_ATC_CODE=checked,DRUGBANK_CARRIERS=checked,DRUGBANK_ENZYMES=checked,DRUGBANK_TARGETS=checked,DRUGBANK_TRANSPORTERS=checked,CTD_CHEM2DISEASE=checked,CTD_CHEM2GENE_25=checked,CTD_CHEMICALS_DISEASES=checked,CTD_CHEMICALS_GENES=checked,CTD_CHEMICALS_GOENRICH_CELLCOMP=checked,CTD_CHEMICALS_GOENRICH_MOLFUNCT=checked,CTD_CHEMICALS_PATHWAYS=checked,CTD_GOSLIM_BIOPROCESS=checked,CTD_PATHWAY=checked,HTS_ACTIVE=checked,LEADSCOPE_TOXICITY=checked,MULTICASE_TOX_PREDICTION=checked,TOXCAST_ACTIVE=checked,TOXINS_TARGETS=checked,TOXPRINT_STRUCTURE=checked,TOXREFDB=checked,", nodeCutoff=10, setNames){
+queue <- function(res, req, mode="", enrichmentUUID="-1", annoSelectStr="MESH=checked,PHARMACTIONLIST=checked,ACTIVITY_CLASS=checked,ADVERSE_EFFECT=checked,INDICATION=checked,KNOWN_TOXICITY=checked,MECH_LEVEL_1=checked,MECH_LEVEL_2=checked,MECH_LEVEL_3=checked,MECHANISM=checked,MODE_CLASS=checked,PRODUCT_CLASS=checked,STRUCTURE_ACTIVITY=checked,TA_LEVEL_1=checked,TA_LEVEL_2=checked,TA_LEVEL_3=checked,THERAPEUTIC_CLASS=checked,TISSUE_TOXICITY=checked,DRUGBANK_ATC=checked,DRUGBANK_ATC_CODE=checked,DRUGBANK_CARRIERS=checked,DRUGBANK_ENZYMES=checked,DRUGBANK_TARGETS=checked,DRUGBANK_TRANSPORTERS=checked,CTD_CHEM2DISEASE=checked,CTD_CHEM2GENE_25=checked,CTD_CHEMICALS_DISEASES=checked,CTD_CHEMICALS_GENES=checked,CTD_CHEMICALS_GOENRICH_CELLCOMP=checked,CTD_CHEMICALS_GOENRICH_MOLFUNCT=checked,CTD_CHEMICALS_PATHWAYS=checked,CTD_GOSLIM_BIOPROCESS=checked,CTD_PATHWAY=checked,HTS_ACTIVE=checked,LEADSCOPE_TOXICITY=checked,MULTICASE_TOX_PREDICTION=checked,TOXCAST_ACTIVE=checked,TOXINS_TARGETS=checked,TOXPRINT_STRUCTURE=checked,TOXREFDB=checked,", nodeCutoff=10, setNames){
+    # Validate input
+    if(mode != "casrn" & mode != "substructure" & mode != "similarity" & mode != "annotation"){
+        res$status <- 400
+        return("Error: Invalid value for argument 'mode'.")
+    }
+    if(!grepl("[A-Za-z0-9]+-[A-Za-z0-9]+-[A-Za-z0-9]+-[A-Za-z0-9]+-[A-Za-z0-9]+", enrichmentUUID)){
+        res$status <- 400
+        return("Error: Incorrect format for argument 'enrichmentUUID'.")
+    }
+    if(!grepl("([A-Za-z0-9]+=checked,)+", annoSelectStr)){
+        res$status <- 400
+        return("Error: Incorrect format for argument 'annoSelectStr'.")
+    } else {
+        # TODO: validate that all passed annotation classes are valid here
+    }
+    if(is.na(as.double(nodeCutoff))){
+        res$status <- 400
+        return("Error: Incorrect value for argument 'nodeCutoff'. Must be between 1 and 50 (inclusive).")
+    } else if(as.double(nodeCutoff) < 1 | as.double(nodeCutoff) > 50){
+        res$status <- 400
+        return("Error: Incorrect value for argument 'nodeCutoff'. Must be between 1 and 50 (inclusive).")
+    }
+    if(!grepl("[A-Za-z0-9]+((\\n)+[A-Za-z0-9]+)*(\\n)*", setNames)){
+        res$status <- 400
+        return("Error: Incorrect format for argument 'setNames'.")
+    }
+    
     # Connect to db
     poolQueue <- dbPool(
         drv=RPostgres::Postgres(),
@@ -2365,18 +2297,123 @@ queue <- function(mode="", enrichmentUUID="-1", annoSelectStr="MESH=checked,PHAR
 #* @param annoSelectStr
 #* @param cutoff
 #* @param input
+#* @param casrnBox
 #* @param originalNames
 #* @param reenrich
 #* @param color
 #* @param timestampPosted
+#* @param reenrichFlag
 #* @post /createTransaction
-createTransaction <- function(res, req, originalMode="", mode="", uuid="-1", annoSelectStr="MESH=checked,PHARMACTIONLIST=checked,ACTIVITY_CLASS=checked,ADVERSE_EFFECT=checked,INDICATION=checked,KNOWN_TOXICITY=checked,MECH_LEVEL_1=checked,MECH_LEVEL_2=checked,MECH_LEVEL_3=checked,MECHANISM=checked,MODE_CLASS=checked,PRODUCT_CLASS=checked,STRUCTURE_ACTIVITY=checked,TA_LEVEL_1=checked,TA_LEVEL_2=checked,TA_LEVEL_3=checked,THERAPEUTIC_CLASS=checked,TISSUE_TOXICITY=checked,DRUGBANK_ATC=checked,DRUGBANK_ATC_CODE=checked,DRUGBANK_CARRIERS=checked,DRUGBANK_ENZYMES=checked,DRUGBANK_TARGETS=checked,DRUGBANK_TRANSPORTERS=checked,CTD_CHEM2DISEASE=checked,CTD_CHEM2GENE_25=checked,CTD_CHEMICALS_DISEASES=checked,CTD_CHEMICALS_GENES=checked,CTD_CHEMICALS_GOENRICH_CELLCOMP=checked,CTD_CHEMICALS_GOENRICH_MOLFUNCT=checked,CTD_CHEMICALS_PATHWAYS=checked,CTD_GOSLIM_BIOPROCESS=checked,CTD_PATHWAY=checked,HTS_ACTIVE=checked,LEADSCOPE_TOXICITY=checked,MULTICASE_TOX_PREDICTION=checked,TOXCAST_ACTIVE=checked,TOXINS_TARGETS=checked,TOXPRINT_STRUCTURE=checked,TOXREFDB=checked,", cutoff=10, input, casrnBox, originalNames="none", reenrich="", color, timestampPosted, reenrichFlag=FALSE){
-    # format reenrich flag
-    if(reenrichFlag == TRUE){
-        reenrichFlag <- 1
-    } else {
-        reenrichFlag <- 0
+createTransaction <- function(res, req, originalMode="", mode="", uuid="-1", annoSelectStr="", cutoff=10, input, casrnBox, originalNames="none", reenrich="", color, timestampPosted, reenrichFlag=FALSE){
+    # Validate input
+    if(originalMode != "similarity" & originalMode != "substructure"){
+        res$status <- 400
+        return("Error: Invalid value for argument 'originalMode'.")
     }
+    if(mode != "similarity" & mode != "substructure" & mode != "casrn" & mode != "annotation"){
+        res$status <- 400
+        return("Error: Invalid value for argument 'mode'.")
+    }
+    if(!grepl("[A-Za-z0-9]+-[A-Za-z0-9]+-[A-Za-z0-9]+-[A-Za-z0-9]+-[A-Za-z0-9]+", uuid)){
+        res$status <- 400
+        return("Error: Incorrect format for argument 'uuid'.")
+    }
+    
+    # Get list of all annotation classes in database
+    annotationList <- getAnnotationList()
+    # Set annotations to default if missing
+    if(annoSelectStr == ""){
+        annoSelectStr <- paste0(paste0(annotationList, collapse="=checked,"), "=checked,")
+    }
+    if(!grepl("([A-Za-z0-9]+=checked,)+", annoSelectStr)){
+        res$status <- 400
+        return("Error: Incorrect format for argument 'annoSelectStr'.")
+    } else {
+        # TODO: validate that all passed annotation classes are valid here
+        # Check if all annotations are valid
+        cleanedAnnoList <- unlist(str_split(annoSelectStr, "=checked,"))
+        cleanedAnnoList <- cleanedAnnoList[nchar(cleanedAnnoList) > 0]
+        errorAnnotationClasses <- lapply(cleanedAnnoList, function(x){
+            if(!(x %in% annotationList)){
+                return(x)
+            }
+            return(NULL)
+        })
+        errorAnnotationClasses <- errorAnnotationClasses[!vapply(errorAnnotationClasses, is.null, FUN.VALUE=logical(1))]
+        if(length(errorAnnotationClasses) > 0){
+            res$status <- 400
+            return(paste0("Error: Invalid annotation class(es): ", paste0(errorAnnotationClasses, collapse=", "), ". Use 'http://<address_of_Tox21_Enricher_API>/getAnnotationList' to see a list of valid annotation classes."))
+        }
+    }
+    # Check if we can coerce cutoff to number
+    if(typeof(cutoff) == "character"){
+        cutoff <- as.numeric(cutoff)
+    }
+    if(is.na(cutoff)){
+        res$status <- 400
+        return("Error: Cutoff value is not a number.")
+    }
+    # Check if cutoff is not a number
+    if(!is.numeric(cutoff)){
+        res$status <- 400
+        return("Error: Cutoff value is not a number.")
+    }
+    # Check if cutoff is not an integer
+    if(cutoff %% 1 != 0){
+        res$status <- 400
+        return("Error: Cutoff value is not an integer.")
+    }
+    # Check if cutoff is out of range
+    if(cutoff < 1 | cutoff > 50){
+        res$status <- 400
+        return("Error: Incorrect value for argument 'cutoff'. Must be between 1 and 50 (inclusive).")
+    }
+    # Check if user inputs any bad chars
+    if(grepl("'|\"|;|--", casrnBox)){
+        res$status <- 400
+        return("Error: Invalid value for argument 'casrnBox'.")
+    }
+    if(grepl("'|\"|;|--", originalNames)){
+        res$status <- 400
+        return("Error: Invalid value for argument 'originalNames'.")
+    }
+    if(grepl("'|\"|;|--", reenrich)){
+        res$status <- 400
+        return("Error: Invalid value for argument 'reenrich'.")
+    }
+    inputSets <- unlist(str_split(input, "\\|"))
+    for(i in inputSets){
+        if(!grepl("([0-9]+-[0-9]+-[0-9]+)|(NOCAS_[0-9]+)__[A-Za-z0-9]+", i)){
+            res$status <- 400
+            return("Error: Invalid value for argument 'input'.")
+        }
+    }
+    inputColors <- unlist(str_split(color, "\\|"))
+    for(i in inputColors){
+        if(!grepl("[A-Za-z0-9]+__rgb\\([0-9]+, [0-9]+, [0-9]+\\)", i)){
+            res$status <- 400
+            return("Error: Invalid value for argument 'color'.")
+        }
+    }
+    if(!grepl("2[0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9] [0-9][0-9]:[0-9][0-9]:[0-9][0-9]", timestampPosted)){
+        res$status <- 400
+        return("Error: Invalid value for argument 'timestampPosted'.")
+    }
+    if(typeof(reenrichFlag) == "character"){
+        reenrichFlag <- tolower(reenrichFlag)
+    }
+    if(reenrichFlag != TRUE & reenrichFlag != FALSE & reenrichFlag != "true" & reenrichFlag != "false"){
+        res$status <- 400
+        return("Error: Incorrect value for argument 'reenrichFlag'.")
+    } else {
+        # format reenrich flag
+        if(reenrichFlag == TRUE){
+            reenrichFlag <- 1
+        } else {
+            reenrichFlag <- 0
+        }
+    }
+    
     # Connect to db
     poolTransaction <- dbPool(
         drv=RPostgres::Postgres(),
@@ -2398,7 +2435,12 @@ createTransaction <- function(res, req, originalMode="", mode="", uuid="-1", ann
 #* Load details for the selected transaction
 #* @param uuid
 #* @get /getTransactionDetails
-getTransactionDetails <- function(uuid="none"){
+getTransactionDetails <- function(res, req, uuid="none"){
+    # Validate input
+    if(!grepl("[A-Za-z0-9]+-[A-Za-z0-9]+-[A-Za-z0-9]+-[A-Za-z0-9]+-[A-Za-z0-9]+", uuid)){
+        res$status <- 400
+        return("Error: Incorrect format for argument 'uuid'.")
+    }
     # Connect to db
     poolTransaction <- dbPool(
         drv=RPostgres::Postgres(),
@@ -2419,8 +2461,19 @@ getTransactionDetails <- function(uuid="none"){
 
 #* Get queue position for given enrichment request
 #* @param transactionId
+#* @param mode
 #* @get /getQueuePos
-getQueuePos <- function(transactionId="-1", mode="none"){
+getQueuePos <- function(res, req, transactionId="-1", mode="init"){
+    # Validate input
+    if(!grepl("[A-Za-z0-9]+-[A-Za-z0-9]+-[A-Za-z0-9]+-[A-Za-z0-9]+-[A-Za-z0-9]+", transactionId)){
+        res$status <- 400
+        return("Error: Incorrect format for argument 'transactionId'.")
+    }
+    if(mode != "init" & mode != "casrn" & mode != "substructure" & mode != "similarity" & mode != "annotation"){
+        res$status <- 400
+        return("Error: Invalid value for argument 'mode'.")
+    }
+    
     # Connect to db
     poolUpdate <- dbPool(
         drv=RPostgres::Postgres(),
@@ -2436,21 +2489,18 @@ getQueuePos <- function(transactionId="-1", mode="none"){
     outp <- dbGetQuery(poolUpdate, query)
     statusFiles <- outp[, "step"]
     names(statusFiles) <- outp[, "setname"]
-    
     # Check if request has completed w/ errors overall (failed completely)
     query <- sqlInterpolate(ANSI(), paste0("SELECT * FROM queue WHERE error IS NOT NULL AND uuid='", transactionId, "';"), id="fetchQueuePosition")
     outp <- dbGetQuery(poolUpdate, query)
     if(nrow(outp) > 0) {
         return("<div class=\"text-danger\">Failed.</div>")
     }
-    
     # Check if request has completed
     query <- sqlInterpolate(ANSI(), paste0("SELECT * FROM queue WHERE finished=0 AND uuid='", transactionId, "';"), id="fetchQueuePosition")
     outp <- dbGetQuery(poolUpdate, query)
     if(nrow(outp) < 1) {
         return("Complete!")
     }
-    
     # Get queue position of request
     query <- sqlInterpolate(ANSI(), paste0("SELECT * FROM queue WHERE finished=0 AND error IS NULL AND cancel=0;"), id="fetchQueuePosition")
     outp <- dbGetQuery(poolUpdate, query)
@@ -2529,7 +2579,13 @@ getQueuePos <- function(transactionId="-1", mode="none"){
 #* Get transaction data for given enrichment request
 #* @param transactionId
 #* @get /getPrevSessionData
-getPrevSessionData <- function(transactionId="-1"){
+getPrevSessionData <- function(res, req, transactionId="-1"){
+    # Validate input
+    if(!grepl("[A-Za-z0-9]+-[A-Za-z0-9]+-[A-Za-z0-9]+-[A-Za-z0-9]+-[A-Za-z0-9]+", transactionId)){
+        res$status <- 400
+        return("Error: Incorrect format for argument 'transactionId'.")
+    }
+    
     # Connect to db
     poolSessionData <- dbPool(
         drv=RPostgres::Postgres(),
@@ -2564,9 +2620,15 @@ getPrevSessionData <- function(transactionId="-1"){
 }
 
 #* Check if enrichment process has terminated for given request
-#* @param transactionId UUID of the request
+#* @param transactionId UUID of the request.
 #* @get /isRequestFinished
-isRequestFinished <- function(res, req, transactionId){
+isRequestFinished <- function(res, req, transactionId="-1"){
+    # Validate input
+    if(!grepl("[A-Za-z0-9]+-[A-Za-z0-9]+-[A-Za-z0-9]+-[A-Za-z0-9]+-[A-Za-z0-9]+", transactionId)){
+        res$status <- 400
+        return("Error: Incorrect format for argument 'transactionId'.")
+    }
+    
     # Connect to db
     poolQueue <- dbPool(
         drv=RPostgres::Postgres(),
@@ -2593,9 +2655,15 @@ isRequestFinished <- function(res, req, transactionId){
 }
 
 #* Check if error file exists for given request
-#* @param transactionId UUID of the request
+#* @param transactionId UUID of the request.
 #* @get /hasError
-hasError <- function(res, req, transactionId){
+hasError <- function(res, req, transactionId="-1"){
+    # Validate input
+    if(!grepl("[A-Za-z0-9]+-[A-Za-z0-9]+-[A-Za-z0-9]+-[A-Za-z0-9]+-[A-Za-z0-9]+", transactionId)){
+        res$status <- 400
+        return("Error: Incorrect format for argument 'transactionId'.")
+    }
+    
     # Connect to db
     poolQueue <- dbPool(
         drv=RPostgres::Postgres(),
@@ -2618,9 +2686,15 @@ hasError <- function(res, req, transactionId){
 }
 
 #* Cancel enrichment process for given UUID
-#* @param transactionId UUID of the request
+#* @param transactionId UUID of the request.
 #* @get /cancelEnrichment
-cancelEnrichment <- function(res, req, transactionId){
+cancelEnrichment <- function(res, req, transactionId="-1"){
+    # Validate input
+    if(!grepl("[A-Za-z0-9]+-[A-Za-z0-9]+-[A-Za-z0-9]+-[A-Za-z0-9]+-[A-Za-z0-9]+", transactionId)){
+        res$status <- 400
+        return("Error: Incorrect format for argument 'transactionId'.")
+    }
+    
     # Connect to db
     poolCancel <- dbPool(
         drv=RPostgres::Postgres(),
@@ -2642,9 +2716,15 @@ cancelEnrichment <- function(res, req, transactionId){
 }
 
 #* Check if a given request has been cancelled for given UUID
-#* @param transactionId UUID of the request
+#* @param transactionId UUID of the request.
 #* @get /isCancel
-isCancel <- function(res, req, transactionId){
+isCancel <- function(res, req, transactionId="-1"){
+    # Validate input
+    if(!grepl("[A-Za-z0-9]+-[A-Za-z0-9]+-[A-Za-z0-9]+-[A-Za-z0-9]+-[A-Za-z0-9]+", transactionId)){
+        res$status <- 400
+        return("Error: Incorrect format for argument 'transactionId'.")
+    }
+    
     # Connect to db
     poolCancel <- dbPool(
         drv=RPostgres::Postgres(),
@@ -2682,8 +2762,15 @@ getDeleteTime <- function(res, req){
 }
 
 #* Calculate cookie expiry date for previous transaction and fetch additional request information
+#* @param transaction Id
 #* @get /getAdditionalRequestInfo
-getAdditionalRequestInfo <- function(res, req, transactionId=""){
+getAdditionalRequestInfo <- function(res, req, transactionId="-1"){
+    # Validate input
+    if(!grepl("[A-Za-z0-9]+-[A-Za-z0-9]+-[A-Za-z0-9]+-[A-Za-z0-9]+-[A-Za-z0-9]+", transactionId)){
+        res$status <- 400
+        return("Error: Incorrect format for argument 'transactionId'.")
+    }
+    
     # Connect to db
     poolExp <- dbPool(
         drv=RPostgres::Postgres(),
@@ -2788,7 +2875,13 @@ getTotalRequests <- function(res, req){
 #* @param input Input string, either SMILES or CASRN (if re-enriching)
 #* @param reenrich Boolean value to let the API know if this is a re-enrichment or not
 #* @get /searchBySubstructure
-searchBySubstructure <- function(res, req, input, reenrich=FALSE){
+searchBySubstructure <- function(res, req, input){
+    # Validate input
+    if(grepl("'|\"|;|--", input)){
+        res$status <- 400
+        return("Error: Invalid value for argument 'input'.")
+    }
+    
     # Connect to db
     poolSubstructure <- dbPool(
         drv=RPostgres::Postgres(),
@@ -2803,13 +2896,8 @@ searchBySubstructure <- function(res, req, input, reenrich=FALSE){
     if (grepl("InChI=", input, fixed=TRUE)) {
         input <- convertInchi(inchi=input)
     }
-    substructureQuery <- ""
     substructureOutp <- NULL
-    if(reenrich == FALSE){
-        substructureQuery <- sqlInterpolate(ANSI(), paste0("SELECT * FROM mols_2 WHERE m @> CAST('", input, "' AS mol);"), id="substructureResults")
-    } else {
-        substructureQuery <- sqlInterpolate(ANSI(), paste0("SELECT * FROM mols_2 WHERE casrn='", input, "';"), id="substructureResults")
-    }
+    substructureQuery <- sqlInterpolate(ANSI(), paste0("SELECT * FROM mols_2 WHERE m @> CAST('", input, "' AS mol);"), id="substructureResults")
     trySubstructure <- tryCatch({
         substructureOutp <- dbGetQuery(poolSubstructure, substructureQuery)
         substructureOutp$m <- unlist(lapply(substructureOutp$m, function(x) paste0(x))) # coerce mol column to string. If left as "pq_mol" data type, R wont' know how to send this in a json back to the client.
@@ -2829,7 +2917,22 @@ searchBySubstructure <- function(res, req, input, reenrich=FALSE){
 #* @param input SMILES Input string
 #* @param threshold Tanimoto similarity threshold
 #* @get /searchBySimilarity
-searchBySimilarity <- function(res, req, input="", threshold=0.5){
+searchBySimilarity <- function(res, req, input="", threshold=0.50){
+    # Validate input
+    if(grepl("'|\"|;|--", input)){
+        res$status <- 400
+        return("Error: Invalid value for argument 'input'.")
+    }
+    if(is.na(as.numeric(threshold))){
+        res$status <- 400
+        return("Error: Invalid value for argument 'threshold'.")
+    } else {
+        if(as.numeric(threshold) < 0.02 | as.numeric(threshold) > 1.00){
+            res$status <- 400
+            return("Error: Invalid value for argument 'threshold'. Must be between 0.02 and 1.00 (inclusive).")
+        }
+    }
+    
     # Connect to db
     poolSimilarity <- dbPool(
         drv=RPostgres::Postgres(),
@@ -2851,6 +2954,7 @@ searchBySimilarity <- function(res, req, input="", threshold=0.5){
     trySimilarity <- tryCatch({
         outpTanimoto <- dbExecute(poolSimilarity, queryTanimoto)
         similarityOutp <- dbGetQuery(poolSimilarity, similarityQuery)
+        similarityOutp$m <- unlist(lapply(similarityOutp$m, function(x) paste0(x))) # coerce mol column to string. If left as "pq_mol" data type, R wont' know how to send this in a json back to the client.
         TRUE
     }, error=function(cond){
         return(FALSE)
@@ -2867,6 +2971,11 @@ searchBySimilarity <- function(res, req, input="", threshold=0.5){
 #* @param input CASRN Input string
 #* @get /getCasrnData
 getCasrnData <- function(res, req, input){
+    if(!grepl("([0-9]+-[0-9]+-[0-9]+)|(NOCAS_[0-9]+)", input)){
+        res$status <- 400
+        return("Error: Incorrect format for argument 'input'.")
+    }
+    
     # Connect to db
     poolCasrn <- dbPool(
         drv=RPostgres::Postgres(),
@@ -2887,7 +2996,12 @@ getCasrnData <- function(res, req, input){
 #* Detect if submitted chemical contains any reactive groups (internal use only)
 #* @param input
 #* @get /getReactiveGroups
-getReactiveGroups <- function(res, req, input){
+getReactiveGroups <- function(res, req, input="-1"){
+    # Validate input
+    if(grepl("'|\"|;|--", input)){
+        res$status <- 400
+        return("Error: Invalid value for argument 'input'.")
+    }
     has_nitrile <- 0
     has_isocyanate <- 0
     has_aldehyde <- 0
@@ -2941,6 +3055,13 @@ getReactiveGroups <- function(res, req, input){
 #* @param inchi
 #* @get /inchiToSmiles
 inchiToSmiles <- function(res, req, inchi){
+    # Validate input
+    # TODO: make this better
+    if(grepl("'|\"|;|--", inchi)){
+        res$status <- 400
+        return("Error: Invalid value for argument 'inchi'.")
+    }
+    
     # Connect to db
     poolInchi <- dbPool(
         drv=RPostgres::Postgres(),
@@ -2981,6 +3102,16 @@ convertInchi <- function(res, req, inchi){
 #* @param input
 #* @get /getStructureImages
 getStructureImages <- function(res, req, input){
+    # Validate input
+    tmpSplit <- unlist(str_split(input, "\n"))
+    for(i in tmpSplit){
+        # TODO: check this eventually to make sure this actually prevents SQL injection
+        if(grepl("'|\"|;|--", i)){
+            res$status <- 400
+            return("Error: Invalid value for argument 'input'.")
+        }
+    }
+    
     # Connect to db
     poolSvg <- dbPool(
         drv=RPostgres::Postgres(),
@@ -2991,7 +3122,6 @@ getStructureImages <- function(res, req, input){
         port=tox21config$port,
         idleTimeout=3600000
     )
-    tmpSplit <- unlist(str_split(input, "\n"))
     structures <- lapply(tmpSplit, function(x){
         tmpSplit2 <- unlist(str_split(x, "__"))
         m <- tmpSplit2[2]
@@ -3012,6 +3142,14 @@ getStructureImages <- function(res, req, input){
 #* @param input
 #* @get /getStructureWarnings
 getStructureWarnings <- function(res, req, input){
+    # Validate input
+    inputSets <- unlist(str_split(input, "\\|"))
+    for(i in inputSets){
+        if(!grepl("([0-9]+-[0-9]+-[0-9]+)|(NOCAS_[0-9]+)__[A-Za-z0-9]+", i)){
+            res$status <- 400
+            return("Error: Invalid value for argument 'input'.")
+        }
+    }
     # Connect to db
     poolWarn <- dbPool(
         drv=RPostgres::Postgres(),
@@ -3022,7 +3160,6 @@ getStructureWarnings <- function(res, req, input){
         port=tox21config$port,
         idleTimeout=3600000
     )
-    inputSets <- unlist(str_split(input, "\\|"))
     inputSets <- unique(unlist(lapply(inputSets, function(x) unlist(str_split(x, "__"))[1])))
     warnQuery <- sqlInterpolate(ANSI(), paste0("SELECT casrn, cyanide, isocyanate, aldehyde, epoxide FROM mols_2 WHERE ", paste0("casrn='", inputSets, "'", collapse=" OR "), ";"), id="getWarnings")
     warnOutp <- dbGetQuery(poolWarn, warnQuery)
@@ -3039,7 +3176,25 @@ getStructureWarnings <- function(res, req, input){
 #* @param filename
 #* @param subDir
 #* @get /serveFileText
-serveFileText <- function(res, req, transactionId, filename, subDir){
+serveFileText <- function(res, req, transactionId="-1", filename, subDir){
+    # Validate input
+    if(!grepl("[A-Za-z0-9]+-[A-Za-z0-9]+-[A-Za-z0-9]+-[A-Za-z0-9]+-[A-Za-z0-9]+", transactionId)){
+        res$status <- 400
+        return("Error: Incorrect format for argument 'transactionId'.")
+    }
+    if(grepl("\\.\\.|~|\\\\|\\/", filename)){
+        res$status <- 400
+        return("Error: Invalid value for argument 'filename'.")
+    }
+    if(subDir == "Input"){
+        subDir <- IN_DIR
+    } else if(subDir == "Output"){
+        subDir <- OUT_DIR
+    } else {
+        res$status <- 400
+        return("Error: Invalid value for argument 'subDir'.")
+    }
+    
     outDir <- paste0(APP_DIR, subDir, "/", transactionId, "/")
     fileToServe <- paste0(outDir, filename)
     readBin(fileToServe, "raw", n=file.info(fileToServe)$size)
@@ -3076,8 +3231,45 @@ checkId <- function(res, req){
 #* @param transactionId UUID for given request
 #* @param enrichmentSets User's input sets
 #* @param setNames Input set names
+#* @param mode Mode of request
+#* @param nodeCutoff
+#* @param annoSelectStr
 #* @post /createInput
-createInput <- function(res, req, transactionId, enrichmentSets, setNames, mode, nodeCutoff, annoSelectStr){
+createInput <- function(res, req, transactionId="-1", enrichmentSets, setNames, mode, nodeCutoff, annoSelectStr){
+    # Validate input
+    if(!grepl("[A-Za-z0-9]+-[A-Za-z0-9]+-[A-Za-z0-9]+-[A-Za-z0-9]+-[A-Za-z0-9]+", transactionId)){
+        res$status <- 400
+        return("Error: Incorrect format for argument 'transactionId'.")
+    }
+    tmpSets <- unlist(str_split(enrichmentSets, "\\n"))
+    for(i in tmpSets){
+        if(!grepl("([0-9]+-[0-9]+-[0-9]+)|(NOCAS_[0-9]+)__[A-Za-z0-9]+", i)){
+            res$status <- 400
+            return("Error: Invalid value for argument 'enrichmentSets'.")
+        }
+    }
+    if(!grepl("[A-Za-z0-9]+((\\n)+[A-Za-z0-9]+)*(\\n)*", setNames)){
+        res$status <- 400
+        return("Error: Incorrect format for argument 'setNames'.")
+    }
+    if(mode != "casrn" & mode != "substructure" & mode != "similarity" & mode != "annotation"){
+        res$status <- 400
+        return("Error: Invalid value for argument 'mode'.")
+    }
+    if(is.na(as.double(nodeCutoff))){
+        res$status <- 400
+        return("Error: Incorrect value for argument 'nodeCutoff'. Must be between 1 and 50 (inclusive).")
+    } else if(as.double(nodeCutoff) < 1 | as.double(nodeCutoff) > 50){
+        res$status <- 400
+        return("Error: Incorrect value for argument 'nodeCutoff'. Must be between 1 and 50 (inclusive).")
+    }
+    if(!grepl("([A-Za-z0-9]+=checked,)+", annoSelectStr)){
+        res$status <- 400
+        return("Error: Incorrect format for argument 'annoSelectStr'.")
+    } else {
+        # TODO: validate that all passed annotation classes are valid here
+    }
+
     # Get enrichment sets from sent string
     enrichmentSetNames <- unlist(str_split(setNames, "\n"))
     enrichmentSetsSplit <- unlist(str_split(enrichmentSets, "\n"))
@@ -3161,7 +3353,12 @@ createInput <- function(res, req, transactionId, enrichmentSets, setNames, mode,
 #* Returns list of sets that are valid/existing for a given transaction
 #* @param transactionId UUID of the request
 #* @get /getInputSets
-getInputSets <- function(res, req, transactionId){
+getInputSets <- function(res, req, transactionId="-1"){
+    # Validate input
+    if(!grepl("[A-Za-z0-9]+-[A-Za-z0-9]+-[A-Za-z0-9]+-[A-Za-z0-9]+-[A-Za-z0-9]+", transactionId)){
+        res$status <- 400
+        return("Error: Incorrect format for argument 'transactionId'.")
+    }
     inputDir <- paste0(APP_DIR, IN_DIR)
     inputFilesList <- Sys.glob(paste0(inputDir, transactionId, "/*.txt"))
     inputFilesList <- unlist(lapply(inputFilesList, function(x){
@@ -3174,7 +3371,13 @@ getInputSets <- function(res, req, transactionId){
 #* Check if result files exist in Input/Output directories for given request
 #* @param transactionId UUID of the request
 #* @get /exists
-exists <- function(res, req, transactionId="none"){
+exists <- function(res, req, transactionId="-1"){
+    # Validate input
+    if(!grepl("[A-Za-z0-9]+-[A-Za-z0-9]+-[A-Za-z0-9]+-[A-Za-z0-9]+-[A-Za-z0-9]+", transactionId)){
+        res$status <- 400
+        return("Error: Incorrect format for argument 'transactionId'.")
+    }
+    
     # Check if DB records exist
     # Connect to db
     poolExists <- dbPool(
@@ -3211,6 +3414,12 @@ exists <- function(res, req, transactionId="none"){
 #* @setName if supplied, is the set name to fetch from
 #* @get /getResults
 getResults <- function(res, req, transactionId, setName="###"){
+    # Validate input
+    if(!grepl("[A-Za-z0-9]+-[A-Za-z0-9]+-[A-Za-z0-9]+-[A-Za-z0-9]+-[A-Za-z0-9]+", transactionId)){
+        res$status <- 400
+        return("Error: Incorrect format for argument 'transactionId'.")
+    }
+    
     inDir <- paste0(APP_DIR, IN_DIR, transactionId, "/")
     outDir <- paste0(APP_DIR, OUT_DIR, transactionId, "/")
     setFiles <- NULL
@@ -3224,6 +3433,12 @@ getResults <- function(res, req, transactionId, setName="###"){
         })
         setFiles <- append(setFilesIn, setFilesOut)
     } else {
+        # Validate input
+        if(!grepl("[A-Za-z0-9]+", setName)){
+            res$status <- 400
+            return("Error: Incorrect format for argument 'SetName'.")
+        }
+        
         setFilesOut <- Sys.glob(paste0(outDir, setName, "*"), dirmark=FALSE) 
         setFilesOut <- unlist(lapply(setFilesOut, function(fileName){
             tmpSplit <- unlist(str_split(fileName, outDir))
@@ -3246,7 +3461,28 @@ getResults <- function(res, req, transactionId, setName="###"){
 #* @param cutoff Given node cutoff value for the request
 #* @param mode Chart or Cluster
 #* @get /readGct
-readGct <- function(res, req, transactionId, cutoff, mode, set="Set1"){
+readGct <- function(res, req, transactionId="-1", cutoff=10, mode, set="Set1"){
+    # Validate input
+    if(!grepl("[A-Za-z0-9]+-[A-Za-z0-9]+-[A-Za-z0-9]+-[A-Za-z0-9]+-[A-Za-z0-9]+", transactionId)){
+        res$status <- 400
+        return("Error: Incorrect format for argument 'transactionId'.")
+    }
+    if(is.na(as.double(cutoff))){
+        res$status <- 400
+        return("Error: Incorrect value for argument 'cutoff'. Must be between 1 and 50 (inclusive).")
+    } else if(as.double(cutoff) < 1 | as.double(cutoff) > 50){
+        res$status <- 400
+        return("Error: Incorrect value for argument 'cutoff'. Must be between 1 and 50 (inclusive).")
+    }
+    if(mode != "set" & mode != "chart" & mode != "cluster") {
+        res$status <- 400
+        return("Error: Invalid value for argument 'mode'.")
+    }
+    if(!grepl("[A-Za-z0-9]+", set)) {
+        res$status <- 400
+        return("Error: Invalid value for argument 'set'.")
+    }
+    
     outDir <- paste0(APP_DIR, OUT_DIR, transactionId, "/")
     gctFile <- NULL
     if(mode == "chart"){
@@ -3296,7 +3532,15 @@ readGct <- function(res, req, transactionId, cutoff, mode, set="Set1"){
 #* @param transactionId UUID of the request
 #* @param enrichmentSets names of the enrichment sets
 #* @get /getBargraph
-getBargraph <- function(res, req, transactionId, enrichmentSets){
+getBargraph <- function(res, req, transactionId="-1", enrichmentSets){
+    if(!grepl("[A-Za-z0-9]+-[A-Za-z0-9]+-[A-Za-z0-9]+-[A-Za-z0-9]+-[A-Za-z0-9]+", transactionId)){
+        res$status <- 400
+        return("Error: Incorrect format for argument 'transactionId'.")
+    }
+    if(!grepl("[A-Za-z0-9]+(__[A-Za-z0-9]+)*", enrichmentSets)){
+        res$status <- 400
+        return("Error: Invalid value for argument 'enrichmentSets'.")
+    }
     # format enrichment sets
     enrichmentSets <- unlist(str_split(enrichmentSets, "__"))
     # define results directory
@@ -3340,6 +3584,33 @@ getBargraph <- function(res, req, transactionId, enrichmentSets){
 #* @param input Current input set
 #* @get /getNetwork
 getNetwork <- function(res, req, transactionId="-1", cutoff, mode, input, qval){
+    if(!grepl("[A-Za-z0-9]+-[A-Za-z0-9]+-[A-Za-z0-9]+-[A-Za-z0-9]+-[A-Za-z0-9]+", transactionId)){
+        res$status <- 400
+        return("Error: Incorrect format for argument 'transactionId'.")
+    }
+    if(is.na(as.double(cutoff))){
+        res$status <- 400
+        return("Error: Incorrect value for argument 'cutoff'. Must be between 1 and 50 (inclusive).")
+    } else if(as.double(cutoff) < 1 | as.double(cutoff) > 50){
+        res$status <- 400
+        return("Error: Incorrect value for argument 'cutoff'. Must be between 1 and 50 (inclusive).")
+    }
+    if(mode != "chart" & mode != "cluster"){
+        res$status <- 400
+        return("Error: Invalid value for argument 'mode'.")
+    }
+    if(!grepl("[A-Za-z0-9]+(#[A-Za-z0-9]+)*", input)){
+        res$status <- 400
+        return("Error: Invalid value for argument 'input'.")
+    }
+    if(is.na(as.numeric(qval))){
+        res$status <- 400
+        return("Error: Invalid value for argument 'qval'. Must be between 0.01 and 1.00 (inclusive).")
+    } else if(as.numeric(qval) < 0.01 | as.numeric(qval) > 1.00){
+        res$status <- 400
+        return("Error: Invalid value for argument 'qval'. Must be between 0.01 and 1.00 (inclusive).")
+    }
+    
     input <- unlist(str_split(input, "#"))
     baseDirName <- paste0(APP_DIR, OUT_DIR, transactionId, "/")
     chartForNetFile <- NULL
@@ -3436,6 +3707,33 @@ getNetwork <- function(res, req, transactionId="-1", cutoff, mode, input, qval){
 #* @param classTo
 #* @get /getNodeChemicals
 getNodeChemicals <- function(res, req, termFrom, termTo, classFrom, classTo){
+    if(!grepl("[A-Za-z0-9_]+", classFrom)){
+        res$status <- 400
+        return("Error: Invalid value for argument 'classFrom'.")
+    } else {
+        if(!(classFrom %in% names(funCatTerm2CASRN))){
+            res$status <- 400
+            return("Error: Class not found for argument 'classFrom'.")
+        }
+    }
+    if(!grepl("[A-Za-z0-9_]+", classTo)){
+        res$status <- 400
+        return("Error: Invalid value for argument 'classTo'.")
+    } else {
+        if(!(classTo %in% names(funCatTerm2CASRN))){
+            res$status <- 400
+            return("Error: Class not found for argument 'classTo'.")
+        }
+    }
+    if(!(termFrom %in% names(funCatTerm2CASRN[[classFrom]]))){
+        res$status <- 400
+        return(paste0("Error: Term '", termFrom, "' not found in class ", classFrom, "."))
+    }
+    if(!(termTo %in% names(funCatTerm2CASRN[[classTo]]))){
+        res$status <- 400
+        return(paste0("Error: Term '", termTo, "' not found in class ", classTo, "."))
+    }
+    
     # Connect to db
     poolNode <- dbPool(
         drv=RPostgres::Postgres(),
@@ -3472,6 +3770,11 @@ getNodeChemicals <- function(res, req, termFrom, termTo, classFrom, classTo){
 #* @param class
 #* @get /getNodeDetails
 getNodeDetails <- function(res, req, class){
+    if(!grepl("[A-Za-z0-9_]+", class)){
+        res$status <- 400
+        return("Error: Incorrect format for argument 'class'.")
+    }
+    
     # Connect to db
     poolNode <- dbPool(
         drv=RPostgres::Postgres(),
@@ -3517,7 +3820,7 @@ getNodeColors <- function(res, req){
 
 #* Get list of all annotations in the database
 #* @get /getAnnotationList
-getAnnotationList <- function(){
+getAnnotationList <- function(res, req){
     pool <- dbPool(
         drv=RPostgres::Postgres(),
         dbname=tox21config$database,
@@ -3539,38 +3842,75 @@ getAnnotationList <- function(){
 #* @param input Comma-separated string of chemicals for this enrichment process.
 #* @param annotations Comma-separated string of all enabled annotations for this enrichment process.
 #* @param cutoff Node cutoff value - integers only between 1-50.
-#* @param tanimoto Tanimoto threshold for Similarity search (default 0.5).
+#* @param tanimoto Tanimoto threshold for similarity search (default 0.5).
 #* @post /submit
-submit <- function(mode="", input="", annotations="MESH,PHARMACTIONLIST,ACTIVITY_CLASS,ADVERSE_EFFECT,INDICATION,KNOWN_TOXICITY,MECH_LEVEL_1,MECH_LEVEL_2,MECH_LEVEL_3,MECHANISM,MODE_CLASS,PRODUCT_CLASS,STRUCTURE_ACTIVITY,TA_LEVEL_1,TA_LEVEL_2,TA_LEVEL_3,THERAPEUTIC_CLASS,TISSUE_TOXICITY,DRUGBANK_ATC,DRUGBANK_ATC_CODE,DRUGBANK_CARRIERS,DRUGBANK_ENZYMES,DRUGBANK_TARGETS,DRUGBANK_TRANSPORTERS,CTD_CHEM2DISEASE,CTD_CHEM2GENE_25,CTD_CHEMICALS_DISEASES,CTD_CHEMICALS_GENES,CTD_CHEMICALS_GOENRICH_CELLCOMP,CTD_CHEMICALS_GOENRICH_MOLFUNCT,CTD_CHEMICALS_PATHWAYS,CTD_GOSLIM_BIOPROCESS,CTD_PATHWAY,HTS_ACTIVE,LEADSCOPE_TOXICITY,MULTICASE_TOX_PREDICTION,TOXCAST_ACTIVE,TOXINS_TARGETS,TOXPRINT_STRUCTURE,TOXREFDB", cutoff=10, tanimoto=0.5) {
+submit <- function(res, req, mode="", input="", annotations="", cutoff=10, tanimoto=0.5) {
     # TODO: Check if arguments are bad
     # Check if mode is missing
     if(is.null(mode) | mode == ""){
+        res$status <- 400
         return("Error: No mode specified. ('casrn', 'substructure', 'similarity', or 'annotation')")
     }
+    # Check if mode value is invalid
+    if(mode != "casrn" & mode != "substructure" & mode != "similarity" & mode != "annotation"){
+        res$status <- 400
+        return("Error: Invalid value for argument 'mode'.")
+    }
+    
     # Check if input is missing
     if(is.null(input) | input == ""){
+        res$status <- 400
         return("Error: No input supplied.")
+    }
+    # Check if user inputs any bad chars
+    if(grepl("'|\"|;|--", input)){
+        res$status <- 400
+        return("Error: Invalid value for argument 'input'.")
+    }
+    
+    # Check if we can coerce cutoff to number
+    if(typeof(cutoff) == "character"){
+        cutoff <- as.numeric(cutoff)
+    }
+    if(is.na(cutoff)){
+        res$status <- 400
+        return("Error: Cutoff value is not a number.")
     }
     # Check if cutoff is not a number
     if(!is.numeric(cutoff)){
+        res$status <- 400
         return("Error: Cutoff value is not a number.")
     }
     # Check if cutoff is not an integer
     if(cutoff %% 1 != 0){
+        res$status <- 400
         return("Error: Cutoff value is not an integer.")
     }
     # Check if cutoff is out of range
     if(cutoff < 1 | cutoff > 50){
+        res$status <- 400
         return("Error: Cutoff value must be between 1 and 50 inclusive.")
+    }
+    
+    # Check if we can coerce Tanimoto to number
+    if(typeof(tanimoto) == "character"){
+        tanimoto <- as.numeric(tanimoto)
+    }
+    if(is.na(tanimoto)){
+        res$status <- 400
+        return("Error: Tanimoto threshold is not a number.")
     }
     # Check if Tanimoto is not a number
     if(!is.numeric(tanimoto)){
+        res$status <- 400
         return("Error: Tanimoto threshold is not a number.")
     }
     # Check if Tanimoto is out of range
-    if(tanimoto < 0.01 | tanimoto > 1.00){
-        return("Error: Tanimoto threshold must be between 0.01 and 1.00 inclusive.")
+    if(tanimoto < 0.02 | tanimoto > 1.00){
+        res$status <- 400
+        return("Error: Tanimoto threshold must be between 0.02 and 1.00 inclusive.")
     }
+    
     # Paths
     inBaseDir <- paste0(APP_DIR, "/", IN_DIR)
     outBaseDir <- paste0(APP_DIR, "/", OUT_DIR)
@@ -3600,6 +3940,7 @@ submit <- function(mode="", input="", annotations="MESH,PHARMACTIONLIST,ACTIVITY
         # Close pool
         poolClose(poolTanimoto)
     }
+    
     # Get list of all annotation classes in database
     annotationList <- getAnnotationList()
     # Set annotations to default if missing
@@ -3609,17 +3950,18 @@ submit <- function(mode="", input="", annotations="MESH,PHARMACTIONLIST,ACTIVITY
     # Check if all annotations are valid
     errorAnnotationClasses <- lapply(unlist(str_split(annotations, ",")), function(x){
         if(!(x %in% annotationList)){
-            return(paste0("Error: Invalid annotation class: ", x))
+            return(x)
         }
         return(NULL)
     })
     errorAnnotationClasses <- errorAnnotationClasses[!vapply(errorAnnotationClasses, is.null, FUN.VALUE=logical(1))]
     if(length(errorAnnotationClasses) > 0){
-        return(paste0(errorAnnotationClasses, collapse=", "))
+        res$status <- 400
+        return(paste0("Error: Invalid annotation class(es): ", paste0(errorAnnotationClasses, collapse=", "), ". Use 'http://<address_of_Tox21_Enricher_API>/getAnnotationList' to see a list of valid annotation classes."))
     }
-    
     # Put annotations into correct form (annotation selection string with =checked)
     annotations <- gsub(",", "=checked,", annotations)
+    
     # Open main pool
     pool <- dbPool(
         drv=RPostgres::Postgres(),
@@ -3711,7 +4053,7 @@ submit <- function(mode="", input="", annotations="MESH,PHARMACTIONLIST,ACTIVITY
     }))
     casrnValidatedInput <- casrnValidatedInput[!vapply(casrnValidatedInput, is.null, FUN.VALUE=logical(1))]
     errorCasrns <- lapply(seq_len(length(casrnValidatedInput)), function(i){
-        if(!grepl("^#[A-Za-z0-9]+|[0-9]+-[0-9]+-[0-9]+", casrnValidatedInput[i], ignore.case=TRUE)) {
+        if(!grepl("^#[A-Za-z0-9]+|[0-9]+-[0-9]+-[0-9]+|(NOCAS_[0-9]+)", casrnValidatedInput[i], ignore.case=TRUE)) {
             return(i)
         }
         return(NULL)
@@ -3766,9 +4108,7 @@ submit <- function(mode="", input="", annotations="MESH,PHARMACTIONLIST,ACTIVITY
     casrnValidatedInput <- casrnValidatedInput[!vapply(casrnValidatedInput, is.null, FUN.VALUE=logical(1))]
     casrnValidatedInput <- paste0(casrnValidatedInput, collapse="\n")
     # Remove pound symbol from set names
-    setNames <- lapply(setNames, function(x){
-        return(gsub("#", "", x))
-    })
+    setNames <- lapply(setNames, function(x) gsub("#", "", x))
     setNames <- paste0(setNames, collapse="\n")
     # Create input file in queue
     createInput(transactionId=transactionId, enrichmentSets=casrnValidatedInput, setNames=setNames, mode=mode, nodeCutoff=cutoff, annoSelectStr=annotations)
@@ -3782,7 +4122,12 @@ submit <- function(mode="", input="", annotations="MESH,PHARMACTIONLIST,ACTIVITY
 #* @serializer contentType list(type="application/zip")
 #* @param id The UUID of the enrichment process to download.
 #* @get /download
-function(id="-1", res) {
+download <- function(res, req, id="-1") {
+    # Validate input
+    if(!grepl("[A-Za-z0-9]+-[A-Za-z0-9]+-[A-Za-z0-9]+-[A-Za-z0-9]+-[A-Za-z0-9]+", id)){
+        res$status <- 400
+        return("Error: Incorrect format for argument 'id'.")
+    }
     # async
     future_promise({
         fName <- paste0(APP_DIR, OUT_DIR, id, "/tox21enricher_", id, ".zip")
@@ -3798,6 +4143,11 @@ function(id="-1", res) {
 #* @param id The UUID of the enrichment process to check.
 #* @get /isComplete
 function(id="-1", res) {
+    # Validate input
+    if(!grepl("[A-Za-z0-9]+-[A-Za-z0-9]+-[A-Za-z0-9]+-[A-Za-z0-9]+-[A-Za-z0-9]+", id)){
+        res$status <- 400
+        return("Error: Incorrect format for argument 'id'.")
+    }
     # async
     future_promise({
         fName <- paste0(APP_DIR, OUT_DIR, id, "/tox21enricher_", id, ".zip")

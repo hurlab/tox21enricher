@@ -313,7 +313,7 @@ shinyUI(function(){
                             )
                         ),
                         hidden(
-                            tipify(sliderInput(inputId="tanimotoThreshold", label="Select Tanimoto similarity threshold (%)", value=50, min=1, max=100, step=1, width="100%"), "This will set the threshold for how structurally similar to the input a chemical should be to be included in enrichment.", placement="bottom")
+                            tipify(sliderInput(inputId="tanimotoThreshold", label="Select Tanimoto similarity threshold (%)", value=50, min=2, max=100, step=1, width="100%"), "This will set the threshold for how structurally similar to the input a chemical should be to be included in enrichment.", placement="bottom")
                         )
                     ),
                     hr(),
@@ -349,7 +349,7 @@ shinyUI(function(){
                             )
                         ),
                         column(12,
-                            p(tags$b("Note:"), "Please verify you are using the correct chemical identifiers by referencing the ", tags$a(href="https://comptox.epa.gov/dashboard", "EPA's CompTox Chemicals Dashboard."))
+                            p(tags$b("Notes:"), "Please verify you are using the correct chemical identifiers by referencing the ", tags$a(href="https://comptox.epa.gov/dashboard", "EPA's CompTox Chemicals Dashboard."))
                         ),
                         column(12,
                             uiOutput("inputInstructions"),
