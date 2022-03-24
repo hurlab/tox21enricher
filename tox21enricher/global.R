@@ -1,6 +1,5 @@
 library(bslib)
 library(catmaply)
-library(CePa)
 library(config)
 library(DBI)
 library(dplyr)

@@ -212,8 +212,40 @@ shinyServer(function(input, output, session) {
     # API connectivity details
     # Change host address and port in config.yml
     tox21config <- config::get("tox21enricher-client")
+    API_SECURE <- tox21config$secure
+    if(API_SECURE){
+        API_PROTOCOL <- "https://"
+    } else {
+        API_PROTOCOL <- "http://"
+    }
     API_HOST <- tox21config$host
     API_PORT <- tox21config$port
+    if(nchar(as.character(API_PORT)) < 1){ #set to sentinel value if no port specified
+        API_PORT <- -1
+    }
+    
+    # Prepare API_ADDR connection string (this is to handle the situation in which the API is hosted in a location like: hostname:8080/subdir/subdir2/api)
+    hostnameSplit <- unlist(str_split(API_HOST, "/"))
+    API_ADDR <- ""
+    if(API_PORT == -1){ # No port specified
+        if(length(hostnameSplit) < 2){
+            API_ADDR <- paste0(hostnameSplit[1])
+        } else {
+            API_ADDR <- paste0(hostnameSplit[1], "/", paste0(hostnameSplit[2:length(hostnameSplit)], collapse="/"))
+        }
+    } else {
+        if(length(hostnameSplit) < 2){
+            API_ADDR <- paste0(hostnameSplit[1], ":", API_PORT)
+        } else {
+            API_ADDR <- paste0(hostnameSplit[1], ":", API_PORT, "/", paste0(hostnameSplit[2:length(hostnameSplit)], collapse="/"))
+        }
+    }
+    # strip ending "/" if part of address
+    if(grepl("/$", API_ADDR)){
+        API_ADDR <- substr(API_ADDR, 1, nchar(API_ADDR) - 1)
+    }
+    
+    # TODO: adjust this as needed for external version
     # If specified in cookies, override config.yml host/port settings
     observe({
         js$getHostInfo()
@@ -223,7 +255,7 @@ shinyServer(function(input, output, session) {
             API_PORT <- hostInfoSplit[2]
             # Check if this new connection will work
             pingAPIUserConfig <- tryCatch({
-                resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="ping")
+                resp <- GET(url=paste0(API_PROTOCOL, API_ADDR, "/ping"))
                 if(resp$status_code != 200) {
                     showNotification("Error: Could not connect to Tox21 Enricher server using user-defined settings. Defaulting to use configuration file settings.", type="warning")
                     API_HOST <<- tox21config$host
@@ -236,11 +268,11 @@ shinyServer(function(input, output, session) {
             })
         }
     })
-
+    
     # Display API connection status
     apiStatus <- function() {
         pingAPI <- tryCatch({
-            resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="ping")
+            resp <- GET(url=paste0(API_PROTOCOL, API_ADDR, "/ping"))
             if(resp$status_code != 200) {
                 output$apiConnection <- renderUI({
                     HTML(paste0("<div class=\"text-danger\">Could not connect to Tox21 Enricher server!</div>"))
@@ -267,7 +299,7 @@ shinyServer(function(input, output, session) {
     resp <- NULL
     cleanupTime <- reactiveValues(hours=48) # default 48 hours
     tryCleanup <- tryCatch({
-        resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="getCleanupTime")
+        resp <- GET(url=paste0(API_PROTOCOL, API_ADDR, "/getCleanupTime"))
         TRUE
     }, error=function(cond){
         return(FALSE)
@@ -342,7 +374,7 @@ shinyServer(function(input, output, session) {
     # Get list of annotation classes & types from Postgres database
     get_annotations <- function(){
         # Query API to get list of annotation classes and types
-        resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="getAnnotations")
+        resp <- GET(url=paste0(API_PROTOCOL, API_ADDR, "/getAnnotations"))
         if(resp$status_code != 200){
             return(list())
         }
@@ -360,7 +392,7 @@ shinyServer(function(input, output, session) {
     getEnrichmentCount <- function(){
         tryEnrichmentCount <- tryCatch({
             # Query API to get list of annotation classes and types
-            resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="getTotalRequests")
+            resp <- GET(url=paste0(API_PROTOCOL, API_ADDR, "/getTotalRequests"))
             if(resp$status_code != 200){
                 return(0)
             }
@@ -386,7 +418,7 @@ shinyServer(function(input, output, session) {
             # First, query API to get most recent version of manual
             resp <- NULL
             tryManual <- tryCatch({
-                resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="getAppVersion")
+                resp <- GET(url=paste0(API_PROTOCOL, API_ADDR, "/getAppVersion"))
             }, error=function(cond){
                 return(NULL)
             })
@@ -402,7 +434,7 @@ shinyServer(function(input, output, session) {
             if(!file.exists(paste0(tempdir(), "/docs/Tox21Enricher_Manual_v", appVersion, ".pdf"))){
                 # TODO: error check if download fails
                 tryManualDL <- tryCatch({
-                    download.file(paste0("http://", API_HOST, ":", API_PORT, "/serveManual"), destfile=paste0(tempdir(), "/docs/Tox21Enricher_Manual_v", appVersion, ".pdf"))
+                    download.file(paste0(API_PROTOCOL, API_ADDR, "/serveManual"), destfile=paste0(tempdir(), "/docs/Tox21Enricher_Manual_v", appVersion, ".pdf"))
                 }, error=function(cond){
                     return(NULL)
                 })
@@ -435,7 +467,7 @@ shinyServer(function(input, output, session) {
             deleteTime <- 30 # default 30 days
             cookieExpTime <- 48
             tryDelete <- tryCatch({
-                resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="getDeleteTime")
+                resp <- GET(url=paste0(API_PROTOCOL, API_ADDR, "/getDeleteTime"))
                 TRUE
             }, error=function(cond){
                 return(FALSE)
@@ -485,7 +517,7 @@ shinyServer(function(input, output, session) {
                 # fetch and calculate expiration dates for cookies and fetch additional info
                 prevRequestInfoList <- lapply(prevSavedSessionsList, function(x){
                     tryInfo <- tryCatch({
-                        resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="getAdditionalRequestInfo", query=list(transactionId=x))
+                        resp <- GET(url=paste0(API_PROTOCOL, API_ADDR, "/getAdditionalRequestInfo"), query=list(transactionId=x))
                         TRUE
                     }, error=function(cond){
                         return(FALSE)
@@ -590,7 +622,7 @@ shinyServer(function(input, output, session) {
                             # Check if result (Input/Output) files exist on the server
                             resp <- NULL
                             tryPrevious <- tryCatch({
-                                resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="exists", query=list(transactionId=transactionId))
+                                resp <- GET(url=paste0(API_PROTOCOL, API_ADDR, "/exists"), query=list(transactionId=transactionId))
                                 TRUE
                             }, error=function(cond){
                                 return(FALSE)
@@ -614,7 +646,7 @@ shinyServer(function(input, output, session) {
                             # Set reactive UUID for this query
                             reactiveTransactionId$id <- transactionId
                             # Check if request has been cancelled - if so, display error message
-                            resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="isCancel", query=list(transactionId=transactionId))
+                            resp <- GET(url=paste0(API_PROTOCOL, API_ADDR, "/isCancel"), query=list(transactionId=transactionId))
                             if(resp$status_code != 200) {
                                 showNotification(paste0("Error: Could not fetch data for this transaction."), type="error")
                                 return(FALSE)
@@ -627,7 +659,7 @@ shinyServer(function(input, output, session) {
                             } 
                             # Get initial queue position
                             initQueuePos <- -1
-                            resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="getQueuePos", query=list(transactionId=transactionId, mode="init"))
+                            resp <- GET(url=paste0(API_PROTOCOL, API_ADDR, "/getQueuePos"), query=list(transactionId=transactionId, mode="init"))
                             if(resp$status_code != 200) {
                                 showNotification("Error: Could not fetch queue position for this request.", type="error")
                             } else {
@@ -636,7 +668,7 @@ shinyServer(function(input, output, session) {
                             }
                             # Get old transaction data
                             transactionData <- NULL
-                            resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="getPrevSessionData", query=list(transactionId=transactionId))
+                            resp <- GET(url=paste0(API_PROTOCOL, API_ADDR, "/getPrevSessionData"), query=list(transactionId=transactionId))
                             if(resp$status_code != 200) {
                                 showNotification(paste0("Error: Could not fetch data for this transaction."), type="error")
                                 return(FALSE)
@@ -717,7 +749,7 @@ shinyServer(function(input, output, session) {
                                         # Query API to get list of annotation classes and types
                                         resp <- NULL
                                         trySubstructure <- tryCatch({
-                                            resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="searchBySubstructure", query=list(input=originalNamesToReturn[[names(enrichmentSets)[casrnSet]]]))
+                                            resp <- GET(url=paste0(API_PROTOCOL, API_ADDR, "/searchBySubstructure"), query=list(input=originalNamesToReturn[[names(enrichmentSets)[casrnSet]]]))
                                             if(resp$status_code != 200){
                                                 return(FALSE)
                                             }
@@ -743,7 +775,7 @@ shinyServer(function(input, output, session) {
                                         threshold <- as.numeric(input$tanimotoThreshold) / 100
                                         resp <- NULL
                                         trySimilarity <- tryCatch({
-                                            resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="searchBySimilarity", query=list(input=originalNamesToReturn[[names(enrichmentSets)[casrnSet]]], threshold=threshold))
+                                            resp <- GET(url=paste0(API_PROTOCOL, API_ADDR, "/searchBySimilarity"), query=list(input=originalNamesToReturn[[names(enrichmentSets)[casrnSet]]], threshold=threshold))
                                             TRUE
                                         }, error=function(cond){
                                             return(FALSE)
@@ -778,7 +810,7 @@ shinyServer(function(input, output, session) {
                                         if (enrichmentType$enrichType == "substructure") {
                                             resp <- NULL
                                             trySubstructure <- tryCatch({
-                                                resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="searchBySubstructure", query=list(input=setName))
+                                                resp <- GET(url=paste0(API_PROTOCOL, API_ADDR, "/searchBySubstructure"), query=list(input=setName))
                                                 if(resp$status_code != 200){
                                                     return(FALSE)
                                                 }
@@ -807,7 +839,7 @@ shinyServer(function(input, output, session) {
                                             threshold <- as.numeric(input$tanimotoThreshold)/100
                                             resp <- NULL
                                             trySimilarity <- tryCatch({
-                                                resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="searchBySimilarity", query=list(input=setName, threshold=threshold))
+                                                resp <- GET(url=paste0(API_PROTOCOL, API_ADDR, "/searchBySimilarity"), query=list(input=setName, threshold=threshold))
                                                 if(resp$status_code != 200){
                                                     return(FALSE)
                                                 }  
@@ -903,7 +935,7 @@ shinyServer(function(input, output, session) {
         # Fetch selected transaction
         resp <- NULL
         tryPrevious <- tryCatch({
-            resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="getTransactionDetails", query=list(uuid=setToFetch))
+            resp <- GET(url=paste0(API_PROTOCOL, API_ADDR, "/getTransactionDetails"), query=list(uuid=setToFetch))
             TRUE
         }, error=function(cond){
             return(FALSE)
@@ -932,7 +964,7 @@ shinyServer(function(input, output, session) {
         # Check if result (Input/Output) files exist on the server
         resp <- NULL
         tryPrevious <- tryCatch({
-            resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="exists", query=list(transactionId=transactionId))
+            resp <- GET(url=paste0(API_PROTOCOL, API_ADDR, "/exists"), query=list(transactionId=transactionId))
             TRUE
         }, error=function(cond){
             return(FALSE)
@@ -1460,7 +1492,7 @@ shinyServer(function(input, output, session) {
         casrnBox <- waitingData[1, "Input"]
         resp <- NULL
         tryRefresh <- tryCatch({
-            resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="getQueuePos", query=list(transactionId=transactionId, mode=enrichmentDisplayType))
+            resp <- GET(url=paste0(API_PROTOCOL, API_ADDR, "/getQueuePos"), query=list(transactionId=transactionId, mode=enrichmentDisplayType))
             TRUE
         }, error=function(cond){
             return(FALSE)
@@ -1675,7 +1707,7 @@ shinyServer(function(input, output, session) {
         transactionId <- NULL
         resp <- NULL
         tryGenerateUUID <- tryCatch({
-            resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="checkId")
+            resp <- GET(url=paste0(API_PROTOCOL, API_ADDR, "/checkId"))
             if(resp$status_code != 200){
                 return(FALSE)
             }
@@ -1754,7 +1786,7 @@ shinyServer(function(input, output, session) {
                         # Query API to get list of annotation classes and types
                         resp <- NULL
                         trySubstructure <- tryCatch({
-                            resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="searchBySubstructure", query=list(input=originalNamesToReturn[[names(enrichmentSets)[casrnSet]]]))
+                            resp <- GET(url=paste0(API_PROTOCOL, API_ADDR, "/searchBySubstructure"), query=list(input=originalNamesToReturn[[names(enrichmentSets)[casrnSet]]]))
                             if(resp$status_code != 200){
                                 return(FALSE)
                             }
@@ -1780,7 +1812,7 @@ shinyServer(function(input, output, session) {
                         threshold <- as.numeric(input$tanimotoThreshold) / 100
                         resp <- NULL
                         trySimilarity <- tryCatch({
-                            resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="searchBySimilarity", query=list(input=originalNamesToReturn[[names(enrichmentSets)[casrnSet]]], threshold=threshold))
+                            resp <- GET(url=paste0(API_PROTOCOL, API_ADDR, "/searchBySimilarity"), query=list(input=originalNamesToReturn[[names(enrichmentSets)[casrnSet]]], threshold=threshold))
                             TRUE
                         }, error=function(cond){
                             return(FALSE)
@@ -1816,7 +1848,7 @@ shinyServer(function(input, output, session) {
                     if (enrichmentType$enrichType == "substructure") {
                         resp <- NULL
                         trySubstructure <- tryCatch({
-                            resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="searchBySubstructure", query=list(input=setName))
+                            resp <- GET(url=paste0(API_PROTOCOL, API_ADDR, "/searchBySubstructure"), query=list(input=setName))
                             if(resp$status_code != 200){
                                 return(FALSE)
                             }
@@ -1845,7 +1877,7 @@ shinyServer(function(input, output, session) {
                         threshold <- as.numeric(input$tanimotoThreshold) / 100
                         resp <- NULL
                         trySimilarity <- tryCatch({
-                            resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="searchBySimilarity", query=list(input=setName, threshold=threshold))
+                            resp <- GET(url=paste0(API_PROTOCOL, API_ADDR, "/searchBySimilarity"), query=list(input=setName, threshold=threshold))
                             if(resp$status_code != 200){
                                 return(FALSE)
                             }  
@@ -1910,7 +1942,7 @@ shinyServer(function(input, output, session) {
         resp <- NULL
         maxInputSize <- 1 # default value of 1 individual set(s)
         tryTransactionSize <- tryCatch({
-            resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="getInputMax")
+            resp <- GET(url=paste0(API_PROTOCOL, API_ADDR, "/getInputMax"))
             TRUE
         }, error=function(cond){
             return(FALSE)
@@ -1983,7 +2015,7 @@ shinyServer(function(input, output, session) {
                 originalReactiveStructures <- lapply(originalNamesList$originalNames, function(x){
                     setInput <- unlist(str_split(x, "__"))[1]
                     tryReactive <- tryCatch({
-                        resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="getReactiveGroups", query=list(input=setInput))
+                        resp <- GET(url=paste0(API_PROTOCOL, API_ADDR, "/getReactiveGroups"), query=list(input=setInput))
                         TRUE
                     }, error=function(cond){
                         return(FALSE)
@@ -2006,7 +2038,7 @@ shinyServer(function(input, output, session) {
                 names(originalReactiveStructures) <- unlist(lapply(originalNamesList$originalNames, function(x) unlist(str_split(x, "__"))[2]))
                 originalReactiveStructures <- originalReactiveStructures[!vapply(originalReactiveStructures, is.null, FUN.VALUE=logical(1))]
                 tryWarnings <- tryCatch({
-                    resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="getStructureWarnings", query=list(input=enrichmentSetsSanitizedLocal))
+                    resp <- GET(url=paste0(API_PROTOCOL, API_ADDR, "/getStructureWarnings"), query=list(input=enrichmentSetsSanitizedLocal))
                     TRUE
                 }, error=function(cond){
                     return(FALSE)
@@ -2128,7 +2160,7 @@ shinyServer(function(input, output, session) {
             # Send query to create transaction entry in database
             resp <- NULL
             tryTransaction <- tryCatch({
-                resp <- POST(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="createTransaction", query=list(originalMode=originalEnrichModeList$originalEnrichMode, mode=enrichmentType$enrichType, uuid=transactionId, annoSelectStr=annoSelectStr, cutoff=cutoff, input=enrichmentSetsSanitizedLocal, casrnBox=casrnBox, originalNames=paste0(originalNamesList$originalNames, collapse="|"), reenrich=paste0(reenrichResultsSanitized, collapse="|"), color=colorsToPrint, timestampPosted=beginTime, reenrichFlag=reenrichFlagReactive$reenrichFlagReactive))
+                resp <- POST(url=paste0(API_PROTOCOL, API_ADDR, "/createTransaction"), query=list(originalMode=originalEnrichModeList$originalEnrichMode, mode=enrichmentType$enrichType, uuid=transactionId, annoSelectStr=annoSelectStr, cutoff=cutoff, input=enrichmentSetsSanitizedLocal, casrnBox=casrnBox, originalNames=paste0(originalNamesList$originalNames, collapse="|"), reenrich=paste0(reenrichResultsSanitized, collapse="|"), color=colorsToPrint, timestampPosted=beginTime, reenrichFlag=reenrichFlagReactive$reenrichFlagReactive))
                 TRUE
             }, error=function(cond){
                 return(FALSE)
@@ -2140,7 +2172,7 @@ shinyServer(function(input, output, session) {
             # Send query to create input file
             resp <- NULL
             tryInput <- tryCatch({
-                resp <- POST(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="createInput", query=list(transactionId=transactionId, enrichmentSets=enrichmentSetsSanitized, setNames=paste0(names(enrichmentSets), collapse="\n"), mode=enrichmentType$enrichType, nodeCutoff=cutoff, annoSelectStr=annoSelectStr))
+                resp <- POST(url=paste0(API_PROTOCOL, API_ADDR, "/createInput"), query=list(transactionId=transactionId, enrichmentSets=enrichmentSetsSanitized, setNames=paste0(names(enrichmentSets), collapse="\n"), mode=enrichmentType$enrichType, nodeCutoff=cutoff, annoSelectStr=annoSelectStr))
                 TRUE
             }, error=function(cond){
                 return(FALSE)
@@ -2188,7 +2220,7 @@ shinyServer(function(input, output, session) {
         # Query API to put request in queue
         resp <- NULL
         tryQueue <- tryCatch({
-            resp <- POST(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="queue", query=list(mode=enrichmentType$enrichType, enrichmentUUID=transactionId, annoSelectStr=annoSelectStr, nodeCutoff=cutoff, setNames=paste0(names(enrichmentSets), collapse="\n")))
+            resp <- POST(url=paste0(API_PROTOCOL, API_ADDR, "/queue"), query=list(mode=enrichmentType$enrichType, enrichmentUUID=transactionId, annoSelectStr=annoSelectStr, nodeCutoff=cutoff, setNames=paste0(names(enrichmentSets), collapse="\n")))
             TRUE
         }, error=function(cond){
             return(FALSE)
@@ -2207,7 +2239,7 @@ shinyServer(function(input, output, session) {
         
         # Get initial queue position
         initQueuePos <- -1
-        resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="getQueuePos", query=list(transactionId=transactionId, mode="init"))
+        resp <- GET(url=paste0(API_PROTOCOL, API_ADDR, "/getQueuePos"), query=list(transactionId=transactionId, mode="init"))
         if(resp$status_code != 200) {
             showNotification("Error: Could not fetch queue position for this request.", type="error")
         } else {
@@ -2242,7 +2274,7 @@ shinyServer(function(input, output, session) {
         # Query the API to see if we ran into an error
         resp <- NULL
         tryError <- tryCatch({
-            resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="hasError", query=list(transactionId=transactionId))
+            resp <- GET(url=paste0(API_PROTOCOL, API_ADDR, "/hasError"), query=list(transactionId=transactionId))
             TRUE
         }, error=function(cond){
             return(FALSE)
@@ -2269,7 +2301,7 @@ shinyServer(function(input, output, session) {
         # Query the API to see if we ran into an error
         resp <- NULL
         tryError <- tryCatch({
-            resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="hasError", query=list(transactionId=transactionId))
+            resp <- GET(url=paste0(API_PROTOCOL, API_ADDR, "/hasError"), query=list(transactionId=transactionId))
             TRUE
         }, error=function(cond){
             return(FALSE)
@@ -2291,7 +2323,7 @@ shinyServer(function(input, output, session) {
         # Query the API to see if process is done
         resp <- NULL
         tryQueue <- tryCatch({
-            resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="isRequestFinished", query=list(transactionId=transactionId))
+            resp <- GET(url=paste0(API_PROTOCOL, API_ADDR, "/isRequestFinished"), query=list(transactionId=transactionId))
             TRUE
         }, error=function(cond){
             return(FALSE)
@@ -2339,7 +2371,7 @@ shinyServer(function(input, output, session) {
         # Query the API to cancel enrichment
         resp <- NULL
         tryCancel <- tryCatch({
-            resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="cancelEnrichment", query=list(transactionId=reactiveTransactionId$id))
+            resp <- GET(url=paste0(API_PROTOCOL, API_ADDR, "/cancelEnrichment"), query=list(transactionId=reactiveTransactionId$id))
             TRUE
         }, error=function(cond){
             return(FALSE)
@@ -2371,7 +2403,7 @@ shinyServer(function(input, output, session) {
         # Check which enrichment sets are good
         resp <- NULL
         tryCheck <- tryCatch({
-            resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="getInputSets", query=list(transactionId=transactionId))
+            resp <- GET(url=paste0(API_PROTOCOL, API_ADDR, "/getInputSets"), query=list(transactionId=transactionId))
             TRUE
         }, error=function(cond){
             return(FALSE)
@@ -2441,7 +2473,7 @@ shinyServer(function(input, output, session) {
             # Fetch setFiles from server via API
             resp <- NULL
             tryResults <- tryCatch({
-                resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="getResults", query=list(transactionId=transactionId))
+                resp <- GET(url=paste0(API_PROTOCOL, API_ADDR, "/getResults"), query=list(transactionId=transactionId))
                 TRUE
             }, error=function(cond){
                 return(FALSE)
@@ -2474,7 +2506,7 @@ shinyServer(function(input, output, session) {
                             tryAnnotationDL <- TRUE
                             if(!file.exists(paste0(tempdir(), "/output/", transactionId, "/", setFilesSplit[setFile]))){
                                 tryAnnotationDL <- tryCatch({
-                                    download.file(paste0("http://", API_HOST, ":", API_PORT, "/serveFileText?transactionId=", transactionId, "&filename=", setFilesSplit[setFile], "&subDir=Output"), destfile=paste0(tempdir(), "/output/", transactionId, "/", setFilesSplit[setFile]))
+                                    download.file(paste0(API_PROTOCOL, API_ADDR, "/serveFileText?transactionId=", transactionId, "&filename=", setFilesSplit[setFile], "&subDir=Output"), destfile=paste0(tempdir(), "/output/", transactionId, "/", setFilesSplit[setFile]))
                                 }, error=function(cond){
                                     return(NULL)
                                 })
@@ -2543,7 +2575,7 @@ shinyServer(function(input, output, session) {
                         tryInputDL <- TRUE
                         if(!file.exists(paste0(tempdir(), "/input/", transactionId, "/", i, ".txt"))){
                             tryInputDL <- tryCatch({
-                                download.file(paste0("http://", API_HOST, ":", API_PORT, "/serveFileText?transactionId=", transactionId, "&filename=", i, ".txt&subDir=Input"), destfile=paste0(tempdir(), "/input/", transactionId, "/", i, ".txt"))
+                                download.file(paste0(API_PROTOCOL, API_ADDR, "/serveFileText?transactionId=", transactionId, "&filename=", i, ".txt&subDir=Input"), destfile=paste0(tempdir(), "/input/", transactionId, "/", i, ".txt"))
                             }, error=function(cond){
                                 return(NULL)
                             })
@@ -2608,7 +2640,7 @@ shinyServer(function(input, output, session) {
                         tryErrorDL <- TRUE
                         if(!file.exists(paste0(tempdir(), "/output/", transactionId, "/", i, "__ErrorCASRNs.txt"))){
                             tryErrorDL <- tryCatch({
-                                download.file(paste0("http://", API_HOST, ":", API_PORT, "/serveFileText?transactionId=", transactionId, "&filename=", i, "__ErrorCASRNs.txt&subDir=Output"), destfile=paste0(tempdir(), "/output/", transactionId, "/", i, "__ErrorCASRNs.txt"))
+                                download.file(paste0(API_PROTOCOL, API_ADDR, "/serveFileText?transactionId=", transactionId, "&filename=", i, "__ErrorCASRNs.txt&subDir=Output"), destfile=paste0(tempdir(), "/output/", transactionId, "/", i, "__ErrorCASRNs.txt"))
                             }, error=function(cond){
                                 return(NULL)
                             })
@@ -2674,7 +2706,7 @@ shinyServer(function(input, output, session) {
                         tryFullMatrixDL <- TRUE
                         if(!file.exists(paste0(tempdir(), "/output/", transactionId, "/", i, "__FullMatrix.txt"))){
                             tryFullMatrixDL <- tryCatch({
-                                download.file(paste0("http://", API_HOST, ":", API_PORT, "/serveFileText?transactionId=", transactionId, "&filename=", i, "__FullMatrix.txt&subDir=Output"), destfile=paste0(tempdir(), "/output/", transactionId, "/", i, "__FullMatrix.txt"))
+                                download.file(paste0(API_PROTOCOL, API_ADDR, "/serveFileText?transactionId=", transactionId, "&filename=", i, "__FullMatrix.txt&subDir=Output"), destfile=paste0(tempdir(), "/output/", transactionId, "/", i, "__FullMatrix.txt"))
                             }, error=function(cond){
                                 return(NULL)
                             })
@@ -2771,7 +2803,7 @@ shinyServer(function(input, output, session) {
                     tryZipDL <- TRUE
                     if(!file.exists(paste0(tempdir(), "/output/", transactionId, "/tox21enricher_", transactionId, ".zip"))){
                         tryZipDL <- tryCatch({
-                            download.file(paste0("http://", API_HOST, ":", API_PORT, "/serveFileText?transactionId=", transactionId, "&filename=tox21enricher_", transactionId, ".zip&subDir=Output"), destfile=paste0(tempdir(), "/output/", transactionId, "/tox21enricher_", transactionId, ".zip"))
+                            download.file(paste0(API_PROTOCOL, API_ADDR, "/serveFileText?transactionId=", transactionId, "&filename=tox21enricher_", transactionId, ".zip&subDir=Output"), destfile=paste0(tempdir(), "/output/", transactionId, "/tox21enricher_", transactionId, ".zip"))
                         }, error=function(cond){
                             return(NULL)
                         })
@@ -2797,7 +2829,7 @@ shinyServer(function(input, output, session) {
                     tryZipDL <- TRUE
                     if(!file.exists(paste0(tempdir(), "/output/", transactionId, "/tox21enricher_", transactionId, ".zip"))){
                         tryZipDL <- tryCatch({
-                            download.file(paste0("http://", API_HOST, ":", API_PORT, "/serveFileText?transactionId=", transactionId, "&filename=tox21enricher_", transactionId, ".zip&subDir=Output"), destfile=paste0(tempdir(), "/output/", transactionId, "/tox21enricher_", transactionId, ".zip"))
+                            download.file(paste0(API_PROTOCOL, API_ADDR, "/serveFileText?transactionId=", transactionId, "&filename=tox21enricher_", transactionId, ".zip&subDir=Output"), destfile=paste0(tempdir(), "/output/", transactionId, "/tox21enricher_", transactionId, ".zip"))
                         }, error=function(cond){
                             return(NULL)
                         })
@@ -2889,7 +2921,7 @@ shinyServer(function(input, output, session) {
                 # Fetch setFiles from server via API
                 resp <- NULL
                 tryGCT <- tryCatch({
-                    resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="readGct", query=list(transactionId=transactionId, cutoff=cutoff, mode="set", set=i))
+                    resp <- GET(url=paste0(API_PROTOCOL, API_ADDR, "/readGct"), query=list(transactionId=transactionId, cutoff=cutoff, mode="set", set=i))
                     TRUE
                 }, error=function(cond){
                     return(FALSE)
@@ -2963,7 +2995,7 @@ shinyServer(function(input, output, session) {
                     # Fetch setFiles from server via API
                     resp <- NULL
                     tryResults <- tryCatch({
-                        resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="getResults", query=list(transactionId=transactionId, setName=i))
+                        resp <- GET(url=paste0(API_PROTOCOL, API_ADDR, "/getResults"), query=list(transactionId=transactionId, setName=i))
                         TRUE
                     }, error=function(cond){
                         return(FALSE)
@@ -3000,7 +3032,7 @@ shinyServer(function(input, output, session) {
                             tryInputDL <- TRUE
                             if(!file.exists(paste0(tempdir(), "/input/", transactionId, "/", i, ".txt"))){
                                 tryInputDL <- tryCatch({
-                                    download.file(paste0("http://", API_HOST, ":", API_PORT, "/serveFileText?transactionId=", transactionId, "&filename=", i, ".txt&subDir=Input"), destfile=paste0(tempdir(), "/input/", transactionId, "/", i, ".txt"))
+                                    download.file(paste0(API_PROTOCOL, API_ADDR, "/serveFileText?transactionId=", transactionId, "&filename=", i, ".txt&subDir=Input"), destfile=paste0(tempdir(), "/input/", transactionId, "/", i, ".txt"))
                                 }, error=function(cond){
                                     return(NULL)
                                 })
@@ -3065,7 +3097,7 @@ shinyServer(function(input, output, session) {
                             tryChartDL <- TRUE
                             if(!file.exists(paste0(tempdir(), "/output/", transactionId, "/", i, "__Chart.txt"))){
                                 tryChartDL <- tryCatch({
-                                    download.file(paste0("http://", API_HOST, ":", API_PORT, "/serveFileText?transactionId=", transactionId, "&filename=", i, "__Chart.txt&subDir=Output"), destfile=paste0(tempdir(), "/output/", transactionId, "/", i, "__Chart.txt"))
+                                    download.file(paste0(API_PROTOCOL, API_ADDR, "/serveFileText?transactionId=", transactionId, "&filename=", i, "__Chart.txt&subDir=Output"), destfile=paste0(tempdir(), "/output/", transactionId, "/", i, "__Chart.txt"))
                                 }, error=function(cond){
                                     return(NULL)
                                 })
@@ -3140,7 +3172,7 @@ shinyServer(function(input, output, session) {
                             tryChartSimpleDL <- TRUE
                             if(!file.exists(paste0(tempdir(), "/output/", transactionId, "/", i, "__ChartSimple.txt"))){
                                 tryChartSimpleDL <- tryCatch({
-                                    download.file(paste0("http://", API_HOST, ":", API_PORT, "/serveFileText?transactionId=", transactionId, "&filename=", i, "__ChartSimple.txt&subDir=Output"), destfile=paste0(tempdir(), "/output/", transactionId, "/", i, "__ChartSimple.txt"))
+                                    download.file(paste0(API_PROTOCOL, API_ADDR, "/serveFileText?transactionId=", transactionId, "&filename=", i, "__ChartSimple.txt&subDir=Output"), destfile=paste0(tempdir(), "/output/", transactionId, "/", i, "__ChartSimple.txt"))
                                 }, error=function(cond){
                                     return(NULL)
                                 })
@@ -3215,7 +3247,7 @@ shinyServer(function(input, output, session) {
                             tryClusterDL <- TRUE
                             if(!file.exists(paste0(tempdir(), "/output/", transactionId, "/", i, "__Cluster.txt"))){
                                 tryClusterDL <- tryCatch({
-                                    download.file(paste0("http://", API_HOST, ":", API_PORT, "/serveFileText?transactionId=", transactionId, "&filename=", i, "__Cluster.txt&subDir=Output"), destfile=paste0(tempdir(), "/output/", transactionId, "/", i, "__Cluster.txt"))
+                                    download.file(paste0(API_PROTOCOL, API_ADDR, "/serveFileText?transactionId=", transactionId, "&filename=", i, "__Cluster.txt&subDir=Output"), destfile=paste0(tempdir(), "/output/", transactionId, "/", i, "__Cluster.txt"))
                                 }, error=function(cond){
                                     return(NULL)
                                 })
@@ -3356,7 +3388,7 @@ shinyServer(function(input, output, session) {
                             tryMatrixDL <- TRUE
                             if(!file.exists(paste0(tempdir(), "/output/", transactionId, "/", i, "__Matrix.txt"))){
                                 tryMatrixDL <- tryCatch({
-                                    download.file(paste0("http://", API_HOST, ":", API_PORT, "/serveFileText?transactionId=", transactionId, "&filename=", i, "__Matrix.txt&subDir=Output"), destfile=paste0(tempdir(), "/output/", transactionId, "/", i, "__Matrix.txt"))
+                                    download.file(paste0(API_PROTOCOL, API_ADDR, "/serveFileText?transactionId=", transactionId, "&filename=", i, "__Matrix.txt&subDir=Output"), destfile=paste0(tempdir(), "/output/", transactionId, "/", i, "__Matrix.txt"))
                                 }, error=function(cond){
                                     return(NULL)
                                 })
@@ -3424,7 +3456,7 @@ shinyServer(function(input, output, session) {
                             tryErrorDL <- TRUE
                             if(!file.exists(paste0(tempdir(), "/output/", transactionId, "/", i, "__ErrorCASRNs.txt"))){
                                 tryErrorDL <- tryCatch({
-                                    download.file(paste0("http://", API_HOST, ":", API_PORT, "/serveFileText?transactionId=", transactionId, "&filename=", i, "__ErrorCASRNs.txt&subDir=Output"), destfile=paste0(tempdir(), "/output/", transactionId, "/", i, "__ErrorCASRNs.txt"))
+                                    download.file(paste0(API_PROTOCOL, API_ADDR, "/serveFileText?transactionId=", transactionId, "&filename=", i, "__ErrorCASRNs.txt&subDir=Output"), destfile=paste0(tempdir(), "/output/", transactionId, "/", i, "__ErrorCASRNs.txt"))
                                 }, error=function(cond){
                                     return(NULL)
                                 })
@@ -3619,7 +3651,7 @@ shinyServer(function(input, output, session) {
                     # Get SVG images from server
                     resp <- NULL
                     trySVG <- tryCatch({
-                        resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="getStructureImages", query=list(input=resultImagesSVG))
+                        resp <- GET(url=paste0(API_PROTOCOL, API_ADDR, "/getStructureImages"), query=list(input=resultImagesSVG))
                         TRUE
                     }, error=function(cond){
                         return(FALSE)
@@ -3658,7 +3690,7 @@ shinyServer(function(input, output, session) {
                         dummy <- c("", "", "", "", "", "", "", "") # dummy list to return in case we have errors fetching data
                         resp <- NULL
                         tryCasrn <- tryCatch({
-                            resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="getCasrnData", query=list(input=casrn))
+                            resp <- GET(url=paste0(API_PROTOCOL, API_ADDR, "/getCasrnData"), query=list(input=casrn))
                             TRUE
                         }, error=function(cond){
                             return(dummy)
@@ -3822,7 +3854,7 @@ shinyServer(function(input, output, session) {
                     originalInputStr <- originalInputStr[!vapply(originalInputStr, is.null, FUN.VALUE=logical(1))]
                     resp <- NULL
                     tryReactive <- tryCatch({
-                        resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="getReactiveGroups", query=list(input=originalInputStr))
+                        resp <- GET(url=paste0(API_PROTOCOL, API_ADDR, "/getReactiveGroups"), query=list(input=originalInputStr))
                         TRUE
                     }, error=function(cond){
                         return(FALSE)
@@ -4050,7 +4082,7 @@ shinyServer(function(input, output, session) {
             # Fetch setFiles from server via API
             resp <- NULL
             tryGCT <- tryCatch({
-                resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="readGct", query=list(transactionId=transactionId, cutoff=cutoff, mode="chart"))
+                resp <- GET(url=paste0(API_PROTOCOL, API_ADDR, "/readGct"), query=list(transactionId=transactionId, cutoff=cutoff, mode="chart"))
                 TRUE
             }, error=function(cond){
                 return(FALSE)
@@ -4117,7 +4149,7 @@ shinyServer(function(input, output, session) {
             # Fetch setFiles from server via API
             resp <- NULL
             tryGCT <- tryCatch({
-                resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="readGct", query=list(transactionId=transactionId, cutoff=cutoff, mode="cluster"))
+                resp <- GET(url=paste0(API_PROTOCOL, API_ADDR, "/readGct"), query=list(transactionId=transactionId, cutoff=cutoff, mode="cluster"))
                 TRUE
             }, error=function(cond){
                 return(FALSE)
@@ -4315,7 +4347,7 @@ shinyServer(function(input, output, session) {
             # Query API to get chart simple
             resp <- NULL
             tryBargraph <- tryCatch({
-                resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="getBargraph", query=list(transactionId=transactionId, enrichmentSets=paste0(names(enrichmentSets), collapse="__")))
+                resp <- GET(url=paste0(API_PROTOCOL, API_ADDR, "/getBargraph"), query=list(transactionId=transactionId, enrichmentSets=paste0(names(enrichmentSets), collapse="__")))
                 TRUE
             }, error=function(cond){
                 return(FALSE)
@@ -4593,7 +4625,7 @@ shinyServer(function(input, output, session) {
         # Error handling
         resp <- NULL
         tryNetwork <- tryCatch({
-            resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="getNetwork", query=list(transactionId=transactionId, cutoff=cutoff, mode=networkMode, input=inputNetwork, qval=qval))
+            resp <- GET(url=paste0(API_PROTOCOL, API_ADDR, "/getNetwork"), query=list(transactionId=transactionId, cutoff=cutoff, mode=networkMode, input=inputNetwork, qval=qval))
             TRUE
         }, error=function(cond){
             return(FALSE)
@@ -4727,7 +4759,7 @@ shinyServer(function(input, output, session) {
         # Get link for node annotation details
         resp <- NULL
         tryNode <- tryCatch({
-            resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="getNodeDetails", query=list(class=selectedNodeClass))
+            resp <- GET(url=paste0(API_PROTOCOL, API_ADDR, "/getNodeDetails"), query=list(class=selectedNodeClass))
             TRUE
         }, error=function(cond){
             return(FALSE)
@@ -4806,7 +4838,7 @@ shinyServer(function(input, output, session) {
             # Get overlapping chemicals
             resp <- NULL
             tryNode <- tryCatch({
-                resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="getNodeChemicals", query=list( termFrom=termFrom, termTo=termTo, classFrom=classFrom, classTo=classTo ))
+                resp <- GET(url=paste0(API_PROTOCOL, API_ADDR, "/getNodeChemicals"), query=list( termFrom=termFrom, termTo=termTo, classFrom=classFrom, classTo=classTo ))
                 TRUE
             }, error=function(cond){
                 return(FALSE)
@@ -5174,7 +5206,7 @@ shinyServer(function(input, output, session) {
     generateAnnoClassColors <- function() {
         resp <- NULL
         tryColor <- tryCatch({
-            resp <- GET(url=paste0("http://", API_HOST, ":", API_PORT, "/"), path="getNodeColors")
+            resp <- GET(url=paste0(API_PROTOCOL, API_ADDR, "/getNodeColors"))
             TRUE
         }, error=function(cond){
             return(FALSE)
