@@ -223,7 +223,6 @@ shinyServer(function(input, output, session) {
     if(nchar(as.character(API_PORT)) < 1){ #set to sentinel value if no port specified
         API_PORT <- -1
     }
-    
     # Prepare API_ADDR connection string (this is to handle the situation in which the API is hosted in a location like: hostname:8080/subdir/subdir2/api)
     hostnameSplit <- unlist(str_split(API_HOST, "/"))
     API_ADDR <- ""
@@ -574,6 +573,17 @@ shinyServer(function(input, output, session) {
                         return("Unknown request type")
                     }
                 }))
+                
+                # Include copy ID buttons for each UUID
+                prevSavedSessionsList <- unlist(lapply(prevSavedSessionsList, function(x){
+                    uuidWithButton <- HTML(paste0(x, "<br>", rclipButton(paste0("copyUUIDButtonPrev__", x), "Copy UUID to clipboard", x, icon("clipboard"))))
+                    # Display confirmation message when copy UUID button is pressed
+                    observeEvent(input[[paste0("copyUUIDButtonPrev__", x)]], {
+                        showNotification(paste0("UUID copied!"), type="message")
+                    })
+                    return(uuidWithButton)
+                }))
+
                 # Drop original_modes and modes columns
                 prevRequestInfoList <- subset(prevRequestInfoList, select=c("cutoff", "casrn_box", "timestamp_posted", "timestamp_started", "timestamp_finished", "expiry_date"))
                 prevSavedSessionsDF <- data.frame(select=unlist(resultsButtons), uuid=prevSavedSessionsList, formatted_mode=formattedModes, prevRequestInfoList, stringsAsFactors=FALSE)
@@ -583,7 +593,7 @@ shinyServer(function(input, output, session) {
                     column(12, style="height:500px; overflow-y:scroll;",
                         DT::datatable({prevSavedSessionsDF},
                             # Render reenrichment table (solution from https://stackoverflow.com/questions/37356625/adding-a-column-with-true-false-and-showing-that-as-a-checkbox/37356792#37356792)
-                            caption=HTML(paste0("<p>Select a recently-submitted request from the list below to view its results if it has finished.</p><div class=\"text-danger\">Requests will be cleared from this list after ", cleanupTime$hours, " hour(s) from their initial posting. Results may still be accessed if a request's UUID is known.</div>")),
+                            caption=HTML(paste0("<p>Select a recently-submitted request from the list below to view its results if it has finished.</p><div class=\"text-danger\">Requests will be cleared from this list after ", cleanupTime$hours, " hour(s) from their initial posting. Results may still be accessed after this period if you know your request's UUID.</div>")),
                             escape=FALSE, 
                             class="row-border stripe compact",
                             rownames=FALSE,
@@ -1008,7 +1018,7 @@ shinyServer(function(input, output, session) {
             reenrichResultsCols <- lapply(reenrichResultsSets, function(x) unlist(str_split(x, "__")))
             reenrichResultsMats <- lapply(reenrichResultsCols, function(x){
                 innerList <- lapply(seq(2, length(x)), function(y){ # start at 2 to skip set name
-                    return(unlist(str_split(x[y], ";")))
+                    return(unlist(str_split(x[y], "&")))
                 })
                 # if similarity
                 if(length(innerList) == 7){
@@ -2134,22 +2144,22 @@ shinyServer(function(input, output, session) {
         if(length(reenrichResultsList$reenrichResults) > 0){
             reenrichResultsSanitized <- unlist(lapply(seq_len(length(reenrichResultsList$reenrichResults)), function(reenrichResult){
                 rr_setname <- names(reenrichResultsList$reenrichResults)[[reenrichResult]]
-                rr_casrn <- paste0(reenrichResultsList$reenrichResults[[reenrichResult]][, "casrn"], collapse=";")
-                rr_m <- paste0(reenrichResultsList$reenrichResults[[reenrichResult]][, "m"], collapse=";")
+                rr_casrn <- paste0(reenrichResultsList$reenrichResults[[reenrichResult]][, "casrn"], collapse="&")
+                rr_m <- paste0(reenrichResultsList$reenrichResults[[reenrichResult]][, "m"], collapse="&")
                 rr_sim <- NULL
                 if("similarity" %in% names(reenrichResultsList$reenrichResults[[reenrichResult]])){
-                    rr_sim <- paste0(reenrichResultsList$reenrichResults[[reenrichResult]][, "similarity"], collapse=";")
+                    rr_sim <- paste0(reenrichResultsList$reenrichResults[[reenrichResult]][, "similarity"], collapse="&")
                 }
-                rr_cyanide <- paste0(reenrichResultsList$reenrichResults[[reenrichResult]][, "cyanide"], collapse=";")
-                rr_isocyanate <- paste0(reenrichResultsList$reenrichResults[[reenrichResult]][, "isocyanate"], collapse=";")
-                rr_aldehyde <- paste0(reenrichResultsList$reenrichResults[[reenrichResult]][, "aldehyde"], collapse=";")
-                rr_epoxide <- paste0(reenrichResultsList$reenrichResults[[reenrichResult]][, "epoxide"], collapse=";")
-                
+                rr_cyanide <- paste0(reenrichResultsList$reenrichResults[[reenrichResult]][, "cyanide"], collapse="&")
+                rr_isocyanate <- paste0(reenrichResultsList$reenrichResults[[reenrichResult]][, "isocyanate"], collapse="&")
+                rr_aldehyde <- paste0(reenrichResultsList$reenrichResults[[reenrichResult]][, "aldehyde"], collapse="&")
+                rr_epoxide <- paste0(reenrichResultsList$reenrichResults[[reenrichResult]][, "epoxide"], collapse="&")
                 if(is.null(rr_sim)){ # no similarity column
                     return(paste0(rr_setname, "__", rr_casrn, "__", rr_m, "__", rr_cyanide, "__", rr_isocyanate, "__", rr_aldehyde, "__", rr_epoxide))
                 }
                 return(paste0(rr_setname, "__", rr_casrn, "__", rr_m, "__", rr_sim, "__", rr_cyanide, "__", rr_isocyanate, "__", rr_aldehyde, "__", rr_epoxide))
             }))
+            
         }
         # Get submission timestamp to put in file
         beginTime <- Sys.time()
@@ -5331,7 +5341,6 @@ shinyServer(function(input, output, session) {
     
                 # Add additional plots to bar graph if more than 1 valid input set
                 if(length(tmpBgCleaned) > 0){
-                    # TODO: find  a way to do this with lapply?
                     for (i in seq_len(length(tmpBgCleaned))){
                         bgDisplay <- bgDisplay %>% add_trace(x=tmpBgCleaned[[i]], name=names(tmpBgCleaned)[i], marker=list(color=colorsList[names(tmpBgCleaned[i])])  )
                     }

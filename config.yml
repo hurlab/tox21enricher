@@ -23,6 +23,10 @@ default:
     python: "/home/username/anaconda3/envs/my-rdkit-env/bin/python3.X"
     # Number of cores for multithreading
     cores: 1
+    # Host/port/protocol of Plumber API: used for error handling.
+    apiHost: "localhost"
+    apiPort: 9000
+    apiSecure: false
   tox21enricher-queue:
     ### Database information for connecting to Postgres database ###
     driver: 'Postgres'
