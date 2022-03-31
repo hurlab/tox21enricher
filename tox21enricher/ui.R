@@ -328,7 +328,7 @@ shinyUI(function(){
                         hidden( #hide SMILES example button by default
                             fluidRow(id="smilesExamples",
                                 column(3,
-                                    actionButton("example_smiles", "SMILES/InChI example set"),
+                                    actionButton("example_smiles", "SMILES example set"),
                                     actionButton("jsme_button", "Draw molecules with JSME")),
                             )
                         ),

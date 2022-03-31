@@ -1571,7 +1571,10 @@ perform_CASRN_enrichment_analysis <- function(CASRNRef, outputBaseDir, outfileBa
     rownames(sortFunCatProcess) <- seq_len(nrow(sortFunCatProcess))
     colnames(sortFunCatProcess) <- c("Category", "Term", "Count", "Percent", "PValue", "Fold Enrichment", "Benjamini")
     sortFunCatProcess <- sortFunCatProcess[order(sortFunCatProcess$PValue), ] # sort by pvalue
-    sortFunCatProcess <- do.call(rbind, by(sortFunCatProcess, sortFunCatProcess["Category"], head, n=nodeCutoff)) #remove any entries if more than the cutoff value
+    sortFunCatProcess <- split(sortFunCatProcess, sortFunCatProcess[["Category"]])
+    sortFunCatProcess <- lapply(sortFunCatProcess, function(x) x %>% slice(1:nodeCutoff))
+    #use data.table::rbindlist() to quickly combine back the list of dataframes
+    sortFunCatProcess <- rbindlist(sortFunCatProcess)
     sortFunCatProcess <- sortFunCatProcess %>% arrange(PValue) # Sort simple chart contents by pvalue
     sortFunCatProcess <- apply(sortFunCatProcess, 1, function(x) paste0(x, collapse="\t"))
     writeLines(paste0(simpleHeader, paste0(sortFunCatProcess, collapse="\n")), SIMPLE)
@@ -1686,7 +1689,7 @@ kappa_cluster <- function(x, deg=NULL, useTerm=FALSE, cutoff=0.5, overlap=0.5, m
         return(NULL)
     }
     termpair2kappaOverThreshold <- tapply(unlist(termpair2kappaOverThreshold, use.names=FALSE), rep(names(termpair2kappaOverThreshold), lengths(termpair2kappaOverThreshold)), FUN=c)
-    
+
     # Step#2: Create qualified initial seeding groups
     # Each term could form a initial seeding group (initial seeds) as long as it has close relationships (kappa > 0.35 or any designated number) with more than > 2 or any designated number of other members. 
     # Update status file
@@ -1720,6 +1723,7 @@ kappa_cluster <- function(x, deg=NULL, useTerm=FALSE, cutoff=0.5, overlap=0.5, m
         names(term2sToPass) <- lapply(seq_len(sortedFunCatTermsCount), function(i) sortedFunCatTerms[i])
         term2sToPassNames <- names(term2sToPass)
     }
+
     qualifiedSeeds <- mclapply(seq_len(sortedFunCatTermsCount), mc.cores=CORES, mc.silent=FALSE, function(i){
         # Seed condition #1: initial group membership
         if (!is.null(termpair2kappaOverThreshold[[sortedFunCatTerms[i]]]) & length(termpair2kappaOverThreshold[[sortedFunCatTerms[i]]]) >= (initialGroupMembership - 1)) {
@@ -1740,7 +1744,6 @@ kappa_cluster <- function(x, deg=NULL, useTerm=FALSE, cutoff=0.5, overlap=0.5, m
             }))
             ij_sorted_matrix <- ij_sorted_matrix[!vapply(ij_sorted_matrix, is.null, FUN.VALUE=logical(1))]
             totalPairs <- choose(length(term2sToPass[[sortedFunCatTerms[i]]]), 2)
-            
             if((length(ij_sorted_matrix) / totalPairs) > multipleLinkageThreshold){
                 return(unlist(unname(term2sToPass[[sortedFunCatTerms[i]]])))
             }
@@ -1749,7 +1752,7 @@ kappa_cluster <- function(x, deg=NULL, useTerm=FALSE, cutoff=0.5, overlap=0.5, m
         return(NULL)
     })
     ml <- qualifiedSeeds[!vapply(qualifiedSeeds, is.null, FUN.VALUE=logical(1))]
-    
+
     #  Step#3: Iteratively merge qualifying seeds
     # Update status file
     # Connect to DB to get status info
@@ -1828,20 +1831,53 @@ kappa_cluster <- function(x, deg=NULL, useTerm=FALSE, cutoff=0.5, overlap=0.5, m
         clusterContentsOrdered <- clusterContentsOrdered[order(clusterContentsOrdered$PValue, decreasing=FALSE),]
         clusterContentsOrdered <- apply(clusterContentsOrdered, 1, function(clusterContentRow) paste0(clusterContentRow, collapse="\t"))
         clusterContents <- paste0(clusterContentsOrdered, collapse="\n")
-        return(paste0(clusterScore, "\n", clusterHeader, "\n", clusterContents, "\n\n"))
+        return(paste0(clusterScore, "\n", clusterHeader, "\n", clusterContents, "\n"))
     })
     writeLines(writeToClusterFile, CLUSTER)
     return(1)
 }
 
+# TODO: make this more closely match old code (Perl)
 # Merge terms to create clusters
-merge_term <- function(x, overlap, multipleLinkageThreshold){
-    ml <- x
+#merge_term <- function(ml, overlap, multipleLinkageThreshold){
+#    names(ml) <- lapply(ml, function(x) x[1])
+#    res <- lapply(names(ml), function(i){
+#        curr <- ml[[i]]
+#        lhs <- setdiff(head(names(ml), -1), i)
+#        while(TRUE){
+#            bestovl <- 0
+#            bestindex <- unlist(lapply(lhs, function(j){
+#                ovl <- 2 * length(intersect(curr, ml[[j]])) / (length(curr) + length(ml[[j]]))
+#                if(ovl > multipleLinkageThreshold & ovl > bestovl){
+#                    bestovl <<- ovl
+#                    return(j)
+#                }
+#                return(NULL)
+#            }))
+#            bestindex <- bestindex[!vapply(bestindex, is.null, FUN.VALUE=logical(1))]
+#            if(length(bestindex) < 1){
+#                break
+#            }
+#            bestindex <- bestindex[length(bestindex)] # get the highest overlap group
+#            curr <- union(curr, ml[[bestindex]])
+#            ml <<- ml[setdiff(names(ml), bestindex)]
+#        }
+#        return(sort(curr))
+#    })
+#    res <- unname(unique(res[!vapply(res, is.null, FUN.VALUE=logical(1))]))
+#    return(res)
+#}
+
+merge_term <- function(ml, overlap, multipleLinkageThreshold){
     names(ml) <- lapply(ml, function(x) x[1])
     res <- lapply(names(ml), function(i){
         curr <- ml[[i]]
-        lhs <- setdiff(head(names(ml), -1), i)
-        while(TRUE){
+        #lhs <- setdiff(head(names(ml), -1), i)
+        lhs <- setdiff(names(ml), i)
+        #while(TRUE){
+        
+        for(i in seq_len(length(lhs))){
+            
             bestovl <- 0
             bestindex <- unlist(lapply(lhs, function(j){
                 ovl <- 2 * length(intersect(curr, ml[[j]])) / (length(curr) + length(ml[[j]]))
@@ -1869,47 +1905,6 @@ calculate_Enrichment_Score <- function(x, df){
     pvalue <- df[x, "PValue"]
     esp <- ifelse(pvalue == 0, 16, (-log(pvalue) / log(10)))
     return(sum(esp) / length(df[x,]))
-}
-
-get_the_best_seed <- function(currentSeedRef, remainingSeedsRef, newSeedRef=list(), multipleLinkageThreshold) {
-    bestOverlapping <- 0
-    bestSeedIndex <- 0
-    currentSeedTerms <- currentSeedRef
-    currentSeedTermCount <- length(currentSeedTerms)
-    if(length(remainingSeedsRef) > 1){
-        bestIndex <- lapply(seq_len((length(remainingSeedsRef) - 1)), function(i) {
-            # calculate the overlapping
-            secondSeedTerms <- remainingSeedsRef[[i]]
-            commonCount <- length(intersect(secondSeedTerms, currentSeedTerms))
-            totalCount <- length(secondSeedTerms)
-            overlapping <- 2 * commonCount / (currentSeedTermCount + totalCount)
-            if (overlapping > multipleLinkageThreshold) {
-                return(list(overlapping, i))
-            }
-            return(NULL)
-        })
-        bestIndex <- bestIndex[!vapply(bestIndex, is.null, FUN.VALUE=logical(1))]
-        if(!is.null(bestIndex) & length(bestIndex) > 1) {
-            bestIndex <- do.call(rbind, bestIndex)
-            colnames(bestIndex) <- c("overlapping", "seedindex")
-            bestIndex <- bestIndex[order(unlist(bestIndex[, "overlapping"]), decreasing=TRUE), ]
-            bestOverlapping <- bestIndex[[1, "overlapping"]]
-            bestSeedIndex <- bestIndex[[1, "seedindex"]]
-        } else if (!is.null(bestIndex) & length(bestIndex) == 1){
-            bestOverlapping <- unlist(bestIndex)[1]
-            bestSeedIndex <- unlist(bestIndex)[2]
-        }
-    }
-    if (bestOverlapping == 0) {
-        # no more merging is possible
-        return(list(remainingSeedsRef=remainingSeedsRef, newSeedRef=newSeedRef, bestSeedIndex=bestSeedIndex, finished=0))
-    } else {
-        # best mergable seed found
-        newSeedRef <- union(currentSeedTerms, remainingSeedsRef[[bestSeedIndex]])
-        # splice
-        remainingSeedsRef <- remainingSeedsRef[-bestSeedIndex]
-        return(list(remainingSeedsRef=remainingSeedsRef, newSeedRef=newSeedRef, bestSeedIndex=bestSeedIndex, finished=1))
-    }
 }
 
 # Fetch all annotations in the Tox21 Enricher database for given CASRNs.
@@ -2198,7 +2193,7 @@ getAnnotationsFunc <- function(enrichmentUUID="-1", annoSelectStr=fullAnnoClassS
 
 # Re-run enrichment request in queue
 queueResubmit <- function(res, req, mode="", enrichmentUUID="-1", annoSelectStr=fullAnnoClassStr, nodeCutoff=10, setNames){
-    future({
+    #future({
         # Connect to DB to get status info
         poolStatus <- dbPool(
             drv=RPostgres::Postgres(),
@@ -2277,7 +2272,7 @@ queueResubmit <- function(res, req, mode="", enrichmentUUID="-1", annoSelectStr=
         outp <- dbExecute(poolFinished, query)
         # Close pool
         poolClose(poolFinished)
-    }, seed=TRUE)
+    #}, seed=TRUE)
     return(TRUE)
 }
 # Launch enrichment requests for each unfinished transaction here:
@@ -2378,7 +2373,7 @@ queue <- function(res, req, mode="", enrichmentUUID="-1", annoSelectStr=fullAnno
     # Close pool
     poolClose(poolQueue)
     
-    future({
+    #future({
         # Connect to DB to get status info
         poolStatus <- dbPool(
             drv=RPostgres::Postgres(),
@@ -2464,7 +2459,7 @@ queue <- function(res, req, mode="", enrichmentUUID="-1", annoSelectStr=fullAnno
         
         # Close pool
         poolClose(poolFinished)
-    }, seed=TRUE)
+    #}, seed=TRUE)
     return(TRUE)
 }
 

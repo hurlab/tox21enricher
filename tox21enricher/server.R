@@ -1470,7 +1470,7 @@ shinyServer(function(input, output, session) {
     })
     # Provide SMILES example set when button is clicked
     observeEvent (input$example_smiles, {
-        updateTextAreaInput(session, "submitted_chemicals", value="ClCC1=CC=CC=C1\nN#CSCC1=CC=CC=C1\nInChI=1S/C8H11N/c1-9(2)8-6-4-3-5-7-8/h3-7H,1-2H3")
+        updateTextAreaInput(session, "submitted_chemicals", value="CC(=O)C1=CC=C(C=C1)[N+]([O-])\nClCC1=CC=CC=C1\nCN(C)C1=CC=C(C=C1)\n")
     })
     # Clear CASRNs input box
     observeEvent(input$clear_casrns, {
@@ -2427,7 +2427,7 @@ shinyServer(function(input, output, session) {
             return(NULL)
         }
         validatedSets <- unlist(content(resp))
-
+        
         enrichmentSets <- unlist(lapply(names(enrichmentSets), function(x){
             if(x %in% validatedSets){
                 return(enrichmentSets[x])
@@ -3801,8 +3801,6 @@ shinyServer(function(input, output, session) {
                     }, FUN.VALUE=character(8)))
                     expandedInfo <- data.frame(expandedInfo, stringsAsFactors=FALSE)
                     row.names(expandedInfo) <- t(vapply(reenrichResults[[i]][, "casrn"], function(casrn) casrn, FUN.VALUE=character(1)))
-                    # Remove anything with missing information
-                    expandedInfo <- expandedInfo %>% filter(expandedInfo != "")
                     # Create final data frame
                     fullTableTmp <- t(vapply(row.names(expandedInfo), function(casrn){
                         fullTableTmpInner <- lapply(seq_len(nrow(reenrichResults[[i]])), function(row){
@@ -3902,7 +3900,6 @@ shinyServer(function(input, output, session) {
                         }
                         return(warningToDisplay)
                     })
-                  
                     # Create final table to display
                     # Truncate to remove individual warning columns
                     if (mode == "similarity" | originalEnrichMode == "similarity") {
@@ -3925,7 +3922,7 @@ shinyServer(function(input, output, session) {
                     selectList <- lapply(checkboxes[[i]], function(x) paste0(x))
                     if(length(warningCheck) > 0){
                         # If we have warnings, then include the warning column
-                        fullTable$warning=fullTableWarnings  
+                        fullTable$warning <- fullTableWarnings  
                         # Add checkboxes for CASRNs
                         fullTable <- data.frame(select=unlist(selectList), fullTable)
                         # Save this so we can use it outside of the method
@@ -3996,7 +3993,6 @@ shinyServer(function(input, output, session) {
                     }
                     # Remove dataframe row names so they will just be numbered
                     rownames(fullTable) <- seq_len(nrow(fullTable))
-                    
                     # Check if chemicals with warnings exist
                     if(length(unlist(warningList$warnings[[i]], recursive=FALSE)) > 0){
                         haveWarnings$warnings <<- TRUE
@@ -4674,7 +4670,6 @@ shinyServer(function(input, output, session) {
         }, FUN.VALUE=list(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16)))
         outpNetwork <- as.data.frame(outpNetwork)
         rownames(outpNetwork) <- seq_len(nrow(outpNetwork))
-        
         # Define class colors
         classColors <- generateAnnoClassColors()
         
@@ -4709,6 +4704,7 @@ shinyServer(function(input, output, session) {
         networkFullNodes <- data.frame(matrix(unlist(networkFullNodes), nrow=nrow(networkFullNodes)), stringsAsFactors=FALSE)
         rownames(networkFullNodes) <- seq_len(nrow(networkFullNodes))
         colnames(networkFullNodes) <- list("id", "label", "group", "shape", "url", "color")
+        
         # Remove duplicates
         networkFullNodes <- networkFullNodes[!duplicated(networkFullNodes), ]
         # Remove nodes if their class is not in the "keep" list
