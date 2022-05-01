@@ -130,6 +130,13 @@ pool <- dbPool(
 # Grab annotation list from Tox21 Enricher database on server startup
 queryAnnotations <- sqlInterpolate(ANSI(), "SELECT chemical_detail.casrn, annotation_class.annoclassname, annotation_detail.annoterm FROM term2casrn_mapping INNER JOIN chemical_detail ON term2casrn_mapping.casrnuid_id=chemical_detail.casrnuid INNER JOIN annotation_detail ON term2casrn_mapping.annotermid=annotation_detail.annotermid INNER JOIN annotation_class ON term2casrn_mapping.annoclassid=annotation_class.annoclassid;")
 outpAnnotations <- dbGetQuery(pool, queryAnnotations)
+
+# TODO: remove this? after refactoring database in next major update
+# Get list of all chemicals in Tox21 only
+tox21chemicals <- read.delim(file=paste0(APP_DIR, "/CASRNS_IN_TOX21.csv"), header=TRUE, sep=",", comment.char="", fill=TRUE)$CASRN
+# Filter out any rows in which the corresponding CASRN is not in Tox21
+outpAnnotations <- outpAnnotations[outpAnnotations$casrn %in% tox21chemicals,]
+
 # Grab annotation details
 queryAnnoDetail <- sqlInterpolate(ANSI(), "SELECT annoclassid, annoterm, annotermid FROM annotation_detail;")
 outpAnnoDetail <- dbGetQuery(pool, queryAnnoDetail)
@@ -365,8 +372,13 @@ performEnrichment <- function(enrichmentUUID="-1", annoSelectStr=fullAnnoClassSt
         return(FALSE)
     }
     
+    
+    # DEBUG
+    tme <- Sys.time()
+    
     # Perform enrichment on each input set simultaneously - multi-core
-    enrichmentStatusComplete <- mclapply(outfileBaseNames, mc.cores=CORES, mc.silent=FALSE, function(outfileBase){
+    #enrichmentStatusComplete <- mclapply(outfileBaseNames, mc.cores=CORES, mc.silent=FALSE, function(outfileBase){
+    enrichmentStatusComplete <- lapply(outfileBaseNames, function(outfileBase){
         # Get list of CASRN names
         CASRNS <- lapply(inputIDListHash[[outfileBase]], function(j) names(j))
         # Check mapped CASRNS
@@ -380,8 +392,19 @@ performEnrichment <- function(enrichmentUUID="-1", annoSelectStr=fullAnnoClassSt
         mappedCASRNs <- mappedCASRNs[!vapply(mappedCASRNs, is.null, FUN.VALUE=logical(1))]
         # Perform enrichment analysis
         print(paste0("Performing enrichment on ", outfileBase, "..."))
+        
         enrichmentStatus <- perform_CASRN_enrichment_analysis(CASRNS, paste0(APP_DIR, OUT_DIR, enrichmentUUID, "/"), outfileBase, mappedCASRNs, funCat2Selected, CASRN2funCatTerm, funCatTerm2CASRN, funCat2CASRNCount, funCat2termCount, funCatTerm2CASRNCount, pvalueThresholdToDisplay, similarityThreshold, initialGroupMembership, multipleLinkageThreshold, EASEThreshold, nodeCutoff, enrichmentUUID)
+        
+        # DEBUG
+        print(paste0(">>> perform enrichment for set: ", outfileBase, " >>> ", (Sys.time() - tme) ))
+        
+        return(enrichmentStatus)
+        
     })
+    
+    # DEBUG
+    print(paste0(">>> perform enrichment TOTAL >>> ", (Sys.time() - tme) ))
+    
     
     # Create individual GCT file
     # Update status file
@@ -425,14 +448,36 @@ performEnrichment <- function(enrichmentUUID="-1", annoSelectStr=fullAnnoClassSt
     # Load CASRN names
     CASRN2Name <- outpChemDetail$testsubstance_chemname
     names(CASRN2Name) <- outpChemDetail$casrn
+    
+    
+    ##### DEBUG #####
+    
+    tm <- Sys.time()
+    
     # Generate individual gct files
     process_variable_DAVID_CHART_directories_individual_file(baseinputDirName, baseDirName, baseOutputDir, '', '', "P", 0.05, "P", CASRN2Name)
+    
+    print(paste0(">>> process_variable_DAVID_CHART_directories_individual_file >> ", (Sys.time() - tm)  ))
+    tm <- Sys.time()
+    
     # Generate clustering images (heatmaps)
     create_clustering_images(baseOutputDir, "-color=BR")
+    
+    print(paste0(">>> create_clustering_images >> ", (Sys.time() - tm)  ))
+    tm <- Sys.time()
+    
     # Create DAVID Chart/Cluster files
     create_david_chart_cluster(baseDirName, nodeCutoff, "ALL", "P", 0.05, "P")
+    
+    print(paste0(">>> create_david_chart_cluster >> ", (Sys.time() - tm)  ))
+    tm <- Sys.time()
+    
     # Generate heatmaps for multiple sets
     create_clustering_images(baseOutputDirGct, "-color=BR")
+    
+    print(paste0(">>> create_clustering_images 2 >> ", (Sys.time() - tm)  ))
+    tm <- Sys.time()
+    
     # zip result files
     if(dir.exists(baseDirName)){
         zipDir <- dir(baseDirName, recursive=TRUE, include.dirs=TRUE)
@@ -1345,76 +1390,45 @@ perform_CASRN_enrichment_analysis <- function(CASRNRef, outputBaseDir, outfileBa
     inputCASRNsCount <- length(inputCASRNs)
     mappedCASRNs <- mappedCASRNsFromProcess # Among the CASRNs, use only those included in the full Tox21 list
     
+    # DEBUG
+    t1 <- Sys.time()
+    
+    tt1 <- Sys.time()
+    
     # Populate sigTerm2CASRNMatrix
-    funCat2SelectedProcessed_sigTerm2CASRNMatrix <- mclapply(names(funCat2Selected), mc.cores=CORES, mc.silent=FALSE, function(funCat){
-        tmp_sigTerm2CASRNMatrix <- NULL
-        if (!is.null(funCat2Selected[[funCat]]) & funCat2Selected[[funCat]] != ""){
-            funCatTerms <- names(funCatTerm2CASRN[[funCat]])
-            tmp_sigTerm2CASRNMatrix_expanded <- expand.grid(names(mappedCASRNs), names(funCatTerm2CASRN[[funCat]]))
-            tmp_sigTerm2CASRNMatrix <- apply(tmp_sigTerm2CASRNMatrix_expanded, 1, function(mat_row){
-                term <- mat_row[["Var2"]]
-                CASRN <- mat_row[["Var1"]]
-                if (CASRN %in% funCatTerm2CASRN[[funCat]][[term]]) {
-                    return(list(term=paste0(funCat, "|", term), casrn=CASRN))
-                }
-                return(NULL)
-            })
-            tmp_sigTerm2CASRNMatrix <- tmp_sigTerm2CASRNMatrix[!vapply(tmp_sigTerm2CASRNMatrix, is.null, FUN.VALUE=logical(1))]
-            if(length(tmp_sigTerm2CASRNMatrix) < 1){
-                return(NULL)
-            }
-            tmp_sigTerm2CASRNMatrix <- data.frame(do.call(rbind, tmp_sigTerm2CASRNMatrix), stringsAsFactors=FALSE)
-        }
+    sigTerm2CASRNMatrix <- funCatTerm2CASRN[names(funCat2Selected)] # filter selected annotation classes
+    sigTerm2CASRNMatrix <- unlist(mclapply(names(sigTerm2CASRNMatrix), mc.cores=CORES, mc.silent=FALSE, function(inner_list){
+        tmp_sigTerm2CASRNMatrix <- lapply(sigTerm2CASRNMatrix[[inner_list]], function(inner_casrns) inner_casrns[inner_casrns %in% names(mappedCASRNs)])
+        names(tmp_sigTerm2CASRNMatrix) <- lapply(names(sigTerm2CASRNMatrix[[inner_list]]), function(x) paste0(inner_list, "|", x))
         return(tmp_sigTerm2CASRNMatrix)
-    })
-    sigTerm2CASRNMatrix <- funCat2SelectedProcessed_sigTerm2CASRNMatrix[!vapply(funCat2SelectedProcessed_sigTerm2CASRNMatrix, is.null, FUN.VALUE=logical(1))]
-    sigTerm2CASRNMatrix <- rbindlist(sigTerm2CASRNMatrix, fill=TRUE)
-    sigTerm2CASRNMatrixNames <- unique(sigTerm2CASRNMatrix$term)
-    sigTerm2CASRNMatrix <- lapply(sigTerm2CASRNMatrixNames, function(x) unlist((sigTerm2CASRNMatrix %>% filter(term == x))$casrn))
-    names(sigTerm2CASRNMatrix) <- sigTerm2CASRNMatrixNames
-    localTermsMatrix <- expand.grid(names(funCat2Selected), names(mappedCASRNs))
-    localTermsList <- apply(localTermsMatrix, 1, function(mat_row){
-        funCat <- mat_row[["Var1"]]
-        CASRN <- mat_row[["Var2"]]
-        # Calculate the CASRN counts for the given categories
-        if (!is.null(funCat2Selected[[funCat]]) & funCat2Selected[[funCat]] != ""){
-            # Variables
-            if (!is.null(CASRN2funCatTerm[[CASRN]][[funCat]])){
-                return(list(funcat=funCat, terms=1))
+    }), recursive=FALSE)
+    sigTerm2CASRNMatrix <- sigTerm2CASRNMatrix[lapply(sigTerm2CASRNMatrix, length ) > 0]
+
+    print(paste0("| >>> | >>> sigterm", Sys.time()-tt1))
+    tt2 <- Sys.time()
+    
+    localTermsList <- mclapply(names(funCat2Selected), mc.cores=CORES, mc.silent=FALSE, function(x){
+        casrns_filtered <- CASRN2funCatTerm[names(mappedCASRNs)]
+        tmp_localTermsList <- lapply(casrns_filtered, function(inner_list) {
+            if(length(inner_list[[x]]) < 1){
+                return(NULL)
             }
-            return(NULL)
-        }
-    })
-    localTermsList <- localTermsList[!vapply(localTermsList, is.null, FUN.VALUE=logical(1))]
-    localTermsList <- data.frame(do.call(rbind, localTermsList), stringsAsFactors=FALSE)
-    funCatNames <- unique(localTermsList$funcat)
-    localTermsList <- lapply(funCatNames, function(x) nrow(localTermsList %>% filter(funcat == x)))
-    names(localTermsList) <- funCatNames
-    funCatLocalTermsMatrix <- expand.grid(names(funCat2Selected), names(localTermsList), stringsAsFactor=FALSE)
-    funCat2SelectedProcessed_datArray <- mclapply(seq_len(nrow(funCatLocalTermsMatrix)), mc.cores=CORES, mc.silent=FALSE, function(mat_row) {
-        funCat <- as.vector(funCatLocalTermsMatrix[[mat_row, "Var1"]])
-        if(funCat != as.vector(funCatLocalTermsMatrix[[mat_row, "Var2"]])){
-            return(NULL)
-        }
-        targetTotalCASRNInFunCatCount <- localTermsList[[as.vector(funCatLocalTermsMatrix[[mat_row, "Var2"]])]]
-        tmp_datArrayMatrix <- expand.grid(names(funCatTerm2CASRN[[funCat]]), names(mappedCASRNs))
-        tmp_datArray <- apply(tmp_datArrayMatrix, 1, function(mat_row2){
-            term <- mat_row2[["Var1"]]
-            CASRN <- mat_row2[["Var2"]]
-            if(CASRN %in% funCatTerm2CASRN[[funCat]][[term]]){
-                return(list(term=term, casrn=CASRN))
-            }
-            return(NULL)
+            return(1)
         })
-        tmp_datArray <- tmp_datArray[!vapply(tmp_datArray, is.null, FUN.VALUE=logical(1))]
-        if(length(tmp_datArray) < 1){
-            return(NULL)
-        }
-        tmp_datArray <- data.frame(do.call(rbind, tmp_datArray), stringsAsFactors=FALSE)
-        tmp_datArray <- lapply(unique(tmp_datArray$term), function(term_inner){
-            tmp_df <- tmp_datArray %>% filter(term == term_inner)
-            targetCASRNsRef <- tmp_df$casrn
-            targetCASRNCount <- nrow(tmp_df)
+        return(length(tmp_localTermsList[!vapply(tmp_localTermsList, is.null, FUN.VALUE=logical(1))]))
+    })
+    names(localTermsList) <- names(funCat2Selected)
+
+    print(paste0("| >>> | >>> localTermsList", Sys.time()-tt2))
+    tt3 <- Sys.time()
+
+    #DEBUG
+    funCat2SelectedProcessed_datArray <- funCatTerm2CASRN[names(funCat2Selected)] # filter selected annotation classes
+    funCat2SelectedProcessed_datArray <- mclapply(names(funCat2SelectedProcessed_datArray), mc.cores=CORES, mc.silent=FALSE, function(funCat) {
+        targetTotalCASRNInFunCatCount <- localTermsList[[funCat]]
+        tmp_datArray <- lapply(names(funCat2SelectedProcessed_datArray[[funCat]]), function(term_inner){
+            targetCASRNsRef <- funCat2SelectedProcessed_datArray[[funCat]][[term_inner]][funCat2SelectedProcessed_datArray[[funCat]][[term_inner]] %in% names(mappedCASRNs)]
+            targetCASRNCount <- length(targetCASRNsRef)
             # Calculate the EASE score
             if (targetCASRNCount > 1){
                 np1 <- targetTotalCASRNInFunCatCount - 1
@@ -1428,13 +1442,17 @@ perform_CASRN_enrichment_analysis <- function(CASRNRef, outputBaseDir, outfileBa
             }
             return(NULL)
         })
-        tmp_datArray <- tmp_datArray[!vapply(tmp_datArray, is.null, FUN.VALUE=logical(1))]
-        return(tmp_datArray)
+        return(tmp_datArray[!vapply(tmp_datArray, is.null, FUN.VALUE=logical(1))])
     })
     funCat2SelectedProcessed_datArray <- funCat2SelectedProcessed_datArray[!vapply(funCat2SelectedProcessed_datArray, is.null, FUN.VALUE=logical(1))]
     funCat2SelectedProcessed_datArray <- unlist(funCat2SelectedProcessed_datArray, recursive=FALSE)
     datArray <- lapply(funCat2SelectedProcessed_datArray, function(x) x$datarray)
     annoArray <- lapply(funCat2SelectedProcessed_datArray, function(x) x$annoarray)
+
+    print(paste0("| >>> | >>> funcatProcessed", Sys.time()-tt3))
+    
+    print(paste0("| >>> populate sigterm2casrn matrix for set: ", outfileBase, " >>> ", (Sys.time()-t1) ))
+    t2 <- Sys.time()
 
     # Save the data file -> create "RINPUT" but as a data frame here
     RINPUT_df <- do.call(rbind, datArray)
@@ -1477,6 +1495,9 @@ perform_CASRN_enrichment_analysis <- function(CASRNRef, outputBaseDir, outfileBa
         return(NULL)
     })
     ROutputData <- ROutputData[!vapply(ROutputData, is.null, FUN.VALUE=logical(1))]
+    
+    print(paste0("| >>> create R output data: ", outfileBase, " >>> ", (Sys.time()-t2) ))
+    t3 <- Sys.time()
 
     # Integrate ROutput into the main hashes/arrays
     # Error checking/handling for the case the number of lines are different between @annoArray and @ROutputData
@@ -1489,7 +1510,7 @@ perform_CASRN_enrichment_analysis <- function(CASRNRef, outputBaseDir, outfileBa
         close(SIMPLE)
         close(MATRIX)
         # Open and create a blank cluster file
-        outfileCluster <- paste0(outputBaseDir, outfileBase, "__Cluster.txt")
+        outfileCluster <- paste0(outputBaseDir, outputBaseDir, "__Cluster.txt")
         file.create(outfileCluster)
         # Initialize db connection pool
         poolStatus <- dbPool(
@@ -1544,6 +1565,9 @@ perform_CASRN_enrichment_analysis <- function(CASRNRef, outputBaseDir, outfileBa
     sortedFunCatTerms <- term2Pvalue[order(unlist(term2Pvalue), decreasing=FALSE)]
     sortedFunCatTermsCount <- length(sortedFunCatTerms)
     
+    print(paste0("| >>> annoarray init for set: ", outfileBase, " >>> ", (Sys.time()-t3) ))
+    t4 <- Sys.time()
+    
     # Write to chart File
     writeToChart <- unlist(lapply(names(sortedFunCatTerms), function(funCatTerm){ 
         if (term2Pvalue[[funCatTerm]] <= pvalueThresholdToDisplay){
@@ -1555,6 +1579,9 @@ perform_CASRN_enrichment_analysis <- function(CASRNRef, outputBaseDir, outfileBa
     writeToChart <- writeToChart[!vapply(writeToChart, is.null, FUN.VALUE=logical(1))]
     writeLines(paste0(chartHeader, paste0(writeToChart, collapse="\n")), OUTFILE)
     close(OUTFILE)
+    
+    print(paste0("| >>> write chart file for set: ", outfileBase, " >>> ", (Sys.time()-t4) ))
+    t5 <- Sys.time()
     
     # Write to simple chart file
     sortFunCatProcess <- lapply(names(sortedFunCatTerms), function(funCatTerm){ 
@@ -1579,6 +1606,9 @@ perform_CASRN_enrichment_analysis <- function(CASRNRef, outputBaseDir, outfileBa
     sortFunCatProcess <- apply(sortFunCatProcess, 1, function(x) paste0(x, collapse="\t"))
     writeLines(paste0(simpleHeader, paste0(sortFunCatProcess, collapse="\n")), SIMPLE)
     close(SIMPLE)
+    
+    print(paste0("| >>> write chart simple for set: ", outfileBase, " >>> ", (Sys.time()-t5) ))
+    t6 <- Sys.time()
 
     # Write to matrix file
     # Create matrix header w/ column names
@@ -1604,14 +1634,19 @@ perform_CASRN_enrichment_analysis <- function(CASRNRef, outputBaseDir, outfileBa
         return(matrixPrintToFile)
     })
     matrixPrintToFile <- rbind.fill.matrix(tmp_mat_split)
-
     # Write matrix to file
     fwrite(matrixPrintToFile, file=MATRIX, row.names=FALSE, col.names=TRUE, sep="\t")
+    
+    print(paste0("| >>> write matrix for set: ", outfileBase, " >>> ", (Sys.time()-t6) ))
+    t7 <- Sys.time()
     
     # Perform functional term clustering
     # Calculate enrichment score
     df <- read.delim(outfileChart, sep="\t", comment.char="", quote="", stringsAsFactors=FALSE)
     res <- kappa_cluster(x=df, outputBaseDir=outputBaseDir, outfileBase=outfileBase, sortedFunCatTerms=sortedFunCatTerms, sigTerm2CASRNMatrix=sigTerm2CASRNMatrix, sortedFunCatTermsCount=sortedFunCatTermsCount, inputCASRNsCount=inputCASRNsCount, similarityThreshold=similarityThreshold, initialGroupMembership=initialGroupMembership, multipleLinkageThreshold=multipleLinkageThreshold, EASEThreshold=EASEThreshold, term2Pvalue=term2Pvalue, term2Contents=term2Contents, enrichmentUUID=enrichmentUUID, inputCASRNs=inputCASRNs)
+    
+    print(paste0("| >>> kappa_cluster for set: ", outfileBase, " >>> ", (Sys.time()-t7) ))
+    
 }
 
 kappa_cluster <- function(x, deg=NULL, useTerm=FALSE, cutoff=0.5, overlap=0.5, minSize=5, escore=3, outputBaseDir=NULL, outfileBase=NULL, sortedFunCatTerms=NULL, sigTerm2CASRNMatrix=NULL, sortedFunCatTermsCount=NULL, inputCASRNsCount=NULL, similarityThreshold=NULL, initialGroupMembership=NULL, multipleLinkageThreshold=NULL, EASEThreshold=NULL, term2Pvalue=NULL, term2Contents=NULL, enrichmentUUID=NULL, inputCASRNs=NULL){
@@ -1643,8 +1678,10 @@ kappa_cluster <- function(x, deg=NULL, useTerm=FALSE, cutoff=0.5, overlap=0.5, m
     # debugging
     overlap <- 0.5
     minSize <- 3
+    
+    tc <- Sys.time()
 
-    # Step#1: Calculate kappa score
+    # # Step#1: Calculate kappa score
     posTermCASRNCount <- lapply(names(sortedFunCatTerms), function(funCatTerm) length(sigTerm2CASRNMatrix[[funCatTerm[[1]]]]))
     names(posTermCASRNCount) <- names(sortedFunCatTerms)
     sortedFunCatTermsPValues <- sortedFunCatTerms
@@ -1654,7 +1691,7 @@ kappa_cluster <- function(x, deg=NULL, useTerm=FALSE, cutoff=0.5, overlap=0.5, m
     termpair2kappaOverThreshold <- mclapply(seq_len(nrow(termpair2kappaOverThreshold)), mc.cores=CORES, mc.silent=FALSE, function(term_row) {
         term1 <- termpair2kappaOverThreshold[term_row, "Var1"]
         term2 <- termpair2kappaOverThreshold[term_row, "Var2"]
-        #calculate_kappa_statistics 
+        #calculate_kappa_statistics
         posTerm1Total <- posTermCASRNCount[[sortedFunCatTerms[term1]]]
         posTerm2Total <- posTermCASRNCount[[sortedFunCatTerms[term2]]]
         negTerm1Total <- inputCASRNsCount - posTerm1Total # note that the total is inputCASRNsCount not the mapped total
@@ -1667,7 +1704,7 @@ kappa_cluster <- function(x, deg=NULL, useTerm=FALSE, cutoff=0.5, overlap=0.5, m
         term1only <- length(tmpMat1) - length(sharedTerms)
         term2only <- length(tmpMat2) - length(sharedTerms)
         term1term2Non <- inputCASRNsCount - term1term2 - term1only - term2only
-        # Calculate the kappa score 
+        # Calculate the kappa score
         # http://david.abcc.ncifcrf.gov/content.jsp?file=linear_search.html
         Oab <- (term1term2 + term1term2Non) / inputCASRNsCount
         Aab <- ((posTerm1Total * posTerm2Total) + (negTerm1Total * negTerm2Total)) / (inputCASRNsCount * inputCASRNsCount)
@@ -1690,6 +1727,79 @@ kappa_cluster <- function(x, deg=NULL, useTerm=FALSE, cutoff=0.5, overlap=0.5, m
     }
     termpair2kappaOverThreshold <- tapply(unlist(termpair2kappaOverThreshold, use.names=FALSE), rep(names(termpair2kappaOverThreshold), lengths(termpair2kappaOverThreshold)), FUN=c)
 
+    # 
+    # 
+    # # Step#1: Calculate kappa score
+    # posTermCASRNCount <- lapply(names(sortedFunCatTerms), function(funCatTerm) length(sigTerm2CASRNMatrix[[funCatTerm[[1]]]]))
+    # names(posTermCASRNCount) <- names(sortedFunCatTerms)
+    # sortedFunCatTermsPValues <- sortedFunCatTerms
+    # sortedFunCatTerms <- names(sortedFunCatTerms)
+    # termpair2kappaOverThreshold <- mclapply (seq(1, sortedFunCatTermsCount - 1), mc.cores=CORES, mc.silent=FALSE, function(i){
+    #     sorted_tmp <- unlist(lapply(seq(i + 1, sortedFunCatTermsCount), function(j){
+    #         #calculate_kappa_statistics
+    #         posTerm1Total <- posTermCASRNCount[[sortedFunCatTerms[i]]]
+    #         posTerm2Total <- posTermCASRNCount[[sortedFunCatTerms[j]]]
+    #         negTerm1Total <- inputCASRNsCount - posTerm1Total # note that the total is inputCASRNsCount not the mapped total
+    #         negTerm2Total <- inputCASRNsCount - posTerm2Total # note that the total is inputCASRNsCount not the mapped total
+    #         # Get number of chemicals that are shared or not for term1 and term2
+    #         tmpMat1 <- sigTerm2CASRNMatrix[[sortedFunCatTerms[i]]]
+    #         tmpMat2 <- sigTerm2CASRNMatrix[[sortedFunCatTerms[j]]]
+    #         sharedTerms <- intersect(tmpMat1, tmpMat2)
+    #         term1term2 <- length(sharedTerms)
+    #         term1only <- length(tmpMat1) - length(sharedTerms)
+    #         term2only <- length(tmpMat2) - length(sharedTerms)
+    #         term1term2Non <- inputCASRNsCount - term1term2 - term1only - term2only
+    #         # Calculate the kappa score
+    #         # http://david.abcc.ncifcrf.gov/content.jsp?file=linear_search.html
+    #         Oab <- (term1term2 + term1term2Non) / inputCASRNsCount
+    #         Aab <- ((posTerm1Total * posTerm2Total) + (negTerm1Total * negTerm2Total)) / (inputCASRNsCount * inputCASRNsCount)
+    #         if (Aab != 1) {
+    #             Kappa <- as.double(sprintf("%.2f", (Oab - Aab) / (1 - Aab)))
+    #             if (Kappa > similarityThreshold) {
+    #                 # iTerm <- paste0(sortedFunCatTerms[i])
+    #                 # jTerm <- paste0(sortedFunCatTerms[j])
+    #                 # ijFrame <- list(iTerm=paste0(jTerm), jTerm=paste0(iTerm))
+    #                 # names(ijFrame) <- c(iTerm, jTerm)
+    #                 # return(ijFrame)
+    #                 return(paste0(sortedFunCatTerms[j]))
+    #             }
+    #             return(NULL)
+    #         }
+    #         return(NULL)
+    #     }))
+    #     sorted_tmp <- sorted_tmp[!vapply(sorted_tmp, is.null, FUN.VALUE=logical(1))]
+    #     return(sort(sorted_tmp))
+    # })
+    # names(termpair2kappaOverThreshold) <- head(sortedFunCatTerms, length(sortedFunCatTerms) - 1)
+    # 
+    # # print("termpair2kappaOverThreshold")
+    # # print(termpair2kappaOverThreshold)
+    # # print(length(termpair2kappaOverThreshold))
+    # # 
+    # # Sys.sleep(10)
+    # # stop()
+    # 
+    # termpair2kappaOverThreshold <- termpair2kappaOverThreshold[!vapply(termpair2kappaOverThreshold, is.null, FUN.VALUE=logical(1))]
+    # termpair2kappaOverThreshold <- unlist(termpair2kappaOverThreshold[!vapply(termpair2kappaOverThreshold, is.null, FUN.VALUE=logical(1))], recursive=FALSE)
+    # if(length(termpair2kappaOverThreshold) < 1) {
+    #     return(NULL)
+    # }
+    # termpair2kappaOverThreshold <- tapply(unlist(termpair2kappaOverThreshold, use.names=FALSE), rep(names(termpair2kappaOverThreshold), lengths(termpair2kappaOverThreshold)), FUN=c)
+    
+    
+    
+    # print("termpair2kappaOverThreshold")
+    # print(termpair2kappaOverThreshold)
+    # 
+    
+    
+    print(paste0("| >>> CLUSTER >>> STEP 1: ", (Sys.time()-tc) ))
+    tc <- Sys.time()
+    
+    
+    #Sys.sleep(10)
+    #stop()
+    
     # Step#2: Create qualified initial seeding groups
     # Each term could form a initial seeding group (initial seeds) as long as it has close relationships (kappa > 0.35 or any designated number) with more than > 2 or any designated number of other members. 
     # Update status file
@@ -1724,34 +1834,61 @@ kappa_cluster <- function(x, deg=NULL, useTerm=FALSE, cutoff=0.5, overlap=0.5, m
         term2sToPassNames <- names(term2sToPass)
     }
 
+    # qualifiedSeeds <- mclapply(seq_len(sortedFunCatTermsCount), mc.cores=CORES, mc.silent=FALSE, function(i){
+    #    # Seed condition #1: initial group membership
+    #    if (!is.null(termpair2kappaOverThreshold[[sortedFunCatTerms[i]]]) & length(termpair2kappaOverThreshold[[sortedFunCatTerms[i]]]) >= (initialGroupMembership - 1)) {
+    #        # Seed condition #2: majority of the members
+    #        i_terms <- head(term2sToPass[[sortedFunCatTerms[i]]], -1)
+    #        names(i_terms) <- seq_len(length(term2sToPass[[sortedFunCatTerms[i]]]) - 1)
+    #        j_terms <- term2sToPass[[sortedFunCatTerms[i]]]
+    #        names(j_terms) <- seq_len(length(term2sToPass[[sortedFunCatTerms[i]]]))
+    #        ij_sorted_matrix <- expand.grid(seq_len(length(term2sToPass[[sortedFunCatTerms[i]]]) - 1), seq_len(length(term2sToPass[[sortedFunCatTerms[i]]])), stringsAsFactors=FALSE)
+    #        ij_sorted_matrix <- ij_sorted_matrix %>% filter(ij_sorted_matrix$Var1 < ij_sorted_matrix$Var2)
+    #        ij_sorted_matrix$Var1 <- lapply(ij_sorted_matrix$Var1, function(i_index) i_terms[[i_index]])
+    #        ij_sorted_matrix$Var2 <- lapply(ij_sorted_matrix$Var2, function(j_index) j_terms[[j_index]])
+    #        ij_sorted_matrix <- unlist(apply(ij_sorted_matrix, 1, function(ij_row){
+    #            if(ij_row[["Var1"]] %in% termpair2kappaOverThreshold[[ij_row[["Var2"]]]]){
+    #                return(1)
+    #            }
+    #            return(NULL)
+    #        }))
+    #        ij_sorted_matrix <- ij_sorted_matrix[!vapply(ij_sorted_matrix, is.null, FUN.VALUE=logical(1))]
+    #        totalPairs <- choose(length(term2sToPass[[sortedFunCatTerms[i]]]), 2)
+    #        if((length(ij_sorted_matrix) / totalPairs) > multipleLinkageThreshold){
+    #            return(unlist(unname(term2sToPass[[sortedFunCatTerms[i]]])))
+    #        }
+    #        return(NULL)
+    #    }
+    #    return(NULL)
+    # })
+    
+    # DEBUG
     qualifiedSeeds <- mclapply(seq_len(sortedFunCatTermsCount), mc.cores=CORES, mc.silent=FALSE, function(i){
         # Seed condition #1: initial group membership
         if (!is.null(termpair2kappaOverThreshold[[sortedFunCatTerms[i]]]) & length(termpair2kappaOverThreshold[[sortedFunCatTerms[i]]]) >= (initialGroupMembership - 1)) {
-            # Seed condition #2: majority of the members 
-            i_terms <- head(term2sToPass[[sortedFunCatTerms[i]]], -1)
-            names(i_terms) <- seq_len(length(term2sToPass[[sortedFunCatTerms[i]]]) - 1)
-            j_terms <- term2sToPass[[sortedFunCatTerms[i]]]
-            names(j_terms) <- seq_len(length(term2sToPass[[sortedFunCatTerms[i]]]))
-            ij_sorted_matrix <- expand.grid(seq_len(length(term2sToPass[[sortedFunCatTerms[i]]]) - 1), seq_len(length(term2sToPass[[sortedFunCatTerms[i]]])), stringsAsFactors=FALSE)
-            ij_sorted_matrix <- ij_sorted_matrix %>% filter(ij_sorted_matrix$Var1 < ij_sorted_matrix$Var2)
-            ij_sorted_matrix$Var1 <- lapply(ij_sorted_matrix$Var1, function(i_index) i_terms[[i_index]])
-            ij_sorted_matrix$Var2 <- lapply(ij_sorted_matrix$Var2, function(j_index) j_terms[[j_index]])
-            ij_sorted_matrix <- unlist(apply(ij_sorted_matrix, 1, function(ij_row){
-                if(ij_row[["Var1"]] %in% termpair2kappaOverThreshold[[ij_row[["Var2"]]]]){
-                    return(1)
+            currentTerm <- sortedFunCatTerms[i]
+            term2s <- append(termpair2kappaOverThreshold[[sortedFunCatTerms[i]]], currentTerm, after=1)
+            totalPairs <- sum(seq_len(length(term2s)))
+            passedPair <- 0
+            for (n in seq(1, length(term2s))){
+                for (m in seq(n + 1, length(term2s) + 1)){
+                    if(term2s[m] %in% termpair2kappaOverThreshold[[term2s[n]]]){
+                        passedPair <- passedPair + 1
+                    }
                 }
-                return(NULL)
-            }))
-            ij_sorted_matrix <- ij_sorted_matrix[!vapply(ij_sorted_matrix, is.null, FUN.VALUE=logical(1))]
-            totalPairs <- choose(length(term2sToPass[[sortedFunCatTerms[i]]]), 2)
-            if((length(ij_sorted_matrix) / totalPairs) > multipleLinkageThreshold){
-                return(unlist(unname(term2sToPass[[sortedFunCatTerms[i]]])))
+            }
+            over_percentage <- passedPair / totalPairs
+            if(over_percentage > multipleLinkageThreshold){
+                return(term2s)
             }
             return(NULL)
         }
         return(NULL)
     })
     ml <- qualifiedSeeds[!vapply(qualifiedSeeds, is.null, FUN.VALUE=logical(1))]
+
+    print(paste0("| >>> CLUSTER >>> STEP 2: ", (Sys.time()-tc) ))
+    tc <- Sys.time()
 
     #  Step#3: Iteratively merge qualifying seeds
     # Update status file
@@ -1777,6 +1914,7 @@ kappa_cluster <- function(x, deg=NULL, useTerm=FALSE, cutoff=0.5, overlap=0.5, m
         print(paste0("Cancelling request: ", enrichmentUUID))
         return(FALSE)
     }
+    
     # Merge terms to generate final groups
     res <- merge_term(ml, overlap, multipleLinkageThreshold)
     # Return null if we can't generate any clusters
@@ -1784,6 +1922,10 @@ kappa_cluster <- function(x, deg=NULL, useTerm=FALSE, cutoff=0.5, overlap=0.5, m
         return(NULL)
     }
     names(res) <- lapply(res, function(cluster) cluster[1])
+    
+    print(paste0("| >>> CLUSTER >>> STEP 3: ", (Sys.time()-tc) ))
+    tc <- Sys.time()
+    
     
     # Step#4: Calculate enrichment score and print out the results
     # Update status file
@@ -1834,50 +1976,68 @@ kappa_cluster <- function(x, deg=NULL, useTerm=FALSE, cutoff=0.5, overlap=0.5, m
         return(paste0(clusterScore, "\n", clusterHeader, "\n", clusterContents, "\n"))
     })
     writeLines(writeToClusterFile, CLUSTER)
+    
+    print(paste0("| >>> CLUSTER >>> STEP 4: ", (Sys.time()-tc) ))
+    
+    
     return(1)
 }
 
-# TODO: make this more closely match old code (Perl)
-# Merge terms to create clusters
-#merge_term <- function(ml, overlap, multipleLinkageThreshold){
-#    names(ml) <- lapply(ml, function(x) x[1])
-#    res <- lapply(names(ml), function(i){
-#        curr <- ml[[i]]
-#        lhs <- setdiff(head(names(ml), -1), i)
-#        while(TRUE){
-#            bestovl <- 0
-#            bestindex <- unlist(lapply(lhs, function(j){
-#                ovl <- 2 * length(intersect(curr, ml[[j]])) / (length(curr) + length(ml[[j]]))
-#                if(ovl > multipleLinkageThreshold & ovl > bestovl){
-#                    bestovl <<- ovl
-#                    return(j)
-#                }
-#                return(NULL)
-#            }))
-#            bestindex <- bestindex[!vapply(bestindex, is.null, FUN.VALUE=logical(1))]
-#            if(length(bestindex) < 1){
-#                break
-#            }
-#            bestindex <- bestindex[length(bestindex)] # get the highest overlap group
-#            curr <- union(curr, ml[[bestindex]])
-#            ml <<- ml[setdiff(names(ml), bestindex)]
-#        }
-#        return(sort(curr))
-#    })
-#    res <- unname(unique(res[!vapply(res, is.null, FUN.VALUE=logical(1))]))
-#    return(res)
-#}
 
+# TODO: make this more closely match old code (Perl)
+merge_term_NEW <- function(ml, overlap, multipleLinkageThreshold){
+    names(ml) <- lapply(ml, function(x) x[1])
+    res <- list()
+    while(length(ml) > 0){
+        
+        print("==============NEW SEED=============")
+        
+        curr <- ml[[1]]
+        ml <- ml[setdiff(names(ml), names(ml)[1])]
+        while(TRUE){
+            bestovl <- 0
+            bestindex <- unlist(lapply(names(ml), function(j){
+                ovl <- (2 * length(intersect(curr, ml[[j]]))) / (length(curr) + length(ml[[j]]))
+                
+                print("OVL")
+                print(ovl)
+                
+                if(ovl > multipleLinkageThreshold & ovl > bestovl){
+                    bestovl <<- ovl
+                    return(j)
+                }
+                return(NULL)
+            }))
+            bestindex <- bestindex[!vapply(bestindex, is.null, FUN.VALUE=logical(1))]
+            if(length(bestindex) < 1){
+                res <- append(res, list(sort(curr)))
+                break
+            } else {
+                bestindex <- bestindex[length(bestindex)] # get the highest overlap group
+                curr <- union(curr, ml[[bestindex]])
+                ml <- ml[setdiff(names(ml), bestindex)]
+            }
+        }
+        
+    }
+    
+    # DEBUG
+    #print(" == RES == ")
+    #print(res)
+    
+    
+    res <- unname(unique(res[!vapply(res, is.null, FUN.VALUE=logical(1))]))
+    
+    return(res)
+}
+
+# TODO: make this more closely match old code (Perl)
 merge_term <- function(ml, overlap, multipleLinkageThreshold){
     names(ml) <- lapply(ml, function(x) x[1])
-    res <- lapply(names(ml), function(i){
-        curr <- ml[[i]]
-        #lhs <- setdiff(head(names(ml), -1), i)
-        lhs <- setdiff(names(ml), i)
-        #while(TRUE){
-        
+    res <- lapply(names(ml), function(currentSeed){
+        curr <- ml[[currentSeed]]
+        lhs <- setdiff(names(ml), currentSeed)
         for(i in seq_len(length(lhs))){
-            
             bestovl <- 0
             bestindex <- unlist(lapply(lhs, function(j){
                 ovl <- 2 * length(intersect(curr, ml[[j]])) / (length(curr) + length(ml[[j]]))
@@ -2193,7 +2353,7 @@ getAnnotationsFunc <- function(enrichmentUUID="-1", annoSelectStr=fullAnnoClassS
 
 # Re-run enrichment request in queue
 queueResubmit <- function(res, req, mode="", enrichmentUUID="-1", annoSelectStr=fullAnnoClassStr, nodeCutoff=10, setNames){
-    future({
+    #future({
         # Connect to DB to get status info
         poolStatus <- dbPool(
             drv=RPostgres::Postgres(),
@@ -2272,7 +2432,7 @@ queueResubmit <- function(res, req, mode="", enrichmentUUID="-1", annoSelectStr=
         outp <- dbExecute(poolFinished, query)
         # Close pool
         poolClose(poolFinished)
-    }, seed=TRUE)
+    #}, seed=TRUE)
     return(TRUE)
 }
 # Launch enrichment requests for each unfinished transaction here:
@@ -2373,7 +2533,7 @@ queue <- function(res, req, mode="", enrichmentUUID="-1", annoSelectStr=fullAnno
     # Close pool
     poolClose(poolQueue)
     
-    future({
+    #future({
         # Connect to DB to get status info
         poolStatus <- dbPool(
             drv=RPostgres::Postgres(),
@@ -2459,7 +2619,7 @@ queue <- function(res, req, mode="", enrichmentUUID="-1", annoSelectStr=fullAnno
         
         # Close pool
         poolClose(poolFinished)
-    }, seed=TRUE)
+    #}, seed=TRUE)
     return(TRUE)
 }
 
@@ -3052,7 +3212,6 @@ searchBySubstructure <- function(res, req, input){
         res$status <- 400
         return("Error: Invalid value for argument 'input'.")
     }
-    
     # Connect to db
     poolSubstructure <- dbPool(
         drv=RPostgres::Postgres(),
