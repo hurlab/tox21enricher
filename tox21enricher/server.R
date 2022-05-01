@@ -1652,7 +1652,7 @@ shinyServer(function(input, output, session) {
           
             # Generate list of indices with bad CASRNs
             errorCasrns <- lapply(seq_len(length(casrnValidatedInput)), function(i) {
-                if(!grepl("^#[A-Za-z0-9]+|[0-9]+-[0-9]+-[0-9]+", casrnValidatedInput[i], ignore.case=TRUE)) {
+                if(!grepl("^#[A-Za-z0-9]+|[0-9]+-[0-9]+-[0-9]+|(NOCAS_[0-9]+)", casrnValidatedInput[i], ignore.case=TRUE)) {
                     return(i)
                 }
                 return(NULL)
