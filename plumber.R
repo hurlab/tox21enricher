@@ -2353,7 +2353,7 @@ getAnnotationsFunc <- function(enrichmentUUID="-1", annoSelectStr=fullAnnoClassS
 
 # Re-run enrichment request in queue
 queueResubmit <- function(res, req, mode="", enrichmentUUID="-1", annoSelectStr=fullAnnoClassStr, nodeCutoff=10, setNames){
-    #future({
+    future({
         # Connect to DB to get status info
         poolStatus <- dbPool(
             drv=RPostgres::Postgres(),
@@ -2432,7 +2432,7 @@ queueResubmit <- function(res, req, mode="", enrichmentUUID="-1", annoSelectStr=
         outp <- dbExecute(poolFinished, query)
         # Close pool
         poolClose(poolFinished)
-    #}, seed=TRUE)
+    }, seed=TRUE)
     return(TRUE)
 }
 # Launch enrichment requests for each unfinished transaction here:
