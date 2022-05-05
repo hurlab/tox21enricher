@@ -2533,7 +2533,7 @@ queue <- function(res, req, mode="", enrichmentUUID="-1", annoSelectStr=fullAnno
     # Close pool
     poolClose(poolQueue)
     
-    #future({
+    future({
         # Connect to DB to get status info
         poolStatus <- dbPool(
             drv=RPostgres::Postgres(),
@@ -2619,7 +2619,7 @@ queue <- function(res, req, mode="", enrichmentUUID="-1", annoSelectStr=fullAnno
         
         # Close pool
         poolClose(poolFinished)
-    #}, seed=TRUE)
+    }, seed=TRUE)
     return(TRUE)
 }
 
