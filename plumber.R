@@ -131,12 +131,6 @@ pool <- dbPool(
 queryAnnotations <- sqlInterpolate(ANSI(), "SELECT chemical_detail.casrn, annotation_class.annoclassname, annotation_detail.annoterm FROM term2casrn_mapping INNER JOIN chemical_detail ON term2casrn_mapping.casrnuid_id=chemical_detail.casrnuid INNER JOIN annotation_detail ON term2casrn_mapping.annotermid=annotation_detail.annotermid INNER JOIN annotation_class ON term2casrn_mapping.annoclassid=annotation_class.annoclassid;")
 outpAnnotations <- dbGetQuery(pool, queryAnnotations)
 
-# TODO: remove this? after refactoring database in next major update
-# Get list of all chemicals in Tox21 only
-tox21chemicals <- read.delim(file=paste0(APP_DIR, "/CASRNS_IN_TOX21.csv"), header=TRUE, sep=",", comment.char="", fill=TRUE)$CASRN
-# Filter out any rows in which the corresponding CASRN is not in Tox21
-outpAnnotations <- outpAnnotations[outpAnnotations$casrn %in% tox21chemicals,]
-
 # Grab annotation details
 queryAnnoDetail <- sqlInterpolate(ANSI(), "SELECT annoclassid, annoterm, annotermid FROM annotation_detail;")
 outpAnnoDetail <- dbGetQuery(pool, queryAnnoDetail)
