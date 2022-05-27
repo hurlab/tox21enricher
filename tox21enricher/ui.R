@@ -236,13 +236,14 @@ shinyUI(function(){
         # Application title
         title="Tox21 Enricher",
         titlePanel("Tox21 Enricher"),
-        # Sidebar
+        # Sidebar with options
         sidebarLayout(
             sidebarPanel(
                 id="sidebar",
                 width=2,
                 style="position:fixed; overflow:visible; width:15%; height:600px; z-index:9999; overflow-y:scroll;",
                 useShinyjs(),
+                # Define JS for theme changing and host config
                 extendShinyjs(text=js_theme, functions=c('init', 'initDarkTheme')),
                 extendShinyjs(text=js_cbx, functions=c('check', 'uncheck')),
                 extendShinyjs(text=js_session, functions=c('saveSession', 'getSession', 'clearSession', 'saveHostInfo', 'getHostInfo', 'clearHostInfo')),
@@ -264,8 +265,10 @@ shinyUI(function(){
                     actionButton("refresh", "Start over", icon=icon("undo"))
                 )
             ),
+            # Main panel depicting enrichment instructions and options
             mainPanel(id="enrichmentPanel", width=10,
                 style="width: 80%;",
+                # View previous request
                 hidden(
                     column(id="searchForm", 12,
                         h1("View Results from Previous Request"),
@@ -279,6 +282,7 @@ shinyUI(function(){
                         )
                     )
                 ),
+                # Submit new request
                 column(id="enrichmentForm", 12,
                     h1(textOutput("selected_enrich_from")),
                     # Annotation selection
@@ -336,6 +340,7 @@ shinyUI(function(){
                             column(3,
                                 actionButton("clear_casrns", "Clear input box")),
                         ),
+                        # Display JSME interface
                         hidden(
                             fluidRow(id="jsmeInput",
                                 column(12,
@@ -365,6 +370,7 @@ shinyUI(function(){
                         tipify(checkboxInput(inputId="includeChemsWithWarnings", label="Ignore chemicals with reactive structure warnings?", value=TRUE), title="A submitted chemical may contain a reactive functional group (nitrile, isocyanate, aldehyde, and/or epoxide) that does not appear in one or more similar chemicals. The opposite may also occur in which similar chemicals contain a reactive functional group not present in the submitted chemical. Checking this box will cause Tox21 Enricher to ignore all similar chemicals that have a reactive functional group discrepancy with the submitted chemical. These chemicals will not be used in enrichment.", placement="top")
                     )
                 ),
+                # Results page, hidden by default until request has completed
                 hidden(
                     fluidRow(id="resultsContainer",
                         column(id="enrichmentResults", 12,
@@ -372,6 +378,7 @@ shinyUI(function(){
                         )
                     )
                 ),
+                # Waiting page, hidden by default until a request is submitted
                 hidden(
                     fluidRow(id="waitingPage",
                         column(12,

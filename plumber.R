@@ -46,6 +46,30 @@ if(INPUT_MAX > 16){ # Tox21 Enricher only supports a max of 16 concurrent input 
     INPUT_MAX <- 1
 }
 
+# Reusable function for generating database connection
+conn <- function(){
+    return(dbPool(
+        drv=RPostgres::Postgres(),
+        dbname=tox21config$database,
+        host=tox21config$host,
+        user=tox21config$uid,
+        password=tox21config$pwd,
+        port=tox21config$port,
+        idleTimeout=3600000
+    ))
+}
+connQueue <- function(){
+    return(dbPool(
+        drv=RPostgres::Postgres(),
+        dbname=tox21queue$database,
+        host=tox21queue$host,
+        user=tox21queue$uid,
+        password=tox21queue$pwd,
+        port=tox21queue$port,
+        idleTimeout=3600000
+    ))
+}
+
 # API connectivity details
 # Change host address and port in config.yml
 API_SECURE <- tox21config$apiSecure
@@ -92,16 +116,7 @@ print("! Loading annotation resources...")
 # Queue for Tox21 Enricher
 # Cleanup anything old in the queue on startup
 # Init database pool
-poolClean <- dbPool(
-    drv=RPostgres::Postgres(),
-    dbname=tox21queue$database,
-    host=tox21queue$host,
-    user=tox21queue$uid,
-    password=tox21queue$pwd,
-    port=tox21queue$port,
-    idleTimeout=3600000
-)
-
+poolClean <- connQueue()
 # Unlock any currently locked, unfinished requests WITHOUT ERRORS AND THAT HAVEN'T BEEN CANCELLED so they can be reprocessed
 query <- sqlInterpolate(ANSI(), paste0("UPDATE queue SET lock=0 WHERE finished=0 AND error IS NULL AND cancel=0;"), id="unlockTransactions")
 outp <- dbExecute(poolClean, query)
@@ -109,24 +124,18 @@ outp <- dbExecute(poolClean, query)
 query <- sqlInterpolate(ANSI(), paste0("SELECT uuid FROM queue WHERE lock=0 AND finished=0 AND error IS NULL AND cancel=0;"), id="resetStatus")
 outp <- dbGetQuery(poolClean, query)
 unlockedTransactions <- outp$uuid
+
 lapply(unlockedTransactions, function(x){
     query <- sqlInterpolate(ANSI(), paste0("UPDATE status SET step=0 WHERE uuid='", x, "';"), id="resetStatus")
     outp <- dbExecute(poolClean, query)
     return(paste0("Reprocessing transaction: ", x))
 })
+
 # Close pool
 poolClose(poolClean)
 
 # Define info for connecting to PostgreSQL Tox21 Enricher database on server startup
-pool <- dbPool(
-    drv=RPostgres::Postgres(),
-    dbname=tox21config$database,
-    host=tox21config$host,
-    user=tox21config$uid,
-    password=tox21config$pwd,
-    port=tox21config$port,
-    idleTimeout=3600000
-)
+pool <- conn()
 # Grab annotation list from Tox21 Enricher database on server startup
 queryAnnotations <- sqlInterpolate(ANSI(), "SELECT chemical_detail.casrn, annotation_class.annoclassname, annotation_detail.annoterm FROM term2casrn_mapping INNER JOIN chemical_detail ON term2casrn_mapping.casrnuid_id=chemical_detail.casrnuid INNER JOIN annotation_detail ON term2casrn_mapping.annotermid=annotation_detail.annotermid INNER JOIN annotation_class ON term2casrn_mapping.annoclassid=annotation_class.annoclassid;")
 outpAnnotations <- dbGetQuery(pool, queryAnnotations)
@@ -142,7 +151,7 @@ queryChemDetail <- sqlInterpolate(ANSI(), "SELECT dtxrid, testsubstance_chemname
 outpChemDetail <- dbGetQuery(pool, queryChemDetail)
 # Close DB connection
 poolClose(pool)
-# Load base Annotations
+# Load base annotations
 CASRN2DSSTox <- apply(outpChemDetail, 1, function(i){
     if (i["casrn"] != "") {
         return(i["dtxrid"])
@@ -171,19 +180,11 @@ funCat2CASRN <- mclapply(split(outpAnnotations, outpAnnotations$annoclassname), 
 term2funCat <- mclapply(split(outpAnnotations, outpAnnotations$annoterm), mc.cores=CORES, mc.silent=FALSE, function(x) split(x, x$annoclassname))
 
 print("! Finished loading DrugMatrix annotations.")
-print("! Ready to accept connections.")
+print("! Starting any previously unfinished requests.")
 
 # Define function to get all annotation class names
 getAnnotationListInternal <- function(res, req){
-    pool <- dbPool(
-        drv=RPostgres::Postgres(),
-        dbname=tox21config$database,
-        host=tox21config$host,
-        user=tox21config$uid,
-        password=tox21config$pwd,
-        port=tox21config$port,
-        idleTimeout=3600000
-    )
+    pool <- conn()
     query <- sqlInterpolate(ANSI(), paste0("SELECT annoclassname FROM annotation_class;"))
     outp <- dbGetQuery(pool, query)
     # Close pool
@@ -200,15 +201,7 @@ fullAnnoClassStr <- paste0(paste0(getAnnotationListInternal(), collapse="=checke
 # nodeCutoff numerical value between 1-100 for the max number to use in clustering.
 performEnrichment <- function(enrichmentUUID="-1", annoSelectStr=fullAnnoClassStr, nodeCutoff=10) {
     # Connect to db
-    poolInput <- dbPool(
-        drv=RPostgres::Postgres(),
-        dbname=tox21queue$database,
-        host=tox21queue$host,
-        user=tox21queue$uid,
-        password=tox21queue$pwd,
-        port=tox21queue$port,
-        idleTimeout=3600000
-    )
+    poolInput <- connQueue()
     # Get begin time for request
     beginTime <- Sys.time()
     # Set begin time in transaction table
@@ -249,15 +242,7 @@ performEnrichment <- function(enrichmentUUID="-1", annoSelectStr=fullAnnoClassSt
     # Throw error if no input sets
     if(length(inputFiles) < 1){
         # Initialize db connection pool
-        poolStatus <- dbPool(
-            drv=RPostgres::Postgres(),
-            dbname=tox21queue$database,
-            host=tox21queue$host,
-            user=tox21queue$uid,
-            password=tox21queue$pwd,
-            port=tox21queue$port,
-            idleTimeout=3600000
-        )
+        poolStatus <- connQueue()
         # Set step flag for each set name
         query <- sqlInterpolate(ANSI(), paste0("UPDATE status SET step=-1 WHERE uuid='", enrichmentUUID, "';"), id="fetchStatus")
         outp <- dbExecute(poolStatus, query)
@@ -284,25 +269,14 @@ performEnrichment <- function(enrichmentUUID="-1", annoSelectStr=fullAnnoClassSt
     ldf <- lapply(seq_len(length(ldf)), function(x) ldf[[x]])
     
     # Assign names to ldf
-    inputFilesNames <- unlist(lapply(inputFiles, function(x){
-        x_lv1 <- gsub(paste0(APP_DIR, IN_DIR, enrichmentUUID, "/"), "", x)
-        return(x_lv2 <- gsub(".txt", "", x_lv1))
-    }))
+    inputFilesNames <- unlist(lapply(inputFiles, function(x) gsub(".txt", "", gsub(paste0(APP_DIR, IN_DIR, enrichmentUUID, "/"), "", x))))
     names(ldf) <- inputFilesNames
     ldf <- ldf[!vapply(ldf, is.null, FUN.VALUE=logical(1))]
     
     # If there are no good input sets, crash gracefully.
     if(length(ldf) < 1){
         # Initialize db connection pool
-        poolStatus <- dbPool(
-            drv=RPostgres::Postgres(),
-            dbname=tox21queue$database,
-            host=tox21queue$host,
-            user=tox21queue$uid,
-            password=tox21queue$pwd,
-            port=tox21queue$port,
-            idleTimeout=3600000
-        )
+        poolStatus <- connQueue()
         # Set step flag for each set name
         query <- sqlInterpolate(ANSI(), paste0("UPDATE status SET step=-1 WHERE uuid='", enrichmentUUID, "';"), id="fetchStatus")
         outp <- dbExecute(poolStatus, query)
@@ -337,16 +311,7 @@ performEnrichment <- function(enrichmentUUID="-1", annoSelectStr=fullAnnoClassSt
     names(inputIDListHash) <- outfileBaseNames
     
     # Connect to DB to get status info
-    poolStatus <- dbPool(
-        drv=RPostgres::Postgres(),
-        dbname=tox21queue$database,
-        host=tox21queue$host,
-        user=tox21queue$uid,
-        password=tox21queue$pwd,
-        port=tox21queue$port,
-        idleTimeout=3600000
-    )
-    
+    poolStatus <- connQueue()
     # Get set names from database
     query <- sqlInterpolate(ANSI(), paste0("SELECT setname FROM status WHERE uuid='", enrichmentUUID, "';"), id="fetchStatus")
     outp <- dbGetQuery(poolStatus, query)
@@ -366,13 +331,8 @@ performEnrichment <- function(enrichmentUUID="-1", annoSelectStr=fullAnnoClassSt
         return(FALSE)
     }
     
-    
-    # DEBUG
-    tme <- Sys.time()
-    
     # Perform enrichment on each input set simultaneously - multi-core
-    #enrichmentStatusComplete <- mclapply(outfileBaseNames, mc.cores=CORES, mc.silent=FALSE, function(outfileBase){
-    enrichmentStatusComplete <- lapply(outfileBaseNames, function(outfileBase){
+    enrichmentStatusComplete <- mclapply(outfileBaseNames, mc.cores=CORES, mc.silent=FALSE, function(outfileBase){
         # Get list of CASRN names
         CASRNS <- lapply(inputIDListHash[[outfileBase]], function(j) names(j))
         # Check mapped CASRNS
@@ -386,32 +346,14 @@ performEnrichment <- function(enrichmentUUID="-1", annoSelectStr=fullAnnoClassSt
         mappedCASRNs <- mappedCASRNs[!vapply(mappedCASRNs, is.null, FUN.VALUE=logical(1))]
         # Perform enrichment analysis
         print(paste0("Performing enrichment on ", outfileBase, "..."))
-        
         enrichmentStatus <- perform_CASRN_enrichment_analysis(CASRNS, paste0(APP_DIR, OUT_DIR, enrichmentUUID, "/"), outfileBase, mappedCASRNs, funCat2Selected, CASRN2funCatTerm, funCatTerm2CASRN, funCat2CASRNCount, funCat2termCount, funCatTerm2CASRNCount, pvalueThresholdToDisplay, similarityThreshold, initialGroupMembership, multipleLinkageThreshold, EASEThreshold, nodeCutoff, enrichmentUUID)
-        
-        # DEBUG
-        print(paste0(">>> perform enrichment for set: ", outfileBase, " >>> ", (Sys.time() - tme) ))
-        
         return(enrichmentStatus)
-        
     })
-    
-    # DEBUG
-    print(paste0(">>> perform enrichment TOTAL >>> ", (Sys.time() - tme) ))
-    
-    
+
     # Create individual GCT file
     # Update status file
     # Connect to DB to get status info
-    poolStatus <- dbPool(
-        drv=RPostgres::Postgres(),
-        dbname=tox21queue$database,
-        host=tox21queue$host,
-        user=tox21queue$uid,
-        password=tox21queue$pwd,
-        port=tox21queue$port,
-        idleTimeout=3600000
-    )
+    poolStatus <- connQueue()
     # Get set names from database
     query <- sqlInterpolate(ANSI(), paste0("SELECT setname FROM status WHERE uuid='", enrichmentUUID, "';"), id="fetchStatus")
     outp <- dbGetQuery(poolStatus, query)
@@ -443,35 +385,14 @@ performEnrichment <- function(enrichmentUUID="-1", annoSelectStr=fullAnnoClassSt
     CASRN2Name <- outpChemDetail$testsubstance_chemname
     names(CASRN2Name) <- outpChemDetail$casrn
     
-    
-    ##### DEBUG #####
-    
-    tm <- Sys.time()
-    
     # Generate individual gct files
     process_variable_DAVID_CHART_directories_individual_file(baseinputDirName, baseDirName, baseOutputDir, '', '', "P", 0.05, "P", CASRN2Name)
-    
-    print(paste0(">>> process_variable_DAVID_CHART_directories_individual_file >> ", (Sys.time() - tm)  ))
-    tm <- Sys.time()
-    
     # Generate clustering images (heatmaps)
     create_clustering_images(baseOutputDir, "-color=BR")
-    
-    print(paste0(">>> create_clustering_images >> ", (Sys.time() - tm)  ))
-    tm <- Sys.time()
-    
     # Create DAVID Chart/Cluster files
     create_david_chart_cluster(baseDirName, nodeCutoff, "ALL", "P", 0.05, "P")
-    
-    print(paste0(">>> create_david_chart_cluster >> ", (Sys.time() - tm)  ))
-    tm <- Sys.time()
-    
     # Generate heatmaps for multiple sets
     create_clustering_images(baseOutputDirGct, "-color=BR")
-    
-    print(paste0(">>> create_clustering_images 2 >> ", (Sys.time() - tm)  ))
-    tm <- Sys.time()
-    
     # zip result files
     if(dir.exists(baseDirName)){
         zipDir <- dir(baseDirName, recursive=TRUE, include.dirs=TRUE)
@@ -483,15 +404,7 @@ performEnrichment <- function(enrichmentUUID="-1", annoSelectStr=fullAnnoClassSt
     
     # Update status file(s)
     # Connect to DB to get status info
-    poolStatus <- dbPool(
-        drv=RPostgres::Postgres(),
-        dbname=tox21queue$database,
-        host=tox21queue$host,
-        user=tox21queue$uid,
-        password=tox21queue$pwd,
-        port=tox21queue$port,
-        idleTimeout=3600000
-    )
+    poolStatus <- connQueue()
     
     # Get ending time
     finishTime <- Sys.time()
@@ -515,7 +428,7 @@ performEnrichment <- function(enrichmentUUID="-1", annoSelectStr=fullAnnoClassSt
     return(200)
 }
 
-## SUBROUTINES
+## ENRICHMENT SUBROUTINES
 # Generate individual GCT files
 process_variable_DAVID_CHART_directories_individual_file <- function(inputDirName, dirName, outputDir, extTag, additionalFileName, sigColumn, sigCutOff, valueColumn, CASRN2Name) {
     # Load the input file
@@ -572,7 +485,7 @@ process_variable_DAVID_CHART_directories_individual_file <- function(inputDirNam
                 tmpSplit[12] <- as.character(DATA[line, "Benjamini"])
                 tmpSplit[13] <- as.character(DATA[line, "FDR"])
                 if ( grepl("^\\D", tmpSplit[[sigColumnIndex]]) | as.double(tmpSplit[[sigColumnIndex]]) >= sigCutOff | as.double(tmpSplit[[10]]) < 1) {
-                    # skip
+                    # skip, do nothing
                 } else {
                     return(tmpSplit[[sigColumnIndex]])
                 }
@@ -586,7 +499,7 @@ process_variable_DAVID_CHART_directories_individual_file <- function(inputDirNam
                 tmpSplit[1] <- as.character(DATA[line, "Category"])
                 tmpSplit[2] <- as.character(DATA[line, "Term"])
                 tmpSplit[3] <- as.character(DATA[line, "Count"])
-                tmpSplit[4] <- as.character(DATA[line, "X."])
+                tmpSplit[4] <- as.character(DATA[line, "X."]) # original label is "%"
                 tmpSplit[5] <- as.character(DATA[line, "PValue"])
                 tmpSplit[6] <- as.character(DATA[line, "CASRNs"])
                 tmpSplit[7] <- as.character(DATA[line, "List.Total"])
@@ -597,7 +510,7 @@ process_variable_DAVID_CHART_directories_individual_file <- function(inputDirNam
                 tmpSplit[12] <- as.character(DATA[line, "Benjamini"])
                 tmpSplit[13] <- as.character(DATA[line, "FDR"])
                 if ( grepl("^\\D", tmpSplit[[sigColumnIndex]]) | as.double(tmpSplit[[sigColumnIndex]]) >= sigCutOff | as.double(tmpSplit[[10]]) < 1) {
-                    # skip
+                    # skip, do nothing
                 } else {
                     tmpTermKey <- paste0(tmpSplit[[2]], " | ", tmpSplit[[1]])
                     return(tmpTermKey)
@@ -615,7 +528,7 @@ process_variable_DAVID_CHART_directories_individual_file <- function(inputDirNam
                     as.character(DATA[line, "Category"]), 
                     as.character(DATA[line, "Term"]),
                     as.character(DATA[line, "Count"]),
-                    as.character(DATA[line, "X."]),
+                    as.character(DATA[line, "X."]), # original label is "%"
                     as.character(DATA[line, "PValue"]),
                     as.character(DATA[line, "CASRNs"]),
                     as.character(DATA[line, "List.Total"]),
@@ -627,7 +540,7 @@ process_variable_DAVID_CHART_directories_individual_file <- function(inputDirNam
                     as.character(DATA[line, "FDR"])
                 )
                 if ( grepl("^\\D", tmpSplit[[sigColumnIndex]]) | as.double(tmpSplit[[sigColumnIndex]]) >= sigCutOff | as.double(tmpSplit[[10]]) < 1) {
-                    # skip
+                    # skip, do no thing
                 } else {
                     tmpTermKey <- paste0(tmpSplit[[2]], " | ", tmpSplit[[1]])
                     CASRNs <- unlist(str_split(tmpSplit[[6]], ", "))
@@ -730,7 +643,7 @@ create_clustering_images <- function(outDir="", imageFlags="-color=BR"){
     color_palette <- paste0(libDir, "colorSchemeBlackRed.txt")
     output_format <- "png"
     # .jpeg, .png, .tiff, .bmp, .eps
-    if (!is.null(imageFlags) & grepl("(jpeg|png|tiff|bmp|eps)", tolower(imageFlags), fixed=TRUE)){ 
+    if (!is.null(imageFlags) & grepl("(jpeg|png|tiff|bmp|eps)", tolower(imageFlags), fixed=FALSE)){ 
         output_format <- tolower(imageFlags)
     }
     
@@ -742,7 +655,7 @@ create_clustering_images <- function(outDir="", imageFlags="-color=BR"){
     baseNameSplit <- baseNameSplit[nchar(baseNameSplit) > 0]
     baseShortDirName  <- ""
     if (baseNameSplit[length(baseNameSplit)] == ""){
-        baseShortDirName <- paste0(baseNameSplit[length(baseNameSplit)-1], '/')
+        baseShortDirName <- paste0(baseNameSplit[length(baseNameSplit) - 1], '/')
     } else {
         baseShortDirName <- paste0(baseNameSplit[length(baseNameSplit)], '/')
     }
@@ -805,6 +718,7 @@ perform_hclustering_per_directory <- function(givenDirName, additionalDirName, o
     })
 }
 
+# Create cluster inpuit file
 convert_gct_to_cluster_input_file <- function(gctFile, clusterInputFile, outputDir){
     GCTFILE <- read.delim(gctFile, sep="\t", comment.char="", quote="", stringsAsFactors=FALSE, header=TRUE, skip=2, fill=TRUE, check.names=FALSE)
     file.create(clusterInputFile)
@@ -828,6 +742,7 @@ convert_gct_to_cluster_input_file <- function(gctFile, clusterInputFile, outputD
     close(CLUSTER)
 }
 
+# Create necessary subdirectories for use during clustering subroutine
 create_sub_directory <- function(outputDir){
     tmp1 <- unlist(str_split(outputDir, "/"))
     tmp1 <- tmp1[nchar(tmp1) > 0]
@@ -835,6 +750,7 @@ create_sub_directory <- function(outputDir){
     dir.create(dirName)
 }
 
+# Check if supplied GCT file is valid for processing
 check_gct_contains_more_than_two_lines <- function(infile){
     INFILE <- read.delim(infile, sep="\t", comment.char="", quote="", stringsAsFactors=FALSE, header=TRUE, skip=2, fill=TRUE)
     lineCount <- nrow(INFILE)
@@ -845,7 +761,7 @@ check_gct_contains_more_than_two_lines <- function(infile){
     }
 }
 
-###### Create DAVID Chart and Cluster files ######
+# Create DAVID Chart and Cluster files
 create_david_chart_cluster <- function(baseDirName="", topTermLimit=10, mode="ALL", sigColumnName="P", sigCutoff=0.05, valueColumnName="P"){
     # Get the corresponding directory names
     baseNameSplit <- unlist(str_split(baseDirName, "/"))
@@ -924,7 +840,7 @@ process_variable_DAVID_CLUSTER_directories <- function(dirName, outputDir, extTa
                 }
             }
         })
-        #Get not null elements
+        # Get not null elements
         tmpIDList <- tmpIDList[!vapply(tmpIDList, is.null, FUN.VALUE=logical(1))]
         tmpIDList <- unlist(tmpIDList, recursive=FALSE)
         # Cut off entries over the limit
@@ -1045,9 +961,9 @@ process_variable_DAVID_CLUSTER_directories <- function(dirName, outputDir, extTa
     close(SUMMARY)
 
     # Create a network summary file for Cluster
-    ForNetworkFile <- paste0(summaryFileNameBase, "__ValueMatrix.ForNet")
-    file.create(paste0(outputDir, ForNetworkFile))
-    NETWORK <- file(paste0(outputDir, ForNetworkFile))
+    forNetworkFile <- paste0(summaryFileNameBase, "__ValueMatrix.ForNet")
+    file.create(paste0(outputDir, forNetworkFile))
+    NETWORK <- file(paste0(outputDir, forNetworkFile))
     writeToNetworkHeader <- paste0("GROUPID\tUID\tTerms\t", paste0(fileHeaderNames, collapse="\t"), "\n")
     writeToNetwork <- lapply(IDs, function(ID) {
         idTermSplits <- unlist(str_split(ID, " \\| "))
@@ -1271,9 +1187,9 @@ process_variable_DAVID_CHART_directories <- function(dirName, outputDir, extTag,
     close(SUMMARY)
     
     # Create a network summary file for Chart
-    ForNetworkFile <- paste0(summaryFileNameBase, "__ValueMatrix.ForNet")
-    file.create(paste0(outputDir, ForNetworkFile))
-    NETWORK <- file(paste0(outputDir, ForNetworkFile))
+    forNetworkFile <- paste0(summaryFileNameBase, "__ValueMatrix.ForNet")
+    file.create(paste0(outputDir, forNetworkFile))
+    NETWORK <- file(paste0(outputDir, forNetworkFile))
     writeToNetworkHeader <- paste0("GROUPID\tUID\tTerms\t", paste0(fileHeaderNames, collapse="\t"), "\n")
     writeToNetwork <- lapply(IDs, function(ID) {
         idTermSplits <- unlist(str_split(ID, " \\| "))
@@ -1358,7 +1274,7 @@ sort_by_file_number <- function(originalArray) {
     return(originalArray)
 }
 
-###### Perform enrichment analysis ######
+# Perform enrichment analysis
 perform_CASRN_enrichment_analysis <- function(CASRNRef, outputBaseDir, outfileBase, mappedCASRNsFromProcess, funCat2Selected, CASRN2funCatTerm, funCatTerm2CASRN, funCat2CASRNCount, funCat2termCount, funCatTerm2CASRNCount, pvalueThresholdToDisplay, similarityThreshold=0.50, initialGroupMembership, multipleLinkageThreshold, EASEThreshold, nodeCutoff=10, enrichmentUUID){
     setName <- outfileBase
 
@@ -1384,11 +1300,6 @@ perform_CASRN_enrichment_analysis <- function(CASRNRef, outputBaseDir, outfileBa
     inputCASRNsCount <- length(inputCASRNs)
     mappedCASRNs <- mappedCASRNsFromProcess # Among the CASRNs, use only those included in the full Tox21 list
     
-    # DEBUG
-    t1 <- Sys.time()
-    
-    tt1 <- Sys.time()
-    
     # Populate sigTerm2CASRNMatrix
     sigTerm2CASRNMatrix <- funCatTerm2CASRN[names(funCat2Selected)] # filter selected annotation classes
     sigTerm2CASRNMatrix <- unlist(mclapply(names(sigTerm2CASRNMatrix), mc.cores=CORES, mc.silent=FALSE, function(inner_list){
@@ -1398,9 +1309,6 @@ perform_CASRN_enrichment_analysis <- function(CASRNRef, outputBaseDir, outfileBa
     }), recursive=FALSE)
     sigTerm2CASRNMatrix <- sigTerm2CASRNMatrix[lapply(sigTerm2CASRNMatrix, length ) > 0]
 
-    print(paste0("| >>> | >>> sigterm", Sys.time()-tt1))
-    tt2 <- Sys.time()
-    
     localTermsList <- mclapply(names(funCat2Selected), mc.cores=CORES, mc.silent=FALSE, function(x){
         casrns_filtered <- CASRN2funCatTerm[names(mappedCASRNs)]
         tmp_localTermsList <- lapply(casrns_filtered, function(inner_list) {
@@ -1413,10 +1321,6 @@ perform_CASRN_enrichment_analysis <- function(CASRNRef, outputBaseDir, outfileBa
     })
     names(localTermsList) <- names(funCat2Selected)
 
-    print(paste0("| >>> | >>> localTermsList", Sys.time()-tt2))
-    tt3 <- Sys.time()
-
-    #DEBUG
     funCat2SelectedProcessed_datArray <- funCatTerm2CASRN[names(funCat2Selected)] # filter selected annotation classes
     funCat2SelectedProcessed_datArray <- mclapply(names(funCat2SelectedProcessed_datArray), mc.cores=CORES, mc.silent=FALSE, function(funCat) {
         targetTotalCASRNInFunCatCount <- localTermsList[[funCat]]
@@ -1442,11 +1346,6 @@ perform_CASRN_enrichment_analysis <- function(CASRNRef, outputBaseDir, outfileBa
     funCat2SelectedProcessed_datArray <- unlist(funCat2SelectedProcessed_datArray, recursive=FALSE)
     datArray <- lapply(funCat2SelectedProcessed_datArray, function(x) x$datarray)
     annoArray <- lapply(funCat2SelectedProcessed_datArray, function(x) x$annoarray)
-
-    print(paste0("| >>> | >>> funcatProcessed", Sys.time()-tt3))
-    
-    print(paste0("| >>> populate sigterm2casrn matrix for set: ", outfileBase, " >>> ", (Sys.time()-t1) ))
-    t2 <- Sys.time()
 
     # Save the data file -> create "RINPUT" but as a data frame here
     RINPUT_df <- do.call(rbind, datArray)
@@ -1490,9 +1389,6 @@ perform_CASRN_enrichment_analysis <- function(CASRNRef, outputBaseDir, outfileBa
     })
     ROutputData <- ROutputData[!vapply(ROutputData, is.null, FUN.VALUE=logical(1))]
     
-    print(paste0("| >>> create R output data: ", outfileBase, " >>> ", (Sys.time()-t2) ))
-    t3 <- Sys.time()
-
     # Integrate ROutput into the main hashes/arrays
     # Error checking/handling for the case the number of lines are different between @annoArray and @ROutputData
     if(length(annoArray) != length(ROutputData)) {
@@ -1507,15 +1403,7 @@ perform_CASRN_enrichment_analysis <- function(CASRNRef, outputBaseDir, outfileBa
         outfileCluster <- paste0(outputBaseDir, outputBaseDir, "__Cluster.txt")
         file.create(outfileCluster)
         # Initialize db connection pool
-        poolStatus <- dbPool(
-            drv=RPostgres::Postgres(),
-            dbname=tox21queue$database,
-            host=tox21queue$host,
-            user=tox21queue$uid,
-            password=tox21queue$pwd,
-            port=tox21queue$port,
-            idleTimeout=3600000
-        )
+        poolStatus <- connQueue()
         # Set step flag for each set name
         query <- sqlInterpolate(ANSI(), paste0("UPDATE status SET step=-1 WHERE uuid='", enrichmentUUID, "' AND setname='", setName, "';"), id="fetchStatus")
         outp <- dbExecute(poolStatus, query)
@@ -1559,9 +1447,6 @@ perform_CASRN_enrichment_analysis <- function(CASRNRef, outputBaseDir, outfileBa
     sortedFunCatTerms <- term2Pvalue[order(unlist(term2Pvalue), decreasing=FALSE)]
     sortedFunCatTermsCount <- length(sortedFunCatTerms)
     
-    print(paste0("| >>> annoarray init for set: ", outfileBase, " >>> ", (Sys.time()-t3) ))
-    t4 <- Sys.time()
-    
     # Write to chart File
     writeToChart <- unlist(lapply(names(sortedFunCatTerms), function(funCatTerm){ 
         if (term2Pvalue[[funCatTerm]] <= pvalueThresholdToDisplay){
@@ -1573,9 +1458,6 @@ perform_CASRN_enrichment_analysis <- function(CASRNRef, outputBaseDir, outfileBa
     writeToChart <- writeToChart[!vapply(writeToChart, is.null, FUN.VALUE=logical(1))]
     writeLines(paste0(chartHeader, paste0(writeToChart, collapse="\n")), OUTFILE)
     close(OUTFILE)
-    
-    print(paste0("| >>> write chart file for set: ", outfileBase, " >>> ", (Sys.time()-t4) ))
-    t5 <- Sys.time()
     
     # Write to simple chart file
     sortFunCatProcess <- lapply(names(sortedFunCatTerms), function(funCatTerm){ 
@@ -1601,9 +1483,6 @@ perform_CASRN_enrichment_analysis <- function(CASRNRef, outputBaseDir, outfileBa
     writeLines(paste0(simpleHeader, paste0(sortFunCatProcess, collapse="\n")), SIMPLE)
     close(SIMPLE)
     
-    print(paste0("| >>> write chart simple for set: ", outfileBase, " >>> ", (Sys.time()-t5) ))
-    t6 <- Sys.time()
-
     # Write to matrix file
     # Create matrix header w/ column names
     sortedHeaderTerms <- unlist(unique(names(sigTerm2CASRNMatrix)))[order(unlist(unique(names(sigTerm2CASRNMatrix))), decreasing=FALSE)]
@@ -1631,31 +1510,17 @@ perform_CASRN_enrichment_analysis <- function(CASRNRef, outputBaseDir, outfileBa
     # Write matrix to file
     fwrite(matrixPrintToFile, file=MATRIX, row.names=FALSE, col.names=TRUE, sep="\t")
     
-    print(paste0("| >>> write matrix for set: ", outfileBase, " >>> ", (Sys.time()-t6) ))
-    t7 <- Sys.time()
-    
     # Perform functional term clustering
     # Calculate enrichment score
     df <- read.delim(outfileChart, sep="\t", comment.char="", quote="", stringsAsFactors=FALSE)
     res <- kappa_cluster(x=df, outputBaseDir=outputBaseDir, outfileBase=outfileBase, sortedFunCatTerms=sortedFunCatTerms, sigTerm2CASRNMatrix=sigTerm2CASRNMatrix, sortedFunCatTermsCount=sortedFunCatTermsCount, inputCASRNsCount=inputCASRNsCount, similarityThreshold=similarityThreshold, initialGroupMembership=initialGroupMembership, multipleLinkageThreshold=multipleLinkageThreshold, EASEThreshold=EASEThreshold, term2Pvalue=term2Pvalue, term2Contents=term2Contents, enrichmentUUID=enrichmentUUID, inputCASRNs=inputCASRNs)
-    
-    print(paste0("| >>> kappa_cluster for set: ", outfileBase, " >>> ", (Sys.time()-t7) ))
-    
 }
 
 kappa_cluster <- function(x, deg=NULL, useTerm=FALSE, cutoff=0.5, overlap=0.5, minSize=5, escore=3, outputBaseDir=NULL, outfileBase=NULL, sortedFunCatTerms=NULL, sigTerm2CASRNMatrix=NULL, sortedFunCatTermsCount=NULL, inputCASRNsCount=NULL, similarityThreshold=NULL, initialGroupMembership=NULL, multipleLinkageThreshold=NULL, EASEThreshold=NULL, term2Pvalue=NULL, term2Contents=NULL, enrichmentUUID=NULL, inputCASRNs=NULL){
     # Perform functional term clustering
     # Update status file
     # Connect to DB to get status info
-    poolStatus <- dbPool(
-        drv=RPostgres::Postgres(),
-        dbname=tox21queue$database,
-        host=tox21queue$host,
-        user=tox21queue$uid,
-        password=tox21queue$pwd,
-        port=tox21queue$port,
-        idleTimeout=3600000
-    )
+    poolStatus <- connQueue()
     # Set step flag for each set name
     query <- sqlInterpolate(ANSI(), paste0("UPDATE status SET step=3 WHERE uuid='", enrichmentUUID, "' AND setname='", outfileBase, "' AND step<>-1;"), id="fetchStatus")
     outp <- dbExecute(poolStatus, query)
@@ -1669,12 +1534,9 @@ kappa_cluster <- function(x, deg=NULL, useTerm=FALSE, cutoff=0.5, overlap=0.5, m
         return(FALSE)
     }
     
-    # debugging
     overlap <- 0.5
     minSize <- 3
     
-    tc <- Sys.time()
-
     # # Step#1: Calculate kappa score
     posTermCASRNCount <- lapply(names(sortedFunCatTerms), function(funCatTerm) length(sigTerm2CASRNMatrix[[funCatTerm[[1]]]]))
     names(posTermCASRNCount) <- names(sortedFunCatTerms)
@@ -1720,93 +1582,12 @@ kappa_cluster <- function(x, deg=NULL, useTerm=FALSE, cutoff=0.5, overlap=0.5, m
         return(NULL)
     }
     termpair2kappaOverThreshold <- tapply(unlist(termpair2kappaOverThreshold, use.names=FALSE), rep(names(termpair2kappaOverThreshold), lengths(termpair2kappaOverThreshold)), FUN=c)
-
-    # 
-    # 
-    # # Step#1: Calculate kappa score
-    # posTermCASRNCount <- lapply(names(sortedFunCatTerms), function(funCatTerm) length(sigTerm2CASRNMatrix[[funCatTerm[[1]]]]))
-    # names(posTermCASRNCount) <- names(sortedFunCatTerms)
-    # sortedFunCatTermsPValues <- sortedFunCatTerms
-    # sortedFunCatTerms <- names(sortedFunCatTerms)
-    # termpair2kappaOverThreshold <- mclapply (seq(1, sortedFunCatTermsCount - 1), mc.cores=CORES, mc.silent=FALSE, function(i){
-    #     sorted_tmp <- unlist(lapply(seq(i + 1, sortedFunCatTermsCount), function(j){
-    #         #calculate_kappa_statistics
-    #         posTerm1Total <- posTermCASRNCount[[sortedFunCatTerms[i]]]
-    #         posTerm2Total <- posTermCASRNCount[[sortedFunCatTerms[j]]]
-    #         negTerm1Total <- inputCASRNsCount - posTerm1Total # note that the total is inputCASRNsCount not the mapped total
-    #         negTerm2Total <- inputCASRNsCount - posTerm2Total # note that the total is inputCASRNsCount not the mapped total
-    #         # Get number of chemicals that are shared or not for term1 and term2
-    #         tmpMat1 <- sigTerm2CASRNMatrix[[sortedFunCatTerms[i]]]
-    #         tmpMat2 <- sigTerm2CASRNMatrix[[sortedFunCatTerms[j]]]
-    #         sharedTerms <- intersect(tmpMat1, tmpMat2)
-    #         term1term2 <- length(sharedTerms)
-    #         term1only <- length(tmpMat1) - length(sharedTerms)
-    #         term2only <- length(tmpMat2) - length(sharedTerms)
-    #         term1term2Non <- inputCASRNsCount - term1term2 - term1only - term2only
-    #         # Calculate the kappa score
-    #         # http://david.abcc.ncifcrf.gov/content.jsp?file=linear_search.html
-    #         Oab <- (term1term2 + term1term2Non) / inputCASRNsCount
-    #         Aab <- ((posTerm1Total * posTerm2Total) + (negTerm1Total * negTerm2Total)) / (inputCASRNsCount * inputCASRNsCount)
-    #         if (Aab != 1) {
-    #             Kappa <- as.double(sprintf("%.2f", (Oab - Aab) / (1 - Aab)))
-    #             if (Kappa > similarityThreshold) {
-    #                 # iTerm <- paste0(sortedFunCatTerms[i])
-    #                 # jTerm <- paste0(sortedFunCatTerms[j])
-    #                 # ijFrame <- list(iTerm=paste0(jTerm), jTerm=paste0(iTerm))
-    #                 # names(ijFrame) <- c(iTerm, jTerm)
-    #                 # return(ijFrame)
-    #                 return(paste0(sortedFunCatTerms[j]))
-    #             }
-    #             return(NULL)
-    #         }
-    #         return(NULL)
-    #     }))
-    #     sorted_tmp <- sorted_tmp[!vapply(sorted_tmp, is.null, FUN.VALUE=logical(1))]
-    #     return(sort(sorted_tmp))
-    # })
-    # names(termpair2kappaOverThreshold) <- head(sortedFunCatTerms, length(sortedFunCatTerms) - 1)
-    # 
-    # # print("termpair2kappaOverThreshold")
-    # # print(termpair2kappaOverThreshold)
-    # # print(length(termpair2kappaOverThreshold))
-    # # 
-    # # Sys.sleep(10)
-    # # stop()
-    # 
-    # termpair2kappaOverThreshold <- termpair2kappaOverThreshold[!vapply(termpair2kappaOverThreshold, is.null, FUN.VALUE=logical(1))]
-    # termpair2kappaOverThreshold <- unlist(termpair2kappaOverThreshold[!vapply(termpair2kappaOverThreshold, is.null, FUN.VALUE=logical(1))], recursive=FALSE)
-    # if(length(termpair2kappaOverThreshold) < 1) {
-    #     return(NULL)
-    # }
-    # termpair2kappaOverThreshold <- tapply(unlist(termpair2kappaOverThreshold, use.names=FALSE), rep(names(termpair2kappaOverThreshold), lengths(termpair2kappaOverThreshold)), FUN=c)
-    
-    
-    
-    # print("termpair2kappaOverThreshold")
-    # print(termpair2kappaOverThreshold)
-    # 
-    
-    
-    print(paste0("| >>> CLUSTER >>> STEP 1: ", (Sys.time()-tc) ))
-    tc <- Sys.time()
-    
-    
-    #Sys.sleep(10)
-    #stop()
     
     # Step#2: Create qualified initial seeding groups
     # Each term could form a initial seeding group (initial seeds) as long as it has close relationships (kappa > 0.35 or any designated number) with more than > 2 or any designated number of other members. 
     # Update status file
     # Connect to DB to get status info
-    poolStatus <- dbPool(
-        drv=RPostgres::Postgres(),
-        dbname=tox21queue$database,
-        host=tox21queue$host,
-        user=tox21queue$uid,
-        password=tox21queue$pwd,
-        port=tox21queue$port,
-        idleTimeout=3600000
-    )
+    poolStatus <- connQueue()
     # Set step flag for each set name
     query <- sqlInterpolate(ANSI(), paste0("UPDATE status SET step=4 WHERE uuid='", enrichmentUUID, "' AND setname='", outfileBase, "' AND step<>-1;"), id="fetchStatus")
     outp <- dbExecute(poolStatus, query)
@@ -1828,35 +1609,6 @@ kappa_cluster <- function(x, deg=NULL, useTerm=FALSE, cutoff=0.5, overlap=0.5, m
         term2sToPassNames <- names(term2sToPass)
     }
 
-    # qualifiedSeeds <- mclapply(seq_len(sortedFunCatTermsCount), mc.cores=CORES, mc.silent=FALSE, function(i){
-    #    # Seed condition #1: initial group membership
-    #    if (!is.null(termpair2kappaOverThreshold[[sortedFunCatTerms[i]]]) & length(termpair2kappaOverThreshold[[sortedFunCatTerms[i]]]) >= (initialGroupMembership - 1)) {
-    #        # Seed condition #2: majority of the members
-    #        i_terms <- head(term2sToPass[[sortedFunCatTerms[i]]], -1)
-    #        names(i_terms) <- seq_len(length(term2sToPass[[sortedFunCatTerms[i]]]) - 1)
-    #        j_terms <- term2sToPass[[sortedFunCatTerms[i]]]
-    #        names(j_terms) <- seq_len(length(term2sToPass[[sortedFunCatTerms[i]]]))
-    #        ij_sorted_matrix <- expand.grid(seq_len(length(term2sToPass[[sortedFunCatTerms[i]]]) - 1), seq_len(length(term2sToPass[[sortedFunCatTerms[i]]])), stringsAsFactors=FALSE)
-    #        ij_sorted_matrix <- ij_sorted_matrix %>% filter(ij_sorted_matrix$Var1 < ij_sorted_matrix$Var2)
-    #        ij_sorted_matrix$Var1 <- lapply(ij_sorted_matrix$Var1, function(i_index) i_terms[[i_index]])
-    #        ij_sorted_matrix$Var2 <- lapply(ij_sorted_matrix$Var2, function(j_index) j_terms[[j_index]])
-    #        ij_sorted_matrix <- unlist(apply(ij_sorted_matrix, 1, function(ij_row){
-    #            if(ij_row[["Var1"]] %in% termpair2kappaOverThreshold[[ij_row[["Var2"]]]]){
-    #                return(1)
-    #            }
-    #            return(NULL)
-    #        }))
-    #        ij_sorted_matrix <- ij_sorted_matrix[!vapply(ij_sorted_matrix, is.null, FUN.VALUE=logical(1))]
-    #        totalPairs <- choose(length(term2sToPass[[sortedFunCatTerms[i]]]), 2)
-    #        if((length(ij_sorted_matrix) / totalPairs) > multipleLinkageThreshold){
-    #            return(unlist(unname(term2sToPass[[sortedFunCatTerms[i]]])))
-    #        }
-    #        return(NULL)
-    #    }
-    #    return(NULL)
-    # })
-    
-    # DEBUG
     qualifiedSeeds <- mclapply(seq_len(sortedFunCatTermsCount), mc.cores=CORES, mc.silent=FALSE, function(i){
         # Seed condition #1: initial group membership
         if (!is.null(termpair2kappaOverThreshold[[sortedFunCatTerms[i]]]) & length(termpair2kappaOverThreshold[[sortedFunCatTerms[i]]]) >= (initialGroupMembership - 1)) {
@@ -1881,21 +1633,10 @@ kappa_cluster <- function(x, deg=NULL, useTerm=FALSE, cutoff=0.5, overlap=0.5, m
     })
     ml <- qualifiedSeeds[!vapply(qualifiedSeeds, is.null, FUN.VALUE=logical(1))]
 
-    print(paste0("| >>> CLUSTER >>> STEP 2: ", (Sys.time()-tc) ))
-    tc <- Sys.time()
-
     #  Step#3: Iteratively merge qualifying seeds
     # Update status file
     # Connect to DB to get status info
-    poolStatus <- dbPool(
-        drv=RPostgres::Postgres(),
-        dbname=tox21queue$database,
-        host=tox21queue$host,
-        user=tox21queue$uid,
-        password=tox21queue$pwd,
-        port=tox21queue$port,
-        idleTimeout=3600000
-    )
+    poolStatus <- connQueue()
     # Set step flag for each set name
     query <- sqlInterpolate(ANSI(), paste0("UPDATE status SET step=5 WHERE uuid='", enrichmentUUID, "' AND setname='", outfileBase, "' AND step<>-1;"), id="fetchStatus")
     outp <- dbExecute(poolStatus, query)
@@ -1916,23 +1657,11 @@ kappa_cluster <- function(x, deg=NULL, useTerm=FALSE, cutoff=0.5, overlap=0.5, m
         return(NULL)
     }
     names(res) <- lapply(res, function(cluster) cluster[1])
-    
-    print(paste0("| >>> CLUSTER >>> STEP 3: ", (Sys.time()-tc) ))
-    tc <- Sys.time()
-    
-    
+
     # Step#4: Calculate enrichment score and print out the results
     # Update status file
     # Connect to DB to get status info
-    poolStatus <- dbPool(
-        drv=RPostgres::Postgres(),
-        dbname=tox21queue$database,
-        host=tox21queue$host,
-        user=tox21queue$uid,
-        password=tox21queue$pwd,
-        port=tox21queue$port,
-        idleTimeout=3600000
-    )
+    poolStatus <- connQueue()
     # Set step flag for each set name
     query <- sqlInterpolate(ANSI(), paste0("UPDATE status SET step=6 WHERE uuid='", enrichmentUUID, "' AND setname='", outfileBase, "' AND step<>-1;"), id="fetchStatus")
     outp <- dbExecute(poolStatus, query)
@@ -1970,62 +1699,10 @@ kappa_cluster <- function(x, deg=NULL, useTerm=FALSE, cutoff=0.5, overlap=0.5, m
         return(paste0(clusterScore, "\n", clusterHeader, "\n", clusterContents, "\n"))
     })
     writeLines(writeToClusterFile, CLUSTER)
-    
-    print(paste0("| >>> CLUSTER >>> STEP 4: ", (Sys.time()-tc) ))
-    
-    
     return(1)
 }
 
-
-# TODO: make this more closely match old code (Perl)
-merge_term_NEW <- function(ml, overlap, multipleLinkageThreshold){
-    names(ml) <- lapply(ml, function(x) x[1])
-    res <- list()
-    while(length(ml) > 0){
-        
-        print("==============NEW SEED=============")
-        
-        curr <- ml[[1]]
-        ml <- ml[setdiff(names(ml), names(ml)[1])]
-        while(TRUE){
-            bestovl <- 0
-            bestindex <- unlist(lapply(names(ml), function(j){
-                ovl <- (2 * length(intersect(curr, ml[[j]]))) / (length(curr) + length(ml[[j]]))
-                
-                print("OVL")
-                print(ovl)
-                
-                if(ovl > multipleLinkageThreshold & ovl > bestovl){
-                    bestovl <<- ovl
-                    return(j)
-                }
-                return(NULL)
-            }))
-            bestindex <- bestindex[!vapply(bestindex, is.null, FUN.VALUE=logical(1))]
-            if(length(bestindex) < 1){
-                res <- append(res, list(sort(curr)))
-                break
-            } else {
-                bestindex <- bestindex[length(bestindex)] # get the highest overlap group
-                curr <- union(curr, ml[[bestindex]])
-                ml <- ml[setdiff(names(ml), bestindex)]
-            }
-        }
-        
-    }
-    
-    # DEBUG
-    #print(" == RES == ")
-    #print(res)
-    
-    
-    res <- unname(unique(res[!vapply(res, is.null, FUN.VALUE=logical(1))]))
-    
-    return(res)
-}
-
-# TODO: make this more closely match old code (Perl)
+# Take list of all clusters and merge down
 merge_term <- function(ml, overlap, multipleLinkageThreshold){
     names(ml) <- lapply(ml, function(x) x[1])
     res <- lapply(names(ml), function(currentSeed){
@@ -2064,15 +1741,7 @@ calculate_Enrichment_Score <- function(x, df){
 # Fetch all annotations in the Tox21 Enricher database for given CASRNs.
 getAnnotationsFunc <- function(enrichmentUUID="-1", annoSelectStr=fullAnnoClassStr, nodeCutoff=10) {
     # Connect to db
-    poolInput <- dbPool(
-        drv=RPostgres::Postgres(),
-        dbname=tox21queue$database,
-        host=tox21queue$host,
-        user=tox21queue$uid,
-        password=tox21queue$pwd,
-        port=tox21queue$port,
-        idleTimeout=3600000
-    )
+    poolInput <- connQueue()
     # Get begin time for request
     beginTime <- Sys.time()
     # Set begin time in transaction table
@@ -2108,15 +1777,7 @@ getAnnotationsFunc <- function(enrichmentUUID="-1", annoSelectStr=fullAnnoClassS
         
         # Read status file and update step
         # Connect to DB to get status info
-        poolStatus <- dbPool(
-            drv=RPostgres::Postgres(),
-            dbname=tox21queue$database,
-            host=tox21queue$host,
-            user=tox21queue$uid,
-            password=tox21queue$pwd,
-            port=tox21queue$port,
-            idleTimeout=3600000
-        )
+        poolStatus <- connQueue()
         # Set step flag for each set name
         query <- sqlInterpolate(ANSI(), paste0("UPDATE status SET step=2 WHERE uuid='", enrichmentUUID, "' AND setname='", setName, "' AND step<>-1;"), id="fetchStatus")
         outp <- dbExecute(poolStatus, query)
@@ -2133,15 +1794,7 @@ getAnnotationsFunc <- function(enrichmentUUID="-1", annoSelectStr=fullAnnoClassS
         # Get the corresponding annotations for each input CASRN
         annotations <- lapply(inputCASRNs, function(CASRN){
             # Connect to db
-            poolMatrix <- dbPool(
-                drv=RPostgres::Postgres(),
-                dbname=tox21config$database,
-                host=tox21config$host,
-                user=tox21config$uid,
-                password=tox21config$pwd,
-                port=tox21config$port,
-                idleTimeout=3600000
-            )
+            poolMatrix <- conn()
             # Grab matrix
             queryMatrix <- sqlInterpolate(ANSI(), paste0("SELECT annotation FROM annotation_matrix WHERE casrn='", CASRN, "';"))
             outpMatrix <- tryCatch({
@@ -2164,15 +1817,7 @@ getAnnotationsFunc <- function(enrichmentUUID="-1", annoSelectStr=fullAnnoClassS
         
         # Read status file and update step
         # Connect to DB to get status info
-        poolStatus <- dbPool(
-            drv=RPostgres::Postgres(),
-            dbname=tox21queue$database,
-            host=tox21queue$host,
-            user=tox21queue$uid,
-            password=tox21queue$pwd,
-            port=tox21queue$port,
-            idleTimeout=3600000
-        )
+        poolStatus <- connQueue()
         # Set step flag for each set name
         query <- sqlInterpolate(ANSI(), paste0("UPDATE status SET step=3 WHERE uuid='", enrichmentUUID, "' AND setname='", setName, "' AND step<>-1;"), id="fetchStatus")
         outp <- dbExecute(poolStatus, query)
@@ -2196,15 +1841,7 @@ getAnnotationsFunc <- function(enrichmentUUID="-1", annoSelectStr=fullAnnoClassS
             # Fetch actual term names from IDs
             fetchedTerms <- lapply(annotations[[CASRN]], function(annotation){
                 # Connect to db
-                poolMatrix <- dbPool(
-                    drv=RPostgres::Postgres(),
-                    dbname=tox21config$database,
-                    host=tox21config$host,
-                    user=tox21config$uid,
-                    password=tox21config$pwd,
-                    port=tox21config$port,
-                    idleTimeout=3600000
-                )
+                poolMatrix <- conn()
                 queryTerm <- sqlInterpolate(ANSI(), paste0("SELECT term FROM annotation_matrix_terms WHERE id=", annotation, ";"))
                 outpTerm <- dbGetQuery(poolMatrix, queryTerm)
                 poolClose(poolMatrix)
@@ -2239,15 +1876,7 @@ getAnnotationsFunc <- function(enrichmentUUID="-1", annoSelectStr=fullAnnoClassS
         
         # Read status file and update step
         # Connect to DB to get status info
-        poolStatus <- dbPool(
-            drv=RPostgres::Postgres(),
-            dbname=tox21queue$database,
-            host=tox21queue$host,
-            user=tox21queue$uid,
-            password=tox21queue$pwd,
-            port=tox21queue$port,
-            idleTimeout=3600000
-        )
+        poolStatus <- connQueue()
         # Set step flag for each set name
         query <- sqlInterpolate(ANSI(), paste0("UPDATE status SET step=4 WHERE uuid='", enrichmentUUID, "' AND setname='", setName, "' AND step<>-1;"), id="fetchStatus")
         outp <- dbExecute(poolStatus, query)
@@ -2286,15 +1915,7 @@ getAnnotationsFunc <- function(enrichmentUUID="-1", annoSelectStr=fullAnnoClassS
     
     # Read status file and update step
     # Connect to DB to get status info
-    poolStatus <- dbPool(
-        drv=RPostgres::Postgres(),
-        dbname=tox21queue$database,
-        host=tox21queue$host,
-        user=tox21queue$uid,
-        password=tox21queue$pwd,
-        port=tox21queue$port,
-        idleTimeout=3600000
-    )
+    poolStatus <- connQueue()
     # Set step flag for each set name
     query <- sqlInterpolate(ANSI(), paste0("UPDATE status SET step=5 WHERE uuid='", enrichmentUUID, "' AND step<>-1;"), id="fetchStatus")
     outp <- dbExecute(poolStatus, query)
@@ -2324,15 +1945,7 @@ getAnnotationsFunc <- function(enrichmentUUID="-1", annoSelectStr=fullAnnoClassS
     }
     
     # Connect to db
-    poolUpdate <- dbPool(
-        drv=RPostgres::Postgres(),
-        dbname=tox21queue$database,
-        host=tox21queue$host,
-        user=tox21queue$uid,
-        password=tox21queue$pwd,
-        port=tox21queue$port,
-        idleTimeout=3600000
-    )
+    poolUpdate <- connQueue()
     # Get ending time
     finishTime <- Sys.time()
     
@@ -2349,15 +1962,7 @@ getAnnotationsFunc <- function(enrichmentUUID="-1", annoSelectStr=fullAnnoClassS
 queueResubmit <- function(res, req, mode="", enrichmentUUID="-1", annoSelectStr=fullAnnoClassStr, nodeCutoff=10, setNames){
     future({
         # Connect to DB to get status info
-        poolStatus <- dbPool(
-            drv=RPostgres::Postgres(),
-            dbname=tox21queue$database,
-            host=tox21queue$host,
-            user=tox21queue$uid,
-            password=tox21queue$pwd,
-            port=tox21queue$port,
-            idleTimeout=3600000
-        )
+        poolStatus <- connQueue()
         # Set lock for current request so it won't be reprocessed
         query <- sqlInterpolate(ANSI(), paste0("UPDATE queue SET lock=1 WHERE uuid='", enrichmentUUID, "';"), id="setLock")
         outp <- dbExecute(poolStatus, query)
@@ -2382,19 +1987,11 @@ queueResubmit <- function(res, req, mode="", enrichmentUUID="-1", annoSelectStr=
         # Perform enrichment analysis or fetch relevant annotations
         if(mode == "annotation") {
             status_code <- getAnnotationsFunc(enrichmentUUID=enrichmentUUID, annoSelectStr=annoSelectStr, nodeCutoff=nodeCutoff)
-        } else { # else query R API server 
+        } else { # else query R API server
             status_code <- performEnrichment(enrichmentUUID=enrichmentUUID, annoSelectStr=annoSelectStr, nodeCutoff=nodeCutoff)
-        } 
+        }
         # Connect to DB to set appropriate finishing flags
-        poolFinished <- dbPool(
-            drv=RPostgres::Postgres(),
-            dbname=tox21queue$database,
-            host=tox21queue$host,
-            user=tox21queue$uid,
-            password=tox21queue$pwd,
-            port=tox21queue$port,
-            idleTimeout=3600000
-        )
+        poolFinished <- connQueue()
         # Check if request was cancelled
         query <- sqlInterpolate(ANSI(), paste0("SELECT cancel FROM queue WHERE uuid='", enrichmentUUID, "';"), id="checkCancel")
         outp <- dbGetQuery(poolFinished, query)
@@ -2429,17 +2026,10 @@ queueResubmit <- function(res, req, mode="", enrichmentUUID="-1", annoSelectStr=
     }, seed=TRUE)
     return(TRUE)
 }
+
 # Launch enrichment requests for each unfinished transaction here:
 mclapply(unlockedTransactions, mc.cores=CORES, mc.silent=FALSE, function(x){
-    poolRequests <- dbPool(
-        drv=RPostgres::Postgres(),
-        dbname=tox21queue$database,
-        host=tox21queue$host,
-        user=tox21queue$uid,
-        password=tox21queue$pwd,
-        port=tox21queue$port,
-        idleTimeout=3600000
-    )
+    poolRequests <- connQueue()
     query <- sqlInterpolate(ANSI(), paste0("SELECT original_mode, uuid, annotation_selection_string, cutoff, original_names FROM transaction WHERE uuid='", x, "' AND delete=0 AND cancel=0;"), id="resubmit")
     outp <- dbGetQuery(poolRequests, query)
     poolClose(poolRequests)
@@ -2454,14 +2044,16 @@ mclapply(unlockedTransactions, mc.cores=CORES, mc.silent=FALSE, function(x){
     }
 })
 
+print("! Ready to accept connections.")
+
 ## SECTION 1: DEALING WITH THE QUEUE
 
-#* Place enrichment request in queue
-#* @param mode
-#* @param enrichmentUUID
-#* @param annoSelectStr
-#* @param nodeCutoff
-#* @param setNames
+#* Place enrichment request in queue (internal use only).
+#* @param mode Mode of request:<br><ul><li><b>casrn</b> - enrich from user-provided list of CASRNs</li><li><b>substructure</b> - shared substructures search</li><li><b>similarity</b> - Tanimoto similarity search</li><li><b>annotation</b> - view list of annotations associated with input chemicals</li></ul>
+#* @param enrichmentUUID Unique ID assigned to request. Automatically generated by Tox21 Enricher.
+#* @param annoSelectStr String of all annotation classes to be used in request.
+#* @param nodeCutoff Cutoff value that determines the top N annotations represented from each class in the enrichment results.
+#* @param setNames Names used internally by Tox21 Enricher for enrichment.
 #* @post /queue
 queue <- function(res, req, mode="", enrichmentUUID="-1", annoSelectStr=fullAnnoClassStr, nodeCutoff=10, setNames){
     # Validate input
@@ -2506,15 +2098,7 @@ queue <- function(res, req, mode="", enrichmentUUID="-1", annoSelectStr=fullAnno
     }
     
     # Connect to db
-    poolQueue <- dbPool(
-        drv=RPostgres::Postgres(),
-        dbname=tox21queue$database,
-        host=tox21queue$host,
-        user=tox21queue$uid,
-        password=tox21queue$pwd,
-        port=tox21queue$port,
-        idleTimeout=3600000
-    )
+    poolQueue <- connQueue()
     # Update database with "queue" entry
     query <- sqlInterpolate(ANSI(), paste0("INSERT INTO queue(mode, uuid, annoselectstr, cutoff) VALUES('", mode, "', '", enrichmentUUID, "', '", annoSelectStr, "', ", nodeCutoff, ") ;"), id="createQueueEntry")
     outp <- dbExecute(poolQueue, query)
@@ -2529,15 +2113,7 @@ queue <- function(res, req, mode="", enrichmentUUID="-1", annoSelectStr=fullAnno
     
     future({
         # Connect to DB to get status info
-        poolStatus <- dbPool(
-            drv=RPostgres::Postgres(),
-            dbname=tox21queue$database,
-            host=tox21queue$host,
-            user=tox21queue$uid,
-            password=tox21queue$pwd,
-            port=tox21queue$port,
-            idleTimeout=3600000
-        )
+        poolStatus <- connQueue()
         # Set lock for current request so it won't be reprocessed
         query <- sqlInterpolate(ANSI(), paste0("UPDATE queue SET lock=1 WHERE uuid='", enrichmentUUID, "';"), id="setLock")
         outp <- dbExecute(poolStatus, query)
@@ -2568,15 +2144,7 @@ queue <- function(res, req, mode="", enrichmentUUID="-1", annoSelectStr=fullAnno
         } 
         
         # Connect to DB to set appropriate finishing flags
-        poolFinished <- dbPool(
-            drv=RPostgres::Postgres(),
-            dbname=tox21queue$database,
-            host=tox21queue$host,
-            user=tox21queue$uid,
-            password=tox21queue$pwd,
-            port=tox21queue$port,
-            idleTimeout=3600000
-        )
+        poolFinished <- connQueue()
         
         # Check if request was cancelled
         query <- sqlInterpolate(ANSI(), paste0("SELECT cancel FROM queue WHERE uuid='", enrichmentUUID, "';"), id="checkCancel")
@@ -2617,23 +2185,23 @@ queue <- function(res, req, mode="", enrichmentUUID="-1", annoSelectStr=fullAnno
     return(TRUE)
 }
 
-#* Create entry for request in transaction table
-#* @param originalMode
-#* @param mode
-#* @param uuid
-#* @param annoSelectStr
-#* @param cutoff
-#* @param input
-#* @param casrnBox
-#* @param originalNames
-#* @param reenrich
-#* @param color
-#* @param timestampPosted
-#* @param reenrichFlag
+#* Create entry for request in transaction table (internal use only).
+#* @param originalMode Special variable for determining if request has been re-enriched.
+#* @param mode Mode of request:<br><ul><li><b>casrn</b> - enrich from user-provided list of CASRNs</li><li><b>substructure</b> - shared substructures search</li><li><b>similarity</b> - Tanimoto similarity search</li><li><b>annotation</b> - view list of annotations associated with input chemicals</li></ul>
+#* @param uuid Unique ID assigned to request. Automatically generated by Tox21 Enricher.
+#* @param annoSelectStr String of all annotation classes to be used in request.
+#* @param cutoff Cutoff value that determines the top N annotations represented from each class in the enrichment results.
+#* @param input Special variable related to input for enrichment.
+#* @param casrnBox Special variable related to input for enrichment.
+#* @param originalNames Special variable for determining if request has been re-enriched.
+#* @param reenrich Special variable for determining if request has been re-enriched.
+#* @param color Special variable related to input for enrichment.
+#* @param timestampPosted Special variable related to input for enrichment.
+#* @param reenrichFlag Special variable for determining if request has been re-enriched.
 #* @post /createTransaction
 createTransaction <- function(res, req, originalMode="", mode="", uuid="-1", annoSelectStr=fullAnnoClassStr, cutoff=10, input, casrnBox, originalNames="none", reenrich="", color, timestampPosted, reenrichFlag=FALSE){
     # Validate input
-    if(originalMode != "similarity" & originalMode != "substructure"){
+    if(originalMode != "similarity" & originalMode != "substructure" & originalMode != "casrn" & originalMode != "annotation"){
         res$status <- 400
         return("Error: Invalid value for argument 'originalMode'.")
     }
@@ -2645,6 +2213,7 @@ createTransaction <- function(res, req, originalMode="", mode="", uuid="-1", ann
         res$status <- 400
         return("Error: Incorrect format for argument 'uuid'.")
     }
+
     # Get list of all annotation classes in database
     annotationList <- getAnnotationListInternal()
     # Set annotations to default if missing
@@ -2738,17 +2307,8 @@ createTransaction <- function(res, req, originalMode="", mode="", uuid="-1", ann
             reenrichFlag <- 0
         }
     }
-    
     # Connect to db
-    poolTransaction <- dbPool(
-        drv=RPostgres::Postgres(),
-        dbname=tox21queue$database,
-        host=tox21queue$host,
-        user=tox21queue$uid,
-        password=tox21queue$pwd,
-        port=tox21queue$port,
-        idleTimeout=3600000
-    )
+    poolTransaction <- connQueue()
     # Update database with transaction entry
     query <- sqlInterpolate(ANSI(), paste0("INSERT INTO transaction(original_mode, mode, uuid, annotation_selection_string, cutoff, input, casrn_box, original_names, reenrich, reenrich_flag, colors, timestamp_posted, ip) VALUES('", originalMode, "', '", mode, "', '", uuid, "', '", annoSelectStr, "', '", cutoff, "', '", input, "', '", casrnBox, "', '", originalNames, "', '", reenrich, "', '", reenrichFlag, "', '", color, "', '", timestampPosted, "', '", req$REMOTE_ADDR, "');"), id="createTransactionEntry")
     outp <- dbExecute(poolTransaction, query)
@@ -2757,8 +2317,8 @@ createTransaction <- function(res, req, originalMode="", mode="", uuid="-1", ann
     return(TRUE)
 }
 
-#* Load details for the selected transaction
-#* @param uuid
+#* Load details for the selected transaction (internal use only).
+#* @param uuid Unique ID assigned to request. Automatically generated by Tox21 Enricher.
 #* @get /getTransactionDetails
 getTransactionDetails <- function(res, req, uuid="none"){
     # Validate input
@@ -2767,15 +2327,7 @@ getTransactionDetails <- function(res, req, uuid="none"){
         return("Error: Incorrect format for argument 'uuid'.")
     }
     # Connect to db
-    poolTransaction <- dbPool(
-        drv=RPostgres::Postgres(),
-        dbname=tox21queue$database,
-        host=tox21queue$host,
-        user=tox21queue$uid,
-        password=tox21queue$pwd,
-        port=tox21queue$port,
-        idleTimeout=3600000
-    )
+    poolTransaction <- connQueue()
     # Update database with transaction entry
     query <- sqlInterpolate(ANSI(), paste0("SELECT * FROM transaction WHERE uuid='", uuid, "';"), id="loadTransaction")
     outp <- dbGetQuery(poolTransaction, query)
@@ -2784,9 +2336,9 @@ getTransactionDetails <- function(res, req, uuid="none"){
     return(outp)
 }
 
-#* Get queue position for given enrichment request
-#* @param transactionId
-#* @param mode
+#* Get queue position for given enrichment request (internal use only).
+#* @param transactionId Unique ID assigned to request. Automatically generated by Tox21 Enricher.
+#* @param mode Mode of request:<br><ul><li><b>casrn</b> - enrich from user-provided list of CASRNs</li><li><b>substructure</b> - shared substructures search</li><li><b>similarity</b> - Tanimoto similarity search</li><li><b>annotation</b> - view list of annotations associated with input chemicals</li></ul>
 #* @get /getQueuePos
 getQueuePos <- function(res, req, transactionId="-1", mode="init"){
     # Validate input
@@ -2800,15 +2352,7 @@ getQueuePos <- function(res, req, transactionId="-1", mode="init"){
     }
     
     # Connect to db
-    poolUpdate <- dbPool(
-        drv=RPostgres::Postgres(),
-        dbname=tox21queue$database,
-        host=tox21queue$host,
-        user=tox21queue$uid,
-        password=tox21queue$pwd,
-        port=tox21queue$port,
-        idleTimeout=3600000
-    )
+    poolUpdate <- connQueue()
     # Get status entries for request
     query <- sqlInterpolate(ANSI(), paste0("SELECT * FROM status WHERE uuid='", transactionId, "';"), id="fetchStatusStep")
     outp <- dbGetQuery(poolUpdate, query)
@@ -2901,8 +2445,8 @@ getQueuePos <- function(res, req, transactionId="-1", mode="init"){
     return("Complete!")
 }
 
-#* Get transaction data for given enrichment request
-#* @param transactionId
+#* Get transaction data for given enrichment request (internal use only).
+#* @param transactionId Unique ID assigned to request. Automatically generated by Tox21 Enricher.
 #* @get /getPrevSessionData
 getPrevSessionData <- function(res, req, transactionId="-1"){
     # Validate input
@@ -2912,15 +2456,7 @@ getPrevSessionData <- function(res, req, transactionId="-1"){
     }
     
     # Connect to db
-    poolSessionData <- dbPool(
-        drv=RPostgres::Postgres(),
-        dbname=tox21queue$database,
-        host=tox21queue$host,
-        user=tox21queue$uid,
-        password=tox21queue$pwd,
-        port=tox21queue$port,
-        idleTimeout=3600000
-    )
+    poolSessionData <- connQueue()
 
     # Get transaction data of request
     query <- sqlInterpolate(ANSI(), paste0("SELECT * FROM transaction WHERE uuid='", transactionId, "';"), id="fetchTransactionData")
@@ -2944,8 +2480,8 @@ getPrevSessionData <- function(res, req, transactionId="-1"){
     return(list())
 }
 
-#* Check if enrichment process has terminated for given request
-#* @param transactionId UUID of the request.
+#* Check if enrichment process has terminated for given request (internal use only).
+#* @param transactionId Unique ID assigned to request. Automatically generated by Tox21 Enricher.
 #* @get /isRequestFinished
 isRequestFinished <- function(res, req, transactionId="-1"){
     # Validate input
@@ -2955,15 +2491,7 @@ isRequestFinished <- function(res, req, transactionId="-1"){
     }
     
     # Connect to db
-    poolQueue <- dbPool(
-        drv=RPostgres::Postgres(),
-        dbname=tox21queue$database,
-        host=tox21queue$host,
-        user=tox21queue$uid,
-        password=tox21queue$pwd,
-        port=tox21queue$port,
-        idleTimeout=3600000
-    )
+    poolQueue <- connQueue()
     # Get status entries for request
     query <- sqlInterpolate(ANSI(), paste0("SELECT * FROM queue WHERE uuid='", transactionId, "';"), id="fetchStatusStep")
     outp <- dbGetQuery(poolQueue, query)
@@ -2979,8 +2507,8 @@ isRequestFinished <- function(res, req, transactionId="-1"){
     return(0)
 }
 
-#* Check if error file exists for given request
-#* @param transactionId UUID of the request.
+#* Check if error file exists for given request (internal use only).
+#* @param transactionId Unique ID assigned to request. Automatically generated by Tox21 Enricher.
 #* @get /hasError
 hasError <- function(res, req, transactionId="-1"){
     # Validate input
@@ -2990,15 +2518,7 @@ hasError <- function(res, req, transactionId="-1"){
     }
     
     # Connect to db
-    poolQueue <- dbPool(
-        drv=RPostgres::Postgres(),
-        dbname=tox21queue$database,
-        host=tox21queue$host,
-        user=tox21queue$uid,
-        password=tox21queue$pwd,
-        port=tox21queue$port,
-        idleTimeout=3600000
-    )
+    poolQueue <- connQueue()
     # Get status entries for request
     query <- sqlInterpolate(ANSI(), paste0("SELECT * FROM queue WHERE uuid='", transactionId, "' AND error IS NOT NULL;"), id="fetchError")
     outp <- dbGetQuery(poolQueue, query)
@@ -3010,8 +2530,8 @@ hasError <- function(res, req, transactionId="-1"){
     return(FALSE)
 }
 
-#* Cancel enrichment process for given UUID
-#* @param transactionId UUID of the request.
+#* Cancel enrichment process for given UUID (internal use only).
+#* @param transactionId Unique ID assigned to request. Automatically generated by Tox21 Enricher.
 #* @get /cancelEnrichment
 cancelEnrichment <- function(res, req, transactionId="-1"){
     # Validate input
@@ -3021,15 +2541,7 @@ cancelEnrichment <- function(res, req, transactionId="-1"){
     }
     
     # Connect to db
-    poolCancel <- dbPool(
-        drv=RPostgres::Postgres(),
-        dbname=tox21queue$database,
-        host=tox21queue$host,
-        user=tox21queue$uid,
-        password=tox21queue$pwd,
-        port=tox21queue$port,
-        idleTimeout=3600000
-    )
+    poolCancel <- connQueue()
     # Update database to show that request was canceled
     query <- sqlInterpolate(ANSI(), paste0("UPDATE queue SET cancel=1, finished=1 WHERE uuid='", transactionId, "';"), id="cancelEnrichment")
     outp <- dbExecute(poolCancel, query)
@@ -3040,8 +2552,8 @@ cancelEnrichment <- function(res, req, transactionId="-1"){
     return(TRUE)
 }
 
-#* Check if a given request has been cancelled for given UUID
-#* @param transactionId UUID of the request.
+#* Check if a given request has been cancelled for given UUID (internal use only).
+#* @param transactionId Unique ID assigned to request. Automatically generated by Tox21 Enricher.
 #* @get /isCancel
 isCancel <- function(res, req, transactionId="-1"){
     # Validate input
@@ -3051,15 +2563,7 @@ isCancel <- function(res, req, transactionId="-1"){
     }
     
     # Connect to db
-    poolCancel <- dbPool(
-        drv=RPostgres::Postgres(),
-        dbname=tox21queue$database,
-        host=tox21queue$host,
-        user=tox21queue$uid,
-        password=tox21queue$pwd,
-        port=tox21queue$port,
-        idleTimeout=3600000
-    )
+    poolCancel <- connQueue()
     # Update database to show that request was canceled
     query <- sqlInterpolate(ANSI(), paste0("SELECT cancel FROM transaction WHERE uuid='", transactionId, "';"), id="isCancel")
     outp <- dbGetQuery(poolCancel, query)
@@ -3072,6 +2576,7 @@ isCancel <- function(res, req, transactionId="-1"){
     return(cancelStatus)
 }
 
+#TODO: PICK UP HERE
 ## SECTION 2: REQUIRED BY CLIENT APPLICATION INITIALIZATION
 
 #* Ping API
@@ -3080,14 +2585,14 @@ ping <- function(res, req){
     return(TRUE)
 }
 
-#* Get delete time for old transaction
+#* Get delete time for old transaction (internal use only).
 #* @get /getDeleteTime
 getDeleteTime <- function(res, req){
     return(DELETE_TIME)
 }
 
-#* Calculate cookie expiry date for previous transaction and fetch additional request information
-#* @param transaction Id
+#* Calculate cookie expiry date for previous transaction and fetch additional request information (internal use only).
+#* @param transactionId Unique ID assigned to request. Automatically generated by Tox21 Enricher.
 #* @get /getAdditionalRequestInfo
 getAdditionalRequestInfo <- function(res, req, transactionId="-1"){
     # Validate input
@@ -3097,15 +2602,7 @@ getAdditionalRequestInfo <- function(res, req, transactionId="-1"){
     }
     
     # Connect to db
-    poolExp <- dbPool(
-        drv=RPostgres::Postgres(),
-        dbname=tox21queue$database,
-        host=tox21queue$host,
-        user=tox21queue$uid,
-        password=tox21queue$pwd,
-        port=tox21queue$port,
-        idleTimeout=3600000
-    )
+    poolExp <- connQueue()
     expQuery <- sqlInterpolate(ANSI(), paste0("SELECT original_mode, mode, cutoff, casrn_box, timestamp_posted, timestamp_started, timestamp_finished FROM transaction WHERE uuid='", transactionId, "';"), id="getAnnotationClasses")
     expOutp <- dbGetQuery(poolExp, expQuery)
     # Close pool
@@ -3117,37 +2614,29 @@ getAdditionalRequestInfo <- function(res, req, transactionId="-1"){
     return(fullRequestInfo)
 }
 
-#* Get cleanup time for old transaction. This number is the number of hours that a transaction will live for on the server. This is used when saving cookie expiry dates on the client as well as the cutoff time to delete in the queue cleanup script.
+#* Get cleanup time for old transaction. This number is the number of hours that a transaction will live for on the server. This is used when saving cookie expiry dates on the client as well as the cutoff time to delete in the queue cleanup script. (internal use only).
 #* @get /getCleanupTime
 getCleanupTime <- function(res, req){
     return(CLEANUP_TIME)
 }
 
-#* Get the maximum number of simultaneous input sets that may be submitted in a request.
+#* Get the maximum number of simultaneous input sets that may be submitted in a request (internal use only).
 #* @get /getInputMax
 getInputMax <- function(res, req){
     return(INPUT_MAX)
 }
 
-#* Check Tox21 Enricher version
+#* Check Tox21 Enricher version (internal use only).
 #* @get /getAppVersion
 getAppVersion <- function(res, req){
     return(APP_VERSION)
 }
 
-#* Get annotation classes/types (internal use only)
+#* Get list of annotation classes/types (internal use only).
 #* @get /getAnnotations
 getAnnotations <- function(res, req){
     # Connect to db
-    poolAnnotations <- dbPool(
-        drv=RPostgres::Postgres(),
-        dbname=tox21config$database,
-        host=tox21config$host,
-        user=tox21config$uid,
-        password=tox21config$pwd,
-        port=tox21config$port,
-        idleTimeout=3600000
-    )
+    poolAnnotations <- conn()
     annoClassQuery <- sqlInterpolate(ANSI(), "SELECT annoclassname, annotype, annodesc, numberoftermids FROM annotation_class;", id="getAnnotationClasses")
     annoClassOutp <- dbGetQuery(poolAnnotations, annoClassQuery)
     rownames(annoClassOutp) <- seq_len(nrow(annoClassOutp))
@@ -3156,19 +2645,11 @@ getAnnotations <- function(res, req){
     return(annoClassOutp)
 }
 
-#* Get total number of requests (internal use only)
+#* Get total number of requests (internal use only).
 #* @get /getTotalRequests
 getTotalRequests <- function(res, req){
     # Connect to db
-    poolTotal <- dbPool(
-        drv=RPostgres::Postgres(),
-        dbname=tox21queue$database,
-        host=tox21queue$host,
-        user=tox21queue$uid,
-        password=tox21queue$pwd,
-        port=tox21queue$port,
-        idleTimeout=3600000
-    )
+    poolTotal <- connQueue()
     totalQuery <- sqlInterpolate(ANSI(), "SELECT uuid, timestamp_started, timestamp_finished FROM transaction WHERE cancel=0;", id="getTotalEnrichment")
     totalOutp <- dbGetQuery(poolTotal, totalQuery)
     # Extract current year
@@ -3196,9 +2677,9 @@ getTotalRequests <- function(res, req){
 
 ## SECTION 3: PREPARING CHEMICAL DATA FOR ENRICHMENT
 
-#* Get data for provided SMILES string (substructure) (internal use only)
-#* @param input Input string, either SMILES or CASRN (if re-enriching)
-#* @param reenrich Boolean value to let the API know if this is a re-enrichment or not
+#* Get data for provided SMILES string (substructure) (internal use only).
+#* @param input Input string, either SMILES or CASRN (if re-enriching).
+#* @param reenrich Boolean value to let the API know if this is a re-enrichment or not.
 #* @get /searchBySubstructure
 searchBySubstructure <- function(res, req, input){
     # Validate input
@@ -3207,15 +2688,7 @@ searchBySubstructure <- function(res, req, input){
         return("Error: Invalid value for argument 'input'.")
     }
     # Connect to db
-    poolSubstructure <- dbPool(
-        drv=RPostgres::Postgres(),
-        dbname=tox21config$database,
-        host=tox21config$host,
-        user=tox21config$uid,
-        password=tox21config$pwd,
-        port=tox21config$port,
-        idleTimeout=3600000
-    )
+    poolSubstructure <- conn()
     # Sanitize input, convert InChI strings to SMILES
     if (grepl("InChI=", input, fixed=TRUE)) {
         input <- convertInchi(inchi=input)
@@ -3237,9 +2710,9 @@ searchBySubstructure <- function(res, req, input){
     return(substructureOutp)
 }
 
-#* Get data for provided SMILES string (similarity) (internal use only)
-#* @param input SMILES Input string
-#* @param threshold Tanimoto similarity threshold
+#* Get data for provided SMILES string (similarity) (internal use only).
+#* @param input SMILES input string.
+#* @param threshold Tanimoto similarity threshold.
 #* @get /searchBySimilarity
 searchBySimilarity <- function(res, req, input="", threshold=0.50){
     # Validate input
@@ -3258,15 +2731,7 @@ searchBySimilarity <- function(res, req, input="", threshold=0.50){
     }
     
     # Connect to db
-    poolSimilarity <- dbPool(
-        drv=RPostgres::Postgres(),
-        dbname=tox21config$database,
-        host=tox21config$host,
-        user=tox21config$uid,
-        password=tox21config$pwd,
-        port=tox21config$port,
-        idleTimeout=3600000
-    )
+    poolSimilarity <- conn()
     # Sanitize input, convert InChI strings to SMILES
     if (grepl("InChI=", input, fixed=TRUE)) {
         input <- convertInchi(inchi=input)
@@ -3291,8 +2756,8 @@ searchBySimilarity <- function(res, req, input="", threshold=0.50){
     return(similarityOutp)
 }
 
-#* Get additional data for provided CASRN (internal use only)
-#* @param input CASRN Input string
+#* Get additional data for provided CASRN (internal use only).
+#* @param input CASRN input string.
 #* @get /getCasrnData
 getCasrnData <- function(res, req, input){
     if(!grepl("([0-9]+-[0-9]+-[0-9]+)|(NOCAS_[0-9]+)", input)){
@@ -3301,15 +2766,7 @@ getCasrnData <- function(res, req, input){
     }
     
     # Connect to db
-    poolCasrn <- dbPool(
-        drv=RPostgres::Postgres(),
-        dbname=tox21config$database,
-        host=tox21config$host,
-        user=tox21config$uid,
-        password=tox21config$pwd,
-        port=tox21config$port,
-        idleTimeout=3600000
-    )
+    poolCasrn <- conn()
     casrnQuery <- sqlInterpolate(ANSI(), paste0("SELECT iupac_name, smiles, dtxsid, dtxrid, mol_formula, mol_weight, inchis, inchikey, cid, testsubstance_chemname FROM chemical_detail WHERE CASRN LIKE '", input, "';"), id="casrnResults")
     casrnOutp <- dbGetQuery(poolCasrn, casrnQuery)
     # Close pool
@@ -3317,8 +2774,8 @@ getCasrnData <- function(res, req, input){
     return(casrnOutp)
 }
 
-#* Detect if submitted chemical contains any reactive groups (internal use only)
-#* @param input
+#* Detect if submitted chemical contains any reactive groups (internal use only).
+#* @param input SMILES input string.
 #* @get /getReactiveGroups
 getReactiveGroups <- function(res, req, input="-1"){
     # Validate input
@@ -3331,15 +2788,7 @@ getReactiveGroups <- function(res, req, input="-1"){
     has_aldehyde <- 0
     has_epoxide <- 0
     # Connect to db
-    poolReactive <- dbPool(
-        drv=RPostgres::Postgres(),
-        dbname=tox21config$database,
-        host=tox21config$host,
-        user=tox21config$uid,
-        password=tox21config$pwd,
-        port=tox21config$port,
-        idleTimeout=3600000
-    )
+    poolReactive <- conn()
     # Convert InChI to SMILES if present in input
     if(grepl("^InChI=", input)){
         input <- inchiToSmiles(inchi=input)
@@ -3375,8 +2824,8 @@ getReactiveGroups <- function(res, req, input="-1"){
     return(reactiveGroups)
 }
 
-#* Convert provided InChI string to SMILES (internal use only)
-#* @param inchi
+#* Convert provided InChI string to SMILES (internal use only).
+#* @param inchi InChI input string.
 #* @get /inchiToSmiles
 inchiToSmiles <- function(res, req, inchi){
     # Validate input
@@ -3386,15 +2835,7 @@ inchiToSmiles <- function(res, req, inchi){
     }
     
     # Connect to db
-    poolInchi <- dbPool(
-        drv=RPostgres::Postgres(),
-        dbname=tox21config$database,
-        host=tox21config$host,
-        user=tox21config$uid,
-        password=tox21config$pwd,
-        port=tox21config$port,
-        idleTimeout=3600000
-    )
+    poolInchi <- conn()
     inchiQuery <- sqlInterpolate(ANSI(), paste0("SELECT smiles FROM chemical_detail WHERE inchis='", inchi, "';"), id="convertInchi")
     inchiOutp <- dbGetQuery(poolInchi, inchiQuery)
     # Close pool
@@ -3405,15 +2846,7 @@ inchiToSmiles <- function(res, req, inchi){
 # Same as above, but done from within the internal Tox21 Enricher substructure/similarity searches. we don't want to do this asynchronously because it is just a function and not an API endpoint.
 convertInchi <- function(res, req, inchi){
     # Connect to db
-    poolInchi <- dbPool(
-        drv=RPostgres::Postgres(),
-        dbname=tox21config$database,
-        host=tox21config$host,
-        user=tox21config$uid,
-        password=tox21config$pwd,
-        port=tox21config$port,
-        idleTimeout=3600000
-    )
+    poolInchi <- conn()
     inchiQuery <- sqlInterpolate(ANSI(), paste0("SELECT smiles FROM chemical_detail WHERE inchis='", inchi, "';"), id="convertInchi")
     inchiOutp <- dbGetQuery(poolInchi, inchiQuery)
     # Close pool
@@ -3421,8 +2854,8 @@ convertInchi <- function(res, req, inchi){
     return(inchiOutp[[1]])
 }
 
-#* Use RDKit to generate chemical structure images from a list of molecules (internal use only)
-#* @param input
+#* Use RDKit to generate chemical structure images from a list of molecules (internal use only).
+#* @param input Newline-delimited list of SMILES.
 #* @get /getStructureImages
 getStructureImages <- function(res, req, input){
     # Validate input
@@ -3433,17 +2866,8 @@ getStructureImages <- function(res, req, input){
             return("Error: Invalid value for argument 'input'.")
         }
     }
-    
     # Connect to db
-    poolSvg <- dbPool(
-        drv=RPostgres::Postgres(),
-        dbname=tox21config$database,
-        host=tox21config$host,
-        user=tox21config$uid,
-        password=tox21config$pwd,
-        port=tox21config$port,
-        idleTimeout=3600000
-    )
+    poolSvg <- conn()
     structures <- lapply(tmpSplit, function(x){
         tmpSplit2 <- unlist(str_split(x, "__"))
         m <- tmpSplit2[2]
@@ -3460,8 +2884,8 @@ getStructureImages <- function(res, req, input){
     return(structures)
 }
 
-#* Get a list of CASRNs with reactive structure warnings from database.
-#* @param input
+#* Get a list of CASRNs with reactive structure warnings from database (internal use only).
+#* @param input Prepared input string generated by Tox21 Enricher.
 #* @get /getStructureWarnings
 getStructureWarnings <- function(res, req, input){
     # Validate input
@@ -3473,15 +2897,7 @@ getStructureWarnings <- function(res, req, input){
         }
     }
     # Connect to db
-    poolWarn <- dbPool(
-        drv=RPostgres::Postgres(),
-        dbname=tox21config$database,
-        host=tox21config$host,
-        user=tox21config$uid,
-        password=tox21config$pwd,
-        port=tox21config$port,
-        idleTimeout=3600000
-    )
+    poolWarn <- conn()
     inputSets <- unique(unlist(lapply(inputSets, function(x) unlist(str_split(x, "__"))[1])))
     warnQuery <- sqlInterpolate(ANSI(), paste0("SELECT casrn, cyanide, isocyanate, aldehyde, epoxide FROM mols_2 WHERE ", paste0("casrn='", inputSets, "'", collapse=" OR "), ";"), id="getWarnings")
     warnOutp <- dbGetQuery(poolWarn, warnQuery)
@@ -3492,11 +2908,11 @@ getStructureWarnings <- function(res, req, input){
 
 ## SECTION 4: FILE CREATION AND SERVING
 
-#* Serve text file to client
+#* Serve text file to client (internal use only).
 #* @serializer contentType list(type="application/text")
-#* @param transactionId
-#* @param filename
-#* @param subDir
+#* @param transactionId Unique ID assigned to request. Automatically generated by Tox21 Enricher.
+#* @param filename Name of file to download.
+#* @param subDir Directory of file to download.
 #* @get /serveFileText
 serveFileText <- function(res, req, transactionId="-1", filename, subDir){
     # Validate input
@@ -3504,7 +2920,7 @@ serveFileText <- function(res, req, transactionId="-1", filename, subDir){
         res$status <- 400
         return("Error: Incorrect format for argument 'transactionId'.")
     }
-    if(grepl("\\.\\.|~|\\\\|\\/", filename)){
+    if(grepl("\\.\\.|~|\\\\|\\/", filename)){ # filesystem snooping protection
         res$status <- 400
         return("Error: Invalid value for argument 'filename'.")
     }
@@ -3522,7 +2938,7 @@ serveFileText <- function(res, req, transactionId="-1", filename, subDir){
     readBin(fileToServe, "raw", n=file.info(fileToServe)$size)
 }
 
-#* Serve manual to client
+#* Serve manual to client (internal use only).
 #* @serializer contentType list(type="application/pdf")
 #* @get /serveManual
 serveManual <- function(res, req){
@@ -3531,7 +2947,7 @@ serveManual <- function(res, req){
     readBin(fileToServe, "raw", n=file.info(fileToServe)$size)
 }
 
-#* Check if randomly-generated UUID already exists. This should be extremely rare, but not impossible
+#* Check if randomly-generated UUID already exists. This situation should be extremely rare, but not impossible. (internal use only).
 #* @get /checkId
 checkId <- function(res, req){
     outDir <- paste0(APP_DIR, "/", OUT_DIR)
@@ -3549,13 +2965,13 @@ checkId <- function(res, req){
     return(transactionId)
 }
 
-#* Create input files on filesystem
-#* @param transactionId UUID for given request
-#* @param enrichmentSets User's input sets
-#* @param setNames Input set names
-#* @param mode Mode of request
-#* @param nodeCutoff
-#* @param annoSelectStr
+#* Create input files on filesystem (internal use only).
+#* @param transactionId Unique ID assigned to request. Automatically generated by Tox21 Enricher.
+#* @param enrichmentSets User's input sets.
+#* @param setNames Input set names.
+#* @param mode Mode of request:<br><ul><li><b>casrn</b> - enrich from user-provided list of CASRNs</li><li><b>substructure</b> - shared substructures search</li><li><b>similarity</b> - Tanimoto similarity search</li><li><b>annotation</b> - view list of annotations associated with input chemicals</li></ul>
+#* @param nodeCutoff Cutoff value that determines the top N annotations represented from each class in the enrichment results.
+#* @param annoSelectStr String of all annotation classes to be used in request.
 #* @post /createInput
 createInput <- function(res, req, transactionId="-1", enrichmentSets, setNames, mode, nodeCutoff=10, annoSelectStr){
     # Validate input
@@ -3605,7 +3021,6 @@ createInput <- function(res, req, transactionId="-1", enrichmentSets, setNames, 
             return(paste0("Error: Invalid annotation class(es): ", paste0(errorAnnotationClasses, collapse=", "), ". Use '", API_PROTOCOL, API_ADDR, "/getAnnotationList' to see a list of valid annotation classes."))
         }
     }
-
     # Get enrichment sets from sent string
     enrichmentSetNames <- unlist(str_split(setNames, "\n"))
     enrichmentSetsSplit <- unlist(str_split(enrichmentSets, "\n"))
@@ -3628,15 +3043,7 @@ createInput <- function(res, req, transactionId="-1", enrichmentSets, setNames, 
     outDir <- paste0(APP_DIR, OUT_DIR, transactionId, "/")
     dir.create(outDir)
     # Connect to db
-    poolInput <- dbPool(
-        drv=RPostgres::Postgres(),
-        dbname=tox21config$database,
-        host=tox21config$host,
-        user=tox21config$uid,
-        password=tox21config$pwd,
-        port=tox21config$port,
-        idleTimeout=3600000
-    )
+    poolInput <- conn()
     # Create input set txt for enrichment
     lapply(names(enrichmentSets), function(i) {
         outString <- ""
@@ -3686,8 +3093,8 @@ createInput <- function(res, req, transactionId="-1", enrichmentSets, setNames, 
     poolClose(poolInput)
 }
 
-#* Returns list of sets that are valid/existing for a given transaction
-#* @param transactionId UUID of the request
+#* Returns list of sets that are valid/existing for a given transaction (internal use only).
+#* @param transactionId Unique ID assigned to request. Automatically generated by Tox21 Enricher.
 #* @get /getInputSets
 getInputSets <- function(res, req, transactionId="-1"){
     # Validate input
@@ -3704,8 +3111,8 @@ getInputSets <- function(res, req, transactionId="-1"){
     return(inputFilesList)
 }
 
-#* Check if result files exist in Input/Output directories for given request
-#* @param transactionId UUID of the request
+#* Check if result files exist in Input/Output directories for given request (internal use only).
+#* @param transactionId Unique ID assigned to request. Automatically generated by Tox21 Enricher.
 #* @get /exists
 exists <- function(res, req, transactionId="-1"){
     # Validate input
@@ -3713,18 +3120,9 @@ exists <- function(res, req, transactionId="-1"){
         res$status <- 400
         return("Error: Incorrect format for argument 'transactionId'.")
     }
-    
     # Check if DB records exist
     # Connect to db
-    poolExists <- dbPool(
-        drv=RPostgres::Postgres(),
-        dbname=tox21queue$database,
-        host=tox21queue$host,
-        user=tox21queue$uid,
-        password=tox21queue$pwd,
-        port=tox21queue$port,
-        idleTimeout=3600000
-    )
+    poolExists <- connQueue()
     # Update database with transaction entry
     query <- sqlInterpolate(ANSI(), paste0("SELECT * FROM transaction WHERE uuid='", transactionId, "';"), id="loadTransaction")
     outp <- dbGetQuery(poolExists, query)
@@ -3745,9 +3143,9 @@ exists <- function(res, req, transactionId="-1"){
 
 ## SECTION 5: DEALING WITH ENRICHMENT RESULTS
 
-#* Get results for given directory
-#* @param transactionId UUID of the request
-#* @setName if supplied, is the set name to fetch from
+#* Get results for given directory (internal use only).
+#* @param transactionId Unique ID assigned to request. Automatically generated by Tox21 Enricher.
+#* @setName Optional: if supplied, is the set name to fetch from.
 #* @get /getResults
 getResults <- function(res, req, transactionId, setName="###"){
     # Validate input
@@ -3792,10 +3190,10 @@ getResults <- function(res, req, transactionId, setName="###"){
     return(setFiles)
 }
 
-#* Read gct files for a given request
-#* @param transactionId UUID of the request
-#* @param cutoff Given node cutoff value for the request
-#* @param mode Chart or Cluster
+#* Read gct files for a given request (internal use only).
+#* @param transactionId Unique ID assigned to request. Automatically generated by Tox21 Enricher.
+#* @param cutoff Cutoff value that determines the top N annotations represented from each class in the enrichment results.
+#* @param mode "chart" or "cluster."
 #* @get /readGct
 readGct <- function(res, req, transactionId="-1", cutoff=10, mode, set="Set1"){
     # Validate input
@@ -3864,9 +3262,9 @@ readGct <- function(res, req, transactionId="-1", cutoff=10, mode, set="Set1"){
     return(gctFile)
 }
 
-#* Return Chart Simple file for given request and input set
-#* @param transactionId UUID of the request
-#* @param enrichmentSets names of the enrichment sets
+#* Return Chart Simple file for given request and input set (internal use only).
+#* @param transactionId Unique ID assigned to request. Automatically generated by Tox21 Enricher.
+#* @param enrichmentSets Prepared string including the names of the enrichment sets generated by Tox21 Enricher.
 #* @get /getBargraph
 getBargraph <- function(res, req, transactionId="-1", enrichmentSets){
     if(!grepl("[A-Za-z0-9]+-[A-Za-z0-9]+-[A-Za-z0-9]+-[A-Za-z0-9]+-[A-Za-z0-9]+", transactionId)){
@@ -3913,11 +3311,12 @@ getBargraph <- function(res, req, transactionId="-1", enrichmentSets){
     return(bgChart)
 }
 
-#* Generate interactive visNetwork for given request and input set
-#* @param transactionId UUID of the request
-#* @param cutoff Node cutoff
-#* @param mode Chart or cluster
-#* @param input Current input set
+#* Generate interactive visNetwork for given request and input set (internal use only).
+#* @param transactionId Unique ID assigned to request. Automatically generated by Tox21 Enricher.
+#* @param cutoff Cutoff value that determines the top N annotations represented from each class in the enrichment results.
+#* @param mode "chart" or "cluster."
+#* @param input Prepared string with the current input set generated by Tox21 Enricher.
+#* @param qval Q-value for use in network generation.
 #* @get /getNetwork
 getNetwork <- function(res, req, transactionId="-1", cutoff, mode, input, qval){
     if(!grepl("[A-Za-z0-9]+-[A-Za-z0-9]+-[A-Za-z0-9]+-[A-Za-z0-9]+-[A-Za-z0-9]+", transactionId)){
@@ -3946,7 +3345,6 @@ getNetwork <- function(res, req, transactionId="-1", cutoff, mode, input, qval){
         res$status <- 400
         return("Error: Invalid value for argument 'qval'. Must be between 0.01 and 1.00 (inclusive).")
     }
-    
     input <- unlist(str_split(input, "#"))
     baseDirName <- paste0(APP_DIR, OUT_DIR, transactionId, "/")
     chartForNetFile <- NULL
@@ -3964,7 +3362,7 @@ getNetwork <- function(res, req, transactionId="-1", cutoff, mode, input, qval){
         if(!tryReadChart){
             return(NULL)
         }
-    } else { # cluster
+    } else { # Cluster
         if(!file.exists(paste0(baseDirName, "/gct/Cluster_Top", cutoff, "_ALL__P_0.05_P__ValueMatrix.ForNet"))){
             return(NULL)
         }
@@ -4007,15 +3405,7 @@ getNetwork <- function(res, req, transactionId="-1", cutoff, mode, input, qval){
     # Create placeholder string for querying database
     termsStringPlaceholder <- paste0(chartNetworkUIDs, collapse=",")
     # Connect to db
-    poolNetwork <- dbPool(
-        drv=RPostgres::Postgres(),
-        dbname=tox21config$database,
-        host=tox21config$host,
-        user=tox21config$uid,
-        password=tox21config$pwd,
-        port=tox21config$port,
-        idleTimeout=3600000
-    )
+    poolNetwork <- conn()
     # Query database
     queryNetwork <- sqlInterpolate(ANSI(), paste0(
         "SELECT p.*, a.annoterm as name1, b.annoterm as name2, ac.annoclassname as class1, bc.annoclassname as class2, ac.baseurl as url1, bc.baseurl as url2
@@ -4036,11 +3426,11 @@ getNetwork <- function(res, req, transactionId="-1", cutoff, mode, input, qval){
     return(outpNetwork)
 }
 
-#* Get lists of chemicals that are associated with the annotations displayed in the nodes in the network (internal use only)
-#* @param termFrom  
-#* @param termTo
-#* @param classFrom
-#* @param classTo
+#* Get lists of chemicals that are associated with the annotations displayed in the nodes in the network (internal use only).
+#* @param termFrom Annotation for "from" node in network.
+#* @param termTo Annotation for "to" node in network.
+#* @param classFrom Annotation class for "from" node in network.
+#* @param classTo Annotation class for "to" node in network.
 #* @get /getNodeChemicals
 getNodeChemicals <- function(res, req, termFrom, termTo, classFrom, classTo){
     if(!grepl("[A-Za-z0-9_]+", classFrom)){
@@ -4069,17 +3459,8 @@ getNodeChemicals <- function(res, req, termFrom, termTo, classFrom, classTo){
         res$status <- 400
         return(paste0("Error: Term '", termTo, "' not found in class ", classTo, "."))
     }
-    
     # Connect to db
-    poolNode <- dbPool(
-        drv=RPostgres::Postgres(),
-        dbname=tox21config$database,
-        host=tox21config$host,
-        user=tox21config$uid,
-        password=tox21config$pwd,
-        port=tox21config$port,
-        idleTimeout=3600000
-    )
+    poolNode <- conn()
     # Get internal ID number of From annotation
     nodeQuery <- sqlInterpolate(ANSI(), paste0( "SELECT id FROM annotation_matrix_terms WHERE term='", classFrom, "__", termFrom, "';" ), id="getFromID")
     nodeOutp <- dbGetQuery(poolNode, nodeQuery)
@@ -4101,26 +3482,17 @@ getNodeChemicals <- function(res, req, termFrom, termTo, classFrom, classTo){
     return(list(casrnsFrom=casrnsFrom[, "casrn"], casrnsTo=casrnsTo[, "casrn"]))
 }
 
-#* Get link from database to view additional info for a selected node in the network (internal use only)
-#* @param term
-#* @param class
+#* Get link from database to view additional info for a selected node in the network (internal use only).
+#* @param term Annotation depicted in selected node.
+#* @param class Annotation class for annotation depicted in selected node.
 #* @get /getNodeDetails
 getNodeDetails <- function(res, req, class){
     if(!grepl("[A-Za-z0-9_]+", class)){
         res$status <- 400
         return("Error: Incorrect format for argument 'class'.")
     }
-    
     # Connect to db
-    poolNode <- dbPool(
-        drv=RPostgres::Postgres(),
-        dbname=tox21config$database,
-        host=tox21config$host,
-        user=tox21config$uid,
-        password=tox21config$pwd,
-        port=tox21config$port,
-        idleTimeout=3600000
-    )
+    poolNode <- conn()
     # Get annotation detail link
     nodeQuery <- sqlInterpolate(ANSI(), paste0( "SELECT baseurl FROM annotation_class WHERE annoclassname='", class, "';" ), id="getNodeDetailsFromClass")
     nodeOutp <- dbGetQuery(poolNode, nodeQuery)
@@ -4130,19 +3502,11 @@ getNodeDetails <- function(res, req, class){
     return(baseurl)
 }
 
-#* Get colors from database to display nodes in the network (internal use only)
+#* Get colors from database to display nodes in the network (internal use only).
 #* @get /getNodeColors
 getNodeColors <- function(res, req){
     # Connect to db
-    poolNode <- dbPool(
-        drv=RPostgres::Postgres(),
-        dbname=tox21config$database,
-        host=tox21config$host,
-        user=tox21config$uid,
-        password=tox21config$pwd,
-        port=tox21config$port,
-        idleTimeout=3600000
-    )
+    poolNode <- conn()
     # Get annotation detail link
     nodeQuery <- sqlInterpolate(ANSI(), paste0( "SELECT annoclassname, networkcolor FROM annotation_class;" ), id="getNodeColors")
     nodeOutp <- dbGetQuery(poolNode, nodeQuery)
@@ -4154,18 +3518,18 @@ getNodeColors <- function(res, req){
 
 ## SECTION 6: API CLIENT ENDPOINTS FOR OPERATING IN NO-GUI MODE
 
-#* Get list of all annotations in the database
+#* Get list of all annotations in the database.
 #* @get /getAnnotationList
 getAnnotationList <- function(res, req){
     return(getAnnotationListInternal())
 }
 
-#* Post input set for enrichment analysis
-#* @param mode The mode to use when performing enrichment analysis. casrn=CASRN input. substructure=SMILES or InChI input. similarity=SMILES or InChI input. annotation=view annotations.
+#* Post input set for enrichment analysis.
+#* @param mode The mode to use when performing enrichment analysis.<ul><li><b>casrn</b> = CASRN input.</b></li><li><b>substructure</b> = SMILES or InChI input.</li><li><b>similarity</b> = SMILES or InChI input.</li><li><b>annotation</b> = View annotations.</li></ul>
 #* @param input Comma-separated string of chemicals for this enrichment process.
 #* @param annotations Comma-separated string of all enabled annotations for this enrichment process.
-#* @param cutoff Node cutoff value - integers only between 1-50.
-#* @param tanimoto Tanimoto threshold for similarity search (default 0.5).
+#* @param cutoff Node cutoff value - integers only between 1 - 50.
+#* @param tanimoto Tanimoto threshold for similarity search (default = 0.5).
 #* @post /submit
 submit <- function(res, req, mode="", input="", annotations="", cutoff=10, tanimoto=0.5) {
     # Check if mode is missing
@@ -4248,15 +3612,7 @@ submit <- function(res, req, mode="", input="", annotations="", cutoff=10, tanim
         tanimoto <- 0.5
     } else {
         # Open pool for PostgreSQL
-        poolTanimoto <- dbPool(
-            drv=RPostgres::Postgres(),
-            dbname=tox21config$database,
-            host=tox21config$host,
-            user=tox21config$uid,
-            password=tox21config$pwd,
-            port=tox21config$port,
-            idleTimeout=3600000
-        )
+        poolTanimoto <- conn()
         queryTanimoto <- sqlInterpolate(ANSI(), paste0("set rdkit.tanimoto_threshold=", tanimoto, ";"))
         outpTanimoto <- dbExecute(poolTanimoto, queryTanimoto)
         # Close pool
@@ -4285,15 +3641,7 @@ submit <- function(res, req, mode="", input="", annotations="", cutoff=10, tanim
     annotations <- gsub(",", "=checked,", annotations)
     
     # Open main pool
-    pool <- dbPool(
-        drv=RPostgres::Postgres(),
-        dbname=tox21config$database,
-        host=tox21config$host,
-        user=tox21config$uid,
-        password=tox21config$pwd,
-        port=tox21config$port,
-        idleTimeout=3600000
-    )
+    pool <- conn()
     # Validate & prepare input
     finalInput <- NULL
     errorCasrns <- list()
@@ -4440,7 +3788,7 @@ submit <- function(res, req, mode="", input="", annotations="", cutoff=10, tanim
     return(transactionId)
 }
 
-#* Download enrichment results for a given uuid
+#* Download enrichment results for a given UUID.
 #* @serializer contentType list(type="application/zip")
 #* @param id The UUID of the enrichment process to download.
 #* @get /download
@@ -4461,7 +3809,7 @@ download <- function(res, req, id="-1") {
     })
 }
 
-#* Check if enrichment results exist for a given uuid
+#* Check if enrichment results exist for a given UUID (i.e., check is the request has completed).
 #* @param id The UUID of the enrichment process to check.
 #* @get /isComplete
 function(id="-1", res) {
