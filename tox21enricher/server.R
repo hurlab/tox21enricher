@@ -68,12 +68,8 @@ shinyServer(function(input, output, session) {
             shinyjs::hide(id="searchPrevButton")
             shinyjs::disable(id="searchPrevButton")
             # Hide waiting page buttons
-            shinyjs::hide(id="fetchResults")
-            shinyjs::hide(id="refreshWaitingPageButton")
             shinyjs::hide(id="clipboard")
             shinyjs::hide(id="cancelEnrichment")
-            shinyjs::disable(id="fetchResults")
-            shinyjs::disable(id="refreshWaitingPageButton")
             shinyjs::disable(id="clipboard")
             shinyjs::disable(id="cancelEnrichment")
             # Reset inputs
@@ -108,12 +104,8 @@ shinyServer(function(input, output, session) {
             shinyjs::show(id="searchPrevButton")
             shinyjs::enable(id="searchPrevButton")
             # Hide waiting page buttons
-            shinyjs::hide(id="fetchResults")
-            shinyjs::hide(id="refreshWaitingPageButton")
             shinyjs::hide(id="clipboard")
             shinyjs::hide(id="cancelEnrichment")
-            shinyjs::disable(id="fetchResults")
-            shinyjs::disable(id="refreshWaitingPageButton")
             shinyjs::disable(id="clipboard")
             shinyjs::disable(id="cancelEnrichment")
         } else if (page == "waiting") {
@@ -155,12 +147,8 @@ shinyServer(function(input, output, session) {
             shinyjs::show(id="waitingTable")
             shinyjs::enable(id="waitingTable")
             # Reenable buttons
-            shinyjs::show(id="fetchResults")
-            shinyjs::show(id="refreshWaitingPageButton")
             shinyjs::show(id="clipboard")
             shinyjs::show(id="cancelEnrichment")
-            shinyjs::enable(id="fetchResults")
-            shinyjs::enable(id="refreshWaitingPageButton")
             shinyjs::enable(id="clipboard")
             shinyjs::enable(id="cancelEnrichment")
         } else if(page == "results"){
@@ -199,12 +187,8 @@ shinyServer(function(input, output, session) {
             shinyjs::hide(id="waitingTable")
             shinyjs::disable(id="waitingTable")
             # Hide waiting page buttons
-            shinyjs::hide(id="fetchResults")
-            shinyjs::hide(id="refreshWaitingPageButton")
             shinyjs::hide(id="clipboard")
             shinyjs::hide(id="cancelEnrichment")
-            shinyjs::disable(id="fetchResults")
-            shinyjs::disable(id="refreshWaitingPageButton")
             shinyjs::disable(id="clipboard")
             shinyjs::disable(id="cancelEnrichment")
         }
@@ -624,8 +608,6 @@ shinyServer(function(input, output, session) {
                             output[["waitingTable"]] <- renderUI(HTML(""))
                             shinyjs::reset(id="waitingTable")
                             shinyjs::disable(id="waitingTable")
-                            shinyjs::disable(id="fetchResults")
-                            shinyjs::disable(id="refreshWaitingPageButton")
                             shinyjs::disable(id="clipboard")
                             shinyjs::disable(id="cancelEnrichment")
                             # Disable settings button
@@ -1488,9 +1470,11 @@ shinyServer(function(input, output, session) {
             jsmeState$jsmeShowState <- "show"
         }
     })
-    
-    # Update waiting page/queue position
-    observeEvent(input$refreshWaitingPageButton, {
+
+    # Flag to see if request has finished
+    finishedFlag <- reactiveValues(finished=FALSE)
+    # Automatically update waiting page/queue position in the background
+    updateWaitingTable <- function(){
         transactionId <- reactiveTransactionId$id
         queuePos <- -1
         waitingData <- inputSetList$inputSet
@@ -1509,21 +1493,18 @@ shinyServer(function(input, output, session) {
             showNotification("Error: The application cannot connect to the Tox21 Enricher server. Please try again later.", type="error")
             return(FALSE)
         }
-        
         if(resp$status_code != 200) {
             showNotification("Error: Could not fetch queue position for this request.", type="error")
         } else {
-            queuePos <- content(resp)  
+            queuePos <- content(resp)
             queuePos <- gsub("\n", "<br><br>", queuePos)
         }
-        
         # Check reenrichment or not
         reenrichFlag <- reenrichFlagReactive$reenrichFlagReactive
-        
         # Cleaned enrichment type strings
         if(reenrichFlag == TRUE){
             if(originalEnrichModeList$originalEnrichMode == "similarity") {
-                enrichmentDisplayType <- "Re-enrich from chemicals with structural similarity" 
+                enrichmentDisplayType <- "Re-enrich from chemicals with structural similarity"
             } else if (originalEnrichModeList$originalEnrichMode == "substructure") { # substructure
                 enrichmentDisplayType <- "Re-enrich from chemicals with shared substructures"
             } else { #casrn network node update
@@ -1540,17 +1521,20 @@ shinyServer(function(input, output, session) {
                 enrichmentDisplayType <- "Enrich from chemicals with shared substructures"
             }
         }
-          
+        
+        # Check if request has finished and set flag to TRUE if it has
+        if(queuePos == "Complete!"){
+            finishedFlag$finished <- TRUE
+        }
+        
         # update waitingData with cleaned output
         waitingData <- data.frame("Position"=c(queuePos), "Mode"=c(enrichmentDisplayType), "UUID"=c(transactionId), "Selected Annotations"=c(splitAnnotationsString), "Node Cutoff"=c(cutoff), "Input"=c(casrnBox), stringsAsFactors=FALSE)
-        
         # Clean up column name formatting
         colnames(waitingData) <- list("Status", "Request Mode", "Request UUID", "Selected Annotations", "Node Cutoff", "User Input")
-  
         # Update table
         output[["waitingTable"]] <- renderUI(
             column(12,
-                DT::datatable({waitingData}, 
+                DT::datatable({waitingData},
                     escape=FALSE,
                     rownames=FALSE,
                     class="row-border stripe compact",
@@ -1562,7 +1546,7 @@ shinyServer(function(input, output, session) {
                 )
             )
         )
-    })
+    }
     
     # Copies transaction ID to user's clipboard
     output$clipboard <- renderUI({
@@ -1707,11 +1691,14 @@ shinyServer(function(input, output, session) {
     bgChartAllCategoriesReactive <- reactiveValues(bgChartAllCategories=NULL)
     # Create reactive variable to store color data for plotting for each input set
     setColors <- reactiveValues(color=NULL)
+    # Flag to see if waiting table has loaded
+    tableLoaded <- reactiveValues(loaded=FALSE)
     
     # Main function that handles the enrichment process once a request is submitted
     performEnrichment <- function(casrnBox, reenrichFlag=FALSE, originalNamesToReturn=NULL) {
         # Display waiting page
         changePage(page="waiting")
+      
         # Generate UUID for this query and access API to see if UUID already exists
         transactionId <- NULL
         resp <- NULL
@@ -2259,11 +2246,11 @@ shinyServer(function(input, output, session) {
         # update waitingData with cleaned output
         waitingData <- data.frame("Position"=c(initQueuePos), "Mode"=c(enrichmentDisplayType), "UUID"=c(transactionId), "Selected Annotations"=c(splitAnnotationsString), "Node Cutoff"=c(cutoff), "Input"=c(casrnBox), stringsAsFactors=FALSE)
 
-        # Clean up column name formatting
+        # # Clean up column name formatting
         colnames(waitingData) <- list("Status", "Request Mode", "Request UUID", "Selected Annotations", "Node Cutoff", "User Input")
         output[["waitingTable"]] <- renderUI(
             column(12,
-                DT::datatable({waitingData}, 
+                DT::datatable({waitingData},
                     escape=FALSE,
                     rownames=FALSE,
                     class="row-border stripe compact",
@@ -2275,6 +2262,7 @@ shinyServer(function(input, output, session) {
                 )
             )
         )
+        
         # Query the API to see if we ran into an error at this point
         resp <- NULL
         tryError <- tryCatch({
@@ -2293,11 +2281,12 @@ shinyServer(function(input, output, session) {
             showNotification(HTML(paste0("Error: ", errorFile)), type="error")
             return(FALSE)
         }
+        # Set flag so the app knows to start updating the table
+        tableLoaded$loaded <- TRUE
         return(TRUE)
     }
     
-    # Check if "Results" button was pressed
-    observeEvent(input$fetchResults, {
+    redirectToResultsPage <- function(){
         mode <- inputSetList$inputSet[1, "Mode"]
         transactionId <- inputSetList$inputSet[1, "UUID"]
         annoSelectStr <- gsub(", ", "=checked,", inputSetList$inputSet[1, "Selected.Annotations"], fixed=TRUE)
@@ -2314,14 +2303,12 @@ shinyServer(function(input, output, session) {
             showNotification("Error: The application cannot connect to the Tox21 Enricher server. Please try again later.", type="error")
             return(FALSE)
         }
-        
         # if enrichment runs into an error while performing the enrichment in the queue, cancel and show error on main UI
         if(unlist(content(resp)) != FALSE | resp$status_code != 200){
             changePage(page="enrichment")
             showNotification(HTML(paste0("Error: ", unlist(content(resp)))), type="error")
             return(FALSE)
         }
-        
         # If no errors
         # First, check if process is done
         # Query the API to see if process is done
@@ -2353,11 +2340,22 @@ shinyServer(function(input, output, session) {
             }
         }
         # Re-enable buttons
-        shinyjs::enable(id="fetchResults")
-        shinyjs::enable(id="refreshWaitingPageButton")
         shinyjs::enable(id="clipboard")
         shinyjs::enable(id="cancelEnrichment")
         shinyjs::enable(id="settingsButton")
+    }
+    
+    observe({
+        invalidateLater(2000, session)
+        if(tableLoaded$loaded == TRUE){
+            if(finishedFlag$finished == TRUE){
+                tableLoaded$loaded <- FALSE
+                finishedFlag$finished <- FALSE
+                redirectToResultsPage()
+            } else {
+                updateWaitingTable()
+            }
+        }
     })
     
     # Check if "Cancel Enrichment" button was pressed
@@ -2372,6 +2370,10 @@ shinyServer(function(input, output, session) {
     
     # Check if the confirmation button was pressed for enrichment cancellation
     observeEvent(input$cancelConfirm, {
+        # Stop updating waiting page
+        tableLoaded$loaded <- FALSE
+        finishedFlag$finished <- FALSE
+      
         # Query the API to cancel enrichment
         resp <- NULL
         tryCancel <- tryCatch({

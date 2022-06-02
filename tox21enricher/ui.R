@@ -248,6 +248,7 @@ shinyUI(function(){
                 extendShinyjs(text=js_cbx, functions=c('check', 'uncheck')),
                 extendShinyjs(text=js_session, functions=c('saveSession', 'getSession', 'clearSession', 'saveHostInfo', 'getHostInfo', 'clearHostInfo')),
                 p("Welcome to Tox21 Enricher! Please see this ", downloadLink(outputId="manualLink", label="link"), "for instructions on using this application and the descriptions about the chemical / biological categories. Other resources from the Tox21 toolbox can be viewed", tags$a(href="https://ntp.niehs.nih.gov/results/tox21/tbox/", "here."), "A sufficiently robust internet connection and JavaScript are required to use all of this application's features."),
+                p("An older version of Tox21 Enricher using the", tags$a(href="https://grails.org/", "Grails framework"), "is hosted", tags$a(href="http://hurlab.med.und.edu/tox21enricher-grails", "here.")),
                 # Display API connection status
                 uiOutput("apiConnection"),
                 # Display enrichment total count
@@ -383,16 +384,10 @@ shinyUI(function(){
                     fluidRow(id="waitingPage",
                         column(12,
                             HTML("<p>Your request has been submitted and placed in the queue. After your request is processed and completed, the results can be accessed by clicking the \"Results\" button. <b>Please make sure to save the request's UUID for future reference and access to the results.</b></p>"),
-                            column(3, 
-                                actionButton("fetchResults", "Results", icon=icon("arrow-alt-circle-right"))
-                            ),
-                            column(3, 
-                                actionButton("refreshWaitingPageButton", "Refresh queue", icon=icon("redo"))
-                            ),
-                            column(3, 
+                            column(6, 
                                 uiOutput("clipboard")
                             ),
-                            column(3, 
+                            column(6, 
                                 actionButton("cancelEnrichment", "Cancel enrichment", icon=icon("times-circle"))
                             )
                         ),

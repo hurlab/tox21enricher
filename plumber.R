@@ -2576,7 +2576,6 @@ isCancel <- function(res, req, transactionId="-1"){
     return(cancelStatus)
 }
 
-#TODO: PICK UP HERE
 ## SECTION 2: REQUIRED BY CLIENT APPLICATION INITIALIZATION
 
 #* Ping API
