@@ -48,7 +48,7 @@ js_session <- "
         var date = new Date();
         date.setTime(date.getTime() + (formattedExpiryTime * 24 * 60 * 60 * 1000));
         // save cookie
-        document.cookie = 'previous_session_id__' + transactionId + '=' + transactionId + '; expires=' + date.toUTCString() + '; path=/; SameSite=Strict; Secure';
+        document.cookie = 'previous_session_id__' + transactionId + '=' + transactionId + '; expires=' + date.toUTCString() + '; path=/; SameSite=Strict;';
     }
     shinyjs.getSession=function(){
         // get cookie storing transaction ID if it exists
@@ -71,7 +71,7 @@ js_session <- "
         var date = new Date();
         date.setTime(date.getTime());
         // save cookie
-        document.cookie = 'previous_session_id__' + transactionId + '=; expires=' + date.toUTCString() + '; path=/; SameSite=Strict; Secure';
+        document.cookie = 'previous_session_id__' + transactionId + '=; expires=' + date.toUTCString() + '; path=/; SameSite=Strict;';
     }
     
     // saving/getting/clearing user-defined host and port information
@@ -79,7 +79,7 @@ js_session <- "
         host = params[0];
         port = params[1];
         // save cookie with host and port info and arbitrarily long expiration date
-        document.cookie = 'host_info=' + host + ':' + port + '; expires=Fri, 31 Dec 9999 23:59:59 GMT; path=/; SameSite=Strict; Secure';
+        document.cookie = 'host_info=' + host + ':' + port + '; expires=Fri, 31 Dec 9999 23:59:59 GMT; path=/; SameSite=Strict;';
     }
     shinyjs.getHostInfo=function(){
         // get cookie storing transaction ID if it exists
@@ -99,7 +99,7 @@ js_session <- "
         var date = new Date();
         date.setTime(date.getTime());
         // save cookie
-        document.cookie = 'host_info=; expires=' + date.toUTCString() + '; path=/; SameSite=Strict; Secure';
+        document.cookie = 'host_info=; expires=' + date.toUTCString() + '; path=/; SameSite=Strict;';
     }
 "
 # Theme toggle js
@@ -108,13 +108,13 @@ js_theme <- "
     shinyjs.saveSessionTheme=function(params){
         theme = params[0];
         // save cookie
-        document.cookie = 'sessiontheme=' + theme + '; expires=' + 'Fri, 31 Dec 9999 23:59:59 GMT' + '; path=/; SameSite=Strict; Secure';
+        document.cookie = 'sessiontheme=' + theme + '; expires=' + 'Fri, 31 Dec 9999 23:59:59 GMT' + '; path=/; SameSite=Strict;';
     }
     
     shinyjs.saveSessionThemePreferred=function(params){
         theme = params[0];
         // save cookie
-        document.cookie = 'prefsessiontheme=' + theme + '; expires=' + 'Fri, 31 Dec 9999 23:59:59 GMT' + '; path=/; SameSite=Strict; Secure';
+        document.cookie = 'prefsessiontheme=' + theme + '; expires=' + 'Fri, 31 Dec 9999 23:59:59 GMT' + '; path=/; SameSite=Strict;';
     }
     
     shinyjs.getSessionTheme=function(){
