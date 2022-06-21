@@ -105,6 +105,7 @@ if(grepl("/$", API_ADDR)){
 }
 
 # vv future plan - futures won't work correctly without this line vv
+#plan('multisession')
 plan('multicore')
 
 print(paste0("! Tox21 Enricher Plumber API version ", APP_VERSION, "."))
@@ -387,12 +388,8 @@ performEnrichment <- function(enrichmentUUID="-1", annoSelectStr=fullAnnoClassSt
     
     # Generate individual gct files
     process_variable_DAVID_CHART_directories_individual_file(baseinputDirName, baseDirName, baseOutputDir, '', '', "P", 0.05, "P", CASRN2Name)
-    # Generate clustering images (heatmaps)
-    create_clustering_images(baseOutputDir, "-color=BR")
     # Create DAVID Chart/Cluster files
     create_david_chart_cluster(baseDirName, nodeCutoff, "ALL", "P", 0.05, "P")
-    # Generate heatmaps for multiple sets
-    create_clustering_images(baseOutputDirGct, "-color=BR")
     # zip result files
     if(dir.exists(baseDirName)){
         zipDir <- dir(baseDirName, recursive=TRUE, include.dirs=TRUE)
@@ -606,78 +603,6 @@ get_column_index <- function(columnType) {
     } else { 
         return("!ERROR! Wrong Signficance type. Use P, BH, or BF\n\n")
     }
-}
-
-# Create clustering images
-create_clustering_images <- function(outDir="", imageFlags="-color=BR"){
-    # Define required variables - Clustering
-    dirName <- outDir
-    dirNameSplit <- unlist(str_split(dirName, "/"))
-    dirTypeTag <- ""
-    dirNameSplit <- dirNameSplit[nchar(dirNameSplit) > 0]
-    if(grepl("CLUSTER", dirNameSplit[1], fixed=TRUE)){
-        dirTypeTag <- "CLUSTER__"
-    } else if(grepl("CHART", dirNameSplit[1], fixed=TRUE)) { 
-        dirTypeTag <- "CHART__"
-    } else if(grepl("PRESELECTED", dirNameSplit[1], fixed=TRUE)){
-        dirTypeTag <- "PRESELECTED__"
-    }
-    
-    # Define required variables - Clustering Images
-    java_flags <- "-Djava.awt.headless=true -Xmx1024m"
-    row_size <- "16"
-    column_size <- "16"
-    show_grid <- "yes"
-    grid_color <- "0:0:0"
-    show_row_description <- "yes"
-    show_row_names <- "yes"
-    row_to_highlight <- ""
-    row_highlight_color <- ""
-    use_color_gradient <- "no"
-    outputBaseDir <- outDir
-    libDir <- paste0(APP_DIR, "HClusterLibrary/")
-    column_distance_measure <- "2" #pearson correlation
-    row_distance_measure <- "2" #pearson correlation
-    clustering_method <- "m" #pairwise complete-linkage
-    color_scheme <- "global" # or "row normalized"
-    color_palette <- paste0(libDir, "colorSchemeBlackRed.txt")
-    output_format <- "png"
-    # .jpeg, .png, .tiff, .bmp, .eps
-    if (!is.null(imageFlags) & grepl("(jpeg|png|tiff|bmp|eps)", tolower(imageFlags), fixed=FALSE)){ 
-        output_format <- tolower(imageFlags)
-    }
-    
-    # Check OS and define program - this is probably always going to be 64-bit Linux at the moment.
-    cluster_program <- "clusterLinux64"
-    
-    # Load directory list
-    baseNameSplit <- unlist(str_split(dirName, "/"))
-    baseNameSplit <- baseNameSplit[nchar(baseNameSplit) > 0]
-    baseShortDirName  <- ""
-    if (baseNameSplit[length(baseNameSplit)] == ""){
-        baseShortDirName <- paste0(baseNameSplit[length(baseNameSplit) - 1], '/')
-    } else {
-        baseShortDirName <- paste0(baseNameSplit[length(baseNameSplit)], '/')
-    }
-    tmpDirs <- list.files(dirName)
-    
-    # Remove current directory and previous directory
-    baseSubDirs <- lapply(tmpDirs, function(x){
-        if(x != "." & x != "..") {
-            return(x)
-        }
-        return(NULL)
-    })
-    baseSubDirs <- baseSubDirs[!vapply(baseSubDirs, is.null, FUN.VALUE=logical(1))]
-    # Perform HClustering
-    perform_hclustering_per_directory(dirName, '', outputBaseDir, dirTypeTag, libDir, cluster_program, row_distance_measure, column_distance_measure, clustering_method, java_flags, output_format, column_size, row_size, show_grid, grid_color, show_row_description, show_row_names, row_to_highlight, row_highlight_color, color_scheme, color_palette, use_color_gradient)
-    if (!is.null(baseSubDirs[1])){
-        performHclusteringForEach <- mclapply(baseSubDirs, mc.cores=CORES, mc.silent=FALSE, function(x){
-            perform_hclustering_per_directory(paste0(dirName, '/', x, baseShortDirName, '/'), outputBaseDir, dirTypeTag, libDir, cluster_program, row_distance_measure, column_distance_measure, clustering_method, java_flags, output_format, column_size, row_size, show_grid, grid_color, show_row_description, show_row_names, row_to_highlight, row_highlight_color, color_scheme, color_palette, use_color_gradient)
-        })
-    }
-    print("! COMPLETE ...")
-    return("success")
 }
 
 # Generate heatmap images using HierarchicalClusteringImages (HCI)
@@ -3752,6 +3677,22 @@ submit <- function(res, req, mode="", input="", annotations="", cutoff=10, tanim
         poolClose(pool)
         return(paste0("Error: It appears you are using set names but have not provided a name for the first input set. Please check your input and try again."))
     }
+    
+    # Check if duplicate set names
+    setNamesList <- unlist(lapply(seq_len(length(casrnValidatedInput)), function(i) {
+        if(grepl("^#[A-Za-z0-9]+", casrnValidatedInput[i], ignore.case=TRUE)) { # Detect if we are using set names
+            return(casrnValidatedInput[i])
+        }
+        return(NULL)
+    }))
+    setNamesList <- setNamesList[!vapply(setNamesList, is.null, FUN.VALUE=logical(1))]
+    setNamesDuplicate <- as.data.frame(table(setNamesList)) %>% filter(Freq > 1)
+    if(nrow(setNamesDuplicate) > 0) { # if we have duplicate names, display error message
+        # Close DB connection
+        poolClose(pool)
+        return(paste0("Error: Duplicate set names are not allowed: ", paste0(setNamesDuplicate$setNamesList, collapse=", ")))
+    }
+    
     # Set setnames to pass to function for casrn input
     if(mode == "casrn" | mode == "annotation"){
         casrnSets <- lapply(seq_len(length(casrnValidatedInput)), function(i){

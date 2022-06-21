@@ -18,15 +18,16 @@ shinyServer(function(input, output, session) {
     # Theme info
     theme <- reactiveValues(textcolor="#000000")
     
-    # Load theme file
-    localDir <- paste0("./www/local/")
-    if(file.exists(paste0(localDir, "theme-dark"))){
-        theme$textcolor="#FFFFFF"
-        updateCheckboxInput(session, inputId="changeThemeToggle", value=TRUE)
-    } else {
-        theme$textcolor="#000000"
-        updateCheckboxInput(session, inputId="changeThemeToggle", value=FALSE)
-    }
+    # Heatmap color memory
+    lHeatmapColor <- reactiveValues()
+    hHeatmapColor <- reactiveValues()
+    
+    lHeatmapColorChart <- reactiveValues(color="white")
+    hHeatmapColorChart <- reactiveValues(color="red")
+    
+    lHeatmapColorCluster <- reactiveValues(color="white")
+    hHeatmapColorCluster <- reactiveValues(color="red")
+
     output[["themeStatus"]] <- renderUI({
         tags$style(HTML(paste0('
             .dataTables_length label, .dataTables_filter label, .dataTables_info {
@@ -586,7 +587,7 @@ shinyServer(function(input, output, session) {
                             style="bootstrap",
                             select="none",
                             options=list( 
-                                paging=TRUE,
+                                paging=FALSE,
                                 preDrawCallback=JS('function() { Shiny.unbindAll(this.api().table().node()); }'),
                                 drawCallback=JS('function() { Shiny.bindAll(this.api().table().node()); } '),
                                 dom="Bfrtip",
@@ -597,8 +598,10 @@ shinyServer(function(input, output, session) {
                         )
                     )
                 )
+
                 # Load previously saved session if link is clicked
-                lapply(prevSavedSessionsList, function(transactionId){
+                lapply(prevSavedSessionsList, function(button){
+                    transactionId <- unlist(str_split(button, "<br>"))[1] # get transaction ID from button element
                     if(is.null(resultsButtonsReactiveList$buttons[[paste0("prevSessionLink__", transactionId)]])) {
                         resultsButtonsReactiveList$buttons[[paste0("prevSessionLink__", transactionId)]] <- observeEvent(input[[paste0("prevSessionLink__", transactionId)]], {
                             # reset waiting page
@@ -676,6 +679,7 @@ shinyServer(function(input, output, session) {
                             cutoff <- transactionData$cutoff[[1]]
                             casrnBox <- transactionData$casrn_box[[1]]
                             casrnBoxSplit <- unlist(str_split(casrnBox, "\n"))
+                            casrnBoxSplit <- casrnBoxSplit[nchar(casrnBoxSplit) > 0] # remove any blank lines
                             reenrichFlag <- transactionData$reenrich_flag[[1]]
                             reenrichFlagReactive$reenrichFlagReactive <- reenrichFlag
                             enrichmentDisplayType <- ""
@@ -698,7 +702,6 @@ shinyServer(function(input, output, session) {
                                     enrichmentDisplayType <- "Enrich from chemicals with shared substructures"
                                 }
                             }
-                            changePage(page="waiting")
                             # Reset checkboxList$checkboxes and warningcasrns
                             checkboxList$checkboxes <- NULL
                             firstCaseWarningChems$casrns <- NULL
@@ -894,24 +897,8 @@ shinyServer(function(input, output, session) {
                             # Save input data to use later
                             waitingData <- data.frame("Position"=c(initQueuePos), "Mode"=c(enrichmentType$enrichType), "UUID"=c(transactionId), "Selected Annotations"=c(splitAnnotationsString), "Node Cutoff"=c(cutoff), "Input"=c(casrnBox), stringsAsFactors=FALSE)
                             inputSetList$inputSet <- waitingData
-                            # update waitingData with cleaned output
-                            waitingData <- data.frame("Position"=c(initQueuePos), "Mode"=c(enrichmentDisplayType), "UUID"=c(transactionId), "Selected Annotations"=c(splitAnnotationsString), "Node Cutoff"=c(cutoff), "Input"=c(casrnBox), stringsAsFactors=FALSE)
-                            # Clean up column name formatting
-                            colnames(waitingData) <- list("Status", "Request Mode", "Request UUID", "Selected Annotations", "Node Cutoff", "User Input")
-                            output[["waitingTable"]] <- renderUI(
-                                column(12,
-                                    DT::datatable({waitingData}, 
-                                        escape=FALSE,
-                                        rownames=FALSE,
-                                        class="row-border stripe compact",
-                                        style="bootstrap",
-                                        select="none",
-                                        options=list(
-                                            autoWidth=TRUE
-                                        )
-                                    )
-                                )
-                            )
+                            # Finally, load results
+                            redirectToResultsPage()
                         }, ignoreInit=FALSE, ignoreNULL=TRUE)
                     }
                 })
@@ -1051,20 +1038,21 @@ shinyServer(function(input, output, session) {
         shinyjs::hide(id="vennClusterMenu")
         shinyjs::hide(id="nodeLinkChartMenu")
         shinyjs::hide(id="nodeLinkClusterMenu")
-        tmpDir <- paste0("./www/local/")
-        if(input$changeThemeToggle){ # dark
+        if(input$changeThemeToggle == "Dark"){ # dark
             theme$textcolor <- "#FFFFFF"
-            file.create(paste0(tmpDir, "theme-dark"))
-            if(file.exists(paste0(tmpDir, "theme-light"))) {
-                unlink(paste0(tmpDir, "theme-light"))
-            }
-        } else { # light
+            js$saveSessionThemePreferred("dark")
+            js$initDarkTheme("dark")
+        } else if (input$changeThemeToggle == "Light") { # light
             theme$textcolor <- "#000000"
-            if(file.exists(paste0(tmpDir, "theme-dark"))) {
-                file.create(paste0(tmpDir, "theme-light"))
-                if(file.exists(paste0(tmpDir, "theme-dark"))) {
-                    unlink(paste0(tmpDir, "theme-dark"))
-                }
+            js$saveSessionThemePreferred("light")
+            js$initDarkTheme("light")
+        } else if (input$changeThemeToggle == "Auto") { # auto
+            js$saveSessionThemePreferred("auto")
+            js$initDarkTheme("default")
+            if(input$sessionTheme == "dark"){
+                theme$textcolor="#FFFFFF"
+            } else if(input$sessionTheme == "light"){
+                theme$textcolor="#000000"
             }
         }
         # Fix for DT::DataTable labels showing up as the wrong color
@@ -1473,6 +1461,8 @@ shinyServer(function(input, output, session) {
 
     # Flag to see if request has finished
     finishedFlag <- reactiveValues(finished=FALSE)
+    # Reactive value to keep track of last queue position
+    queuePosOld <- reactiveValues(pos="")
     # Automatically update waiting page/queue position in the background
     updateWaitingTable <- function(){
         transactionId <- reactiveTransactionId$id
@@ -1526,26 +1516,29 @@ shinyServer(function(input, output, session) {
         if(queuePos == "Complete!"){
             finishedFlag$finished <- TRUE
         }
-        
-        # update waitingData with cleaned output
-        waitingData <- data.frame("Position"=c(queuePos), "Mode"=c(enrichmentDisplayType), "UUID"=c(transactionId), "Selected Annotations"=c(splitAnnotationsString), "Node Cutoff"=c(cutoff), "Input"=c(casrnBox), stringsAsFactors=FALSE)
-        # Clean up column name formatting
-        colnames(waitingData) <- list("Status", "Request Mode", "Request UUID", "Selected Annotations", "Node Cutoff", "User Input")
-        # Update table
-        output[["waitingTable"]] <- renderUI(
-            column(12,
-                DT::datatable({waitingData},
-                    escape=FALSE,
-                    rownames=FALSE,
-                    class="row-border stripe compact",
-                    style="bootstrap",
-                    select="none",
-                    options=list(
-                        autoWidth=TRUE
+        # Only update if queue position is now different than before
+        if(queuePos != queuePosOld$pos){
+            queuePosOld$pos <- queuePos
+            # update waitingData with cleaned output
+            waitingData <- data.frame("Position"=c(queuePos), "Mode"=c(enrichmentDisplayType), "UUID"=c(transactionId), "Selected Annotations"=c(splitAnnotationsString), "Node Cutoff"=c(cutoff), "Input"=c(casrnBox), stringsAsFactors=FALSE)
+            # Clean up column name formatting
+            colnames(waitingData) <- list("Status", "Request Mode", "Request UUID", "Selected Annotations", "Node Cutoff", "User Input")
+            # Update table
+            output[["waitingTable"]] <- renderUI(
+                column(12,
+                    DT::datatable({waitingData},
+                        escape=FALSE,
+                        rownames=FALSE,
+                        class="row-border stripe compact",
+                        style="bootstrap",
+                        select="none",
+                        options=list(
+                            autoWidth=TRUE
+                        )
                     )
                 )
             )
-        )
+        }
     }
     
     # Copies transaction ID to user's clipboard
@@ -1662,6 +1655,20 @@ shinyServer(function(input, output, session) {
             }
             if(!grepl("^#[A-Za-z0-9]+", casrnValidatedInput[1], ignore.case=TRUE) & usingSetNames == TRUE) {
                 showNotification("Error: It appears you are using set names but have not provided a name for the first input set. Please check your input and try again.", type="error")
+                return(FALSE)
+            }
+            
+            # 4a) check if duplicate set names
+            setNamesList <- unlist(lapply(seq_len(length(casrnValidatedInput)), function(i) {
+                if(grepl("^#[A-Za-z0-9]+", casrnValidatedInput[i], ignore.case=TRUE)) { # Detect if we are using set names
+                    return(casrnValidatedInput[i])
+                }
+                return(NULL)
+            }))
+            setNamesList <- setNamesList[!vapply(setNamesList, is.null, FUN.VALUE=logical(1))]
+            setNamesDuplicate <- as.data.frame(table(setNamesList)) %>% filter(Freq > 1)
+            if(nrow(setNamesDuplicate) > 0) { # if we have duplicate names, display error message
+                showNotification(paste0("Error: Duplicate set names are not allowed: ", paste0(setNamesDuplicate$setNamesList, collapse=", ")), type="error")
                 return(FALSE)
             }
         }
@@ -1935,6 +1942,7 @@ shinyServer(function(input, output, session) {
         }
         reenrichResults <- reenrichResults[!vapply(reenrichResults, is.null, FUN.VALUE=logical(1))]
         enrichmentSets <- enrichmentSets[!vapply(enrichmentSets, is.null, FUN.VALUE=logical(1))]
+        
         resp <- NULL
         maxInputSize <- 1 # default value of 1 individual set(s)
         tryTransactionSize <- tryCatch({
@@ -2000,6 +2008,7 @@ shinyServer(function(input, output, session) {
         # Convert enrichmentSets into a form that is API-friendly
         enrichmentSetsSanitized <- lapply(names(enrichmentSets), function(enrichmentSet) paste0(paste0(enrichmentSets[[enrichmentSet]], collapse=paste0("__", enrichmentSet, "\n")), "__", enrichmentSet))
         enrichmentSetsSanitized <- paste0(enrichmentSetsSanitized, collapse="\n")
+        
         # Convert enrichmentSets into a form that is API-friendly 2
         enrichmentSetsSanitizedLocal <- lapply(names(enrichmentSets), function(enrichmentSet) paste0(paste0(enrichmentSets[[enrichmentSet]], collapse=paste0("__", enrichmentSet, "|")), "__", enrichmentSet))
         enrichmentSetsSanitizedLocal <- paste0(enrichmentSetsSanitizedLocal, collapse="|")
@@ -2061,10 +2070,9 @@ shinyServer(function(input, output, session) {
                         }))
                         CASRNsToKeep <- CASRNsToKeep[!vapply(CASRNsToKeep, is.null, FUN.VALUE=logical(1))]
                         enrichmentSetRemoved <- lapply(enrichmentSets, function(x) x[x %in% CASRNsToKeep])
-                        enrichmentSetRemoved <- enrichmentSetRemoved[lapply(enrichmentSetRemoved, length) > 0]
+                        enrichmentSetRemoved <- enrichmentSetRemoved[lapply(enrichmentSetRemoved, length) > 0][setName]
                         return(enrichmentSetRemoved)
                     }), recursive=FALSE)
-                    
                     # Remove from reernichResults
                     reenrichResults <- lapply(names(enrichmentSets), function(setName){
                         currentSet <- enrichmentSets[[setName]]
@@ -2091,6 +2099,7 @@ shinyServer(function(input, output, session) {
                     # Convert enrichmentSets into a form that is API-friendly
                     enrichmentSetsSanitized <- lapply(names(enrichmentSets), function(enrichmentSet) paste0(paste0(enrichmentSets[[enrichmentSet]], collapse=paste0("__", enrichmentSet, "\n")), "__", enrichmentSet))
                     enrichmentSetsSanitized <- paste0(enrichmentSetsSanitized, collapse="\n")
+                    
                     # Convert enrichmentSets into a form that is API-friendly 2
                     enrichmentSetsSanitizedLocal <- lapply(names(enrichmentSets), function(enrichmentSet) paste0(paste0(enrichmentSets[[enrichmentSet]], collapse=paste0("__", enrichmentSet, "|")), "__", enrichmentSet))
                     enrichmentSetsSanitizedLocal <- paste0(enrichmentSetsSanitizedLocal, collapse="|")
@@ -2162,6 +2171,7 @@ shinyServer(function(input, output, session) {
                 showNotification("Error: The application cannot connect to the Tox21 Enricher server. Please try again later.", type="error")
                 return(FALSE)
             }
+            
             # Send query to create input file
             resp <- NULL
             tryInput <- tryCatch({
@@ -2353,6 +2363,7 @@ shinyServer(function(input, output, session) {
                 finishedFlag$finished <- FALSE
                 redirectToResultsPage()
             } else {
+                # TODO: don't update if status is the same
                 updateWaitingTable()
             }
         }
@@ -2403,6 +2414,14 @@ shinyServer(function(input, output, session) {
         checkboxList$checkboxes <- NULL
         # Set reactive transactionId value 
         reactiveTransactionId$id <- transactionId
+        # Reset heatmap colors
+        lHeatmapColor <- reactiveValues()
+        hHeatmapColor <- reactiveValues()
+        lHeatmapColorChart$color <- "white"
+        hHeatmapColorChart$color <- "red"
+        lHeatmapColorCluster$color <- "white"
+        hHeatmapColorCluster$color <- "red"
+        
         # Get enrichmentSets
         if(!is.null(enrichmentSetsList$enrichmentSets)){
             enrichmentSets <- enrichmentSetsList$enrichmentSets  
@@ -2549,7 +2568,7 @@ shinyServer(function(input, output, session) {
                                         style="bootstrap",
                                         select="none",
                                         options=list( 
-                                            paging=TRUE,
+                                            paging=FALSE,
                                             scrollX=TRUE,
                                             dom="Bfrtip",
                                             pageLength=10,
@@ -2619,7 +2638,7 @@ shinyServer(function(input, output, session) {
                                     style="bootstrap",
                                     select="none",
                                     options=list( 
-                                        paging=TRUE,
+                                        paging=FALSE,
                                         dom="Bfrtip",
                                         pageLength=10,
                                         buttons=list("copy", "csv", "excel", "pdf", "print")  
@@ -2684,7 +2703,7 @@ shinyServer(function(input, output, session) {
                                     style="bootstrap",
                                     select="none",
                                     options=list( 
-                                        paging=TRUE,
+                                        paging=FALSE,
                                         scrollX=TRUE,
                                         dom="Bfrtip",
                                         pageLength=10,
@@ -2701,7 +2720,7 @@ shinyServer(function(input, output, session) {
                     shinyjs::enable(id="refresh")
                     removeModal()
                 })
-                  
+                
                 # Full matrix
                 if(is.null(setFilesObservers$observers[[paste0("fullMatrixObserver__", i)]])){
                     setFilesObservers$observers[[paste0("fullMatrixObserver__", i)]] <- observeEvent(input[[paste0(i, "__FullMatrix.txt__link")]], {
@@ -2744,6 +2763,7 @@ shinyServer(function(input, output, session) {
                                     )
                                 )
                             )
+                            
                             output[["fullMatrixPreview"]] <- renderDataTable(
                                 DT::datatable({tmpFile},
                                     escape=FALSE,
@@ -2752,7 +2772,7 @@ shinyServer(function(input, output, session) {
                                     style="bootstrap",
                                     select="none",
                                     options=list( 
-                                        paging=TRUE,
+                                        paging=FALSE,
                                         scrollX=TRUE,
                                         dom="Bfrtip",
                                         pageLength=10,
@@ -2771,28 +2791,101 @@ shinyServer(function(input, output, session) {
                 })
                 
                 lapply(names(enrichmentSets), function(i) {
+                    # Load matrix to make heatmap
+                    fullMatrixHeatmap <- NULL
+                    fullMatrixHeatmapCasrns <- NULL
+                    fullMatrixHeatmapAnnotations <- NULL
+                    dir.create(paste0(tempdir(), "/output/")) # Create temporary directory for request
+                    dir.create(paste0(tempdir(), "/output/", transactionId, "/"))
+                    tryFullMatrixDL <- TRUE
+                    if(!file.exists(paste0(tempdir(), "/output/", transactionId, "/", i, "__FullMatrix.txt"))){
+                        tryFullMatrixDL <- tryCatch({
+                            download.file(paste0(API_PROTOCOL, API_ADDR, "/serveFileText?transactionId=", transactionId, "&filename=", i, "__FullMatrix.txt&subDir=Output"), destfile=paste0(tempdir(), "/output/", transactionId, "/", i, "__FullMatrix.txt"))
+                        }, error=function(cond){
+                            return(NULL)
+                        })
+                    }
+                    if(is.null(tryFullMatrixDL)) {
+                        showNotification("Error: The application cannot connect to the Tox21 Enricher server. Please try again later.", type="error")
+                    } else {
+                        # Check file size
+                        fSize <- file.info(paste0(tempdir(), "/output/", transactionId, "/", i, "__FullMatrix.txt"))$size
+                        if(fSize > 1000000){ # show preview error if file is larger than 1MB
+                            showNotification(paste0("Warning: this file is too large to be previewed. Please view it after downloading the result files."), duration=5, type="warning")
+                            return(FALSE)
+                        }
+                        fullMatrixHeatmap <- read.delim(paste0(tempdir(), "/output/", transactionId, "/", i, "__FullMatrix.txt"), sep="\t", header=TRUE, comment.char="", fill=TRUE, stringsAsFactors=FALSE)
+                        names(fullMatrixHeatmap) <- lapply(names(fullMatrixHeatmap), function(x) gsub("\\.", " ", x))
+                        fullMatrixHeatmapCasrns <- fullMatrixHeatmap[, 1]
+                        fullMatrixHeatmap$CASRN <- NULL
+                        fullMatrixHeatmapAnnotations <- names(fullMatrixHeatmap)
+                        fullMatrixHeatmap <- t(data.matrix(fullMatrixHeatmap))
+                    }
+                    
+                    lHeatmapColor[[paste0("color__", i)]] <- "white"
+                    hHeatmapColor[[paste0("color__", i)]] <- "red"
+                    
                     output[[paste0("annotationTab_", i)]] <- renderUI(
-                        column(12,
-                            lapply(seq_len(length(setFiles)), function(setFile){
-                                # Create item in tab for matching sets
-                                if (grepl(paste0(i, "[.]*"), setFilesSplit[setFile])) {
-                                    fluidRow(
-                                        column(id=paste0(setFilesSplit[setFile]), 3, 
-                                            if(endsWith(setFilesSplit[setFile], "__FullMatrix.txt")){
-                                                tipify( div(actionLink(inputId=paste0(i, "__FullMatrix.txt__link"), label=gsub("__FullMatrix.txt", " Full Matrix", setFilesSplit[setFile]))), "A matrix displaying all of the annotations and their corresponding chemicals for this set (.txt format).", placement="bottom")
-                                            } else if (endsWith(setFilesSplit[setFile], "ErrorCASRNs.txt")){ 
-                                                tipify( div(actionLink(inputId=paste0(setFilesSplit[setFile], "__link"), label=paste0(i, " Error CASRNs"))), "A list of submitted CASRNs that were not found in the Tox21 Enricher database (.txt format).", placement="bottom")
-                                            } else if (endsWith(setFilesSplit[setFile], "__Input.txt")){ # Input file
-                                                tipify( div(actionLink(inputId=paste0(gsub("__Input", "", setFilesSplit[setFile]), "__link"), label=paste0(i, " Input"))), "A list of input chemicals for this set (.txt format).", placement="bottom")
-                                            } else { # CASRN file
-                                                tipify( div(actionLink(inputId=paste0(setFilesSplit[setFile], "__link"), label=gsub(".txt", "", gsub(paste0(i, "__"), "", setFilesSplit[setFile])))), "A list of annotations in the Tox21 Enricher database for this chemical with respect to the given annotation classes (.txt format).", placement="bottom")
-                                            }
+                        div(
+                            column(12,
+                                lapply(seq_len(length(setFiles)), function(setFile){
+                                    # Create item in tab for matching sets
+                                    if (grepl(paste0(i, "[.]*"), setFilesSplit[setFile])) {
+                                        fluidRow(
+                                            column(id=paste0(setFilesSplit[setFile]), 3, 
+                                                if(endsWith(setFilesSplit[setFile], "__FullMatrix.txt")){
+                                                    tipify( div(actionLink(inputId=paste0(i, "__FullMatrix.txt__link"), label=gsub("__FullMatrix.txt", " Full Matrix", setFilesSplit[setFile]))), "A matrix displaying all of the annotations and their corresponding chemicals for this set (.txt format).", placement="bottom")
+                                                } else if (endsWith(setFilesSplit[setFile], "ErrorCASRNs.txt")){ 
+                                                    tipify( div(actionLink(inputId=paste0(setFilesSplit[setFile], "__link"), label=paste0(i, " Error CASRNs"))), "A list of submitted CASRNs that were not found in the Tox21 Enricher database (.txt format).", placement="bottom")
+                                                } else if (endsWith(setFilesSplit[setFile], "__Input.txt")){ # Input file
+                                                    tipify( div(actionLink(inputId=paste0(gsub("__Input", "", setFilesSplit[setFile]), "__link"), label=paste0(i, " Input"))), "A list of input chemicals for this set (.txt format).", placement="bottom")
+                                                } else { # CASRN file
+                                                    tipify( div(actionLink(inputId=paste0(setFilesSplit[setFile], "__link"), label=gsub(".txt", "", gsub(paste0(i, "__"), "", setFilesSplit[setFile])))), "A list of annotations in the Tox21 Enricher database for this chemical with respect to the given annotation classes (.txt format).", placement="bottom")
+                                                }
+                                            )
                                         )
+                                    }
+                                })
+                            ),
+                            if(!is.null(fullMatrixHeatmap)) {
+                                fluidRow(
+                                    column(1, 
+                                        radioButtons(inputId=paste0("lHeatmapColorControl__", i), label="Select 0 color for heatmap:", choices=c("white", "gray", "black", "red", "blue", "yellow", "green", "brown", "purple", "orange"), selected="white"),
+                                    ),
+                                    column(1,
+                                        radioButtons(inputId=paste0("hHeatmapColorControl__", i), label="Select 1 color for heatmap:", choices=c("white", "gray", "black", "red", "blue", "yellow", "green", "brown", "purple", "orange"), selected="red")
+                                    ),
+                                    column(10,
+                                        uiOutput(outputId=paste0("fullMatrixHeatmap__", i))
                                     )
-                                }
-                            })
+                                )
+                            }
                         )
                     )
+                    
+                    output[[paste0("fullMatrixHeatmap__", i)]] <- renderUI(
+                        div(
+                            plot_ly(x=fullMatrixHeatmapCasrns, y=fullMatrixHeatmapAnnotations, z=fullMatrixHeatmap, colors=colorRamp(c(lHeatmapColor[[paste0("color__", i)]], hHeatmapColor[[paste0("color__", i)]])), type="heatmap", xgap=2, ygap=2 ) %>%
+                            layout(
+                                autosize=TRUE,
+                                showlegend=FALSE,
+                                xaxis=list(title="<b>Input CASRNs</b>", automargin=TRUE),
+                                yaxis=list(title="<b>Annotations</b>", tickfont=list(size=9), tickangle=15, type="category", automargin=TRUE),
+                                plot_bgcolor="transparent",
+                                paper_bgcolor="transparent",
+                                font=list(color=theme$textcolor)
+                            ) %>% hide_colorbar()
+                        )
+                    )
+                    
+                    # add observers for heatmap colors
+                    observeEvent(input[[paste0("lHeatmapColorControl__", i)]], {
+                        lHeatmapColor[[paste0("color__", i)]] <- input[[paste0("lHeatmapColorControl__", i)]]
+                    })
+                    observeEvent(input[[paste0("hHeatmapColorControl__", i)]], {
+                        hHeatmapColor[[paste0("color__", i)]] <- input[[paste0("hHeatmapColorControl__", i)]]
+                    })
+                    
                 })
             })
   
@@ -3073,7 +3166,7 @@ shinyServer(function(input, output, session) {
                                         style="bootstrap",
                                         select="none",
                                         options=list( 
-                                            paging=TRUE,
+                                            paging=FALSE,
                                             dom="Bfrtip",
                                             pageLength=10,
                                             buttons=list("copy", "csv", "excel", "pdf", "print")  
@@ -3138,7 +3231,7 @@ shinyServer(function(input, output, session) {
                                         style="bootstrap",
                                         select="none",
                                         options=list( 
-                                            paging=TRUE,
+                                            paging=FALSE,
                                             scrollX=TRUE,
                                             dom="Bfrtip",
                                             pageLength=10,
@@ -3213,7 +3306,7 @@ shinyServer(function(input, output, session) {
                                         style="bootstrap",
                                         select="none",
                                         options=list( 
-                                            paging=TRUE,
+                                            paging=FALSE,
                                             scrollX=TRUE,
                                             dom="Bfrtip",
                                             pageLength=10,
@@ -3340,7 +3433,7 @@ shinyServer(function(input, output, session) {
                                             select="none",
                                             caption=HTML(paste0("<span style='color:", theme$textcolor, ";'>", x, " - ", enrichmentScores[x], "</span>")),
                                             options=list( 
-                                                paging=TRUE,
+                                                paging=FALSE,
                                                 scrollX=TRUE,
                                                 dom="Bfrtip",
                                                 pageLength=10,
@@ -3431,7 +3524,7 @@ shinyServer(function(input, output, session) {
                                         style="bootstrap",
                                         select="none",
                                         options=list( 
-                                            paging=TRUE,
+                                            paging=FALSE,
                                             scrollX=TRUE,
                                             dom="Bfrtip",
                                             pageLength=10,
@@ -3497,7 +3590,7 @@ shinyServer(function(input, output, session) {
                                         style="bootstrap",
                                         select="none",
                                         options=list( 
-                                            paging=TRUE,
+                                            paging=FALSE,
                                             scrollX=TRUE,
                                             dom="Bfrtip",
                                             pageLength=10,
@@ -3514,6 +3607,11 @@ shinyServer(function(input, output, session) {
                         shinyjs::enable(id="refresh")
                         removeModal()
                     })
+                    
+                    # Generate default reactive values for colors
+                    lHeatmapColor[[paste0("color__", i)]] <- "white"
+                    hHeatmapColor[[paste0("color__", i)]] <- "red"
+                    
                     # Render result file links
                     output[[paste0("outTab_", i)]] <- renderUI(
                         column(12,
@@ -3538,8 +3636,6 @@ shinyServer(function(input, output, session) {
                                             )
                                         } else {
                                             fluidRow(
-                                                # Add links to result files with corresponding tooltips
-                                                # TODO: fix formatting
                                                 # Chart.txt
                                                 if(endsWith(resultFile, paste0(i, "__Chart.txt"))){
                                                     column(3, id=paste0(tmpName[length(tmpName)]), tipify( div(actionLink(inputId=paste0(i, "__Chart.txt__link"), label=paste0(gsub(".txt", "", gsub("__", " ", tmpName[length(tmpName)]))))), "A list of all significant annotations (.txt format).", placement="bottom") )
@@ -3566,19 +3662,28 @@ shinyServer(function(input, output, session) {
                                 )
                             ),
                             # Main heatmap per set
-                            fluidRow(
-                                plot_ly(x=gctAnnoNames, y=gctCASRNNames, z=gctFileMatrix, colors=colorRamp(c("white", "red")), type="heatmap", xgap=2, ygap=2 ) %>% 
-                                    layout(
-                                        autosize=TRUE, 
-                                        showlegend=FALSE, 
-                                        margin=list(r=200, b=200), 
-                                        xaxis=list(title="<b>Annotations</b>", tickfont=list(size=9), tickangle=15, automargin=TRUE), 
-                                        yaxis=list(title="<b>Input CASRNs</b>", type="category", automargin=TRUE),
-                                        plot_bgcolor="transparent",
-                                        paper_bgcolor="transparent",
-                                        font=list(color=theme$textcolor)
-                                    ) %>% hide_colorbar()
-                            ),
+                            # fluidRow(
+                            #     column(1, 
+                            #         radioButtons(inputId=paste0("lHeatmapColorControl__", i), label="Select 0 color for heatmap:", choices=c("white", "gray", "black", "red", "blue", "yellow", "green", "brown", "purple", "orange"), selected="white"),
+                            #     ),
+                            #     column(1,
+                            #         radioButtons(inputId=paste0("hHeatmapColorControl__", i), label="Select 1 color for heatmap:", choices=c("white", "gray", "black", "red", "blue", "yellow", "green", "brown", "purple", "orange"), selected="red")
+                            #     ),
+                            #     column(10,
+                            #         plot_ly(x=gctAnnoNames, y=gctCASRNNames, z=gctFileMatrix, colors=colorRamp(c(lHeatmapColor[[paste0("color__", i)]], hHeatmapColor[[paste0("color__", i)]])), type="heatmap", xgap=2, ygap=2 ) %>% 
+                            #         layout(
+                            #             autosize=TRUE, 
+                            #             showlegend=FALSE, 
+                            #             margin=list(r=200, b=200), 
+                            #             xaxis=list(title="<b>Annotations</b>", tickfont=list(size=9), tickangle=15, automargin=TRUE), 
+                            #             yaxis=list(title="<b>Input CASRNs</b>", type="category", automargin=TRUE),
+                            #             plot_bgcolor="transparent",
+                            #             paper_bgcolor="transparent",
+                            #             font=list(color=theme$textcolor)
+                            #         ) %>% hide_colorbar()
+                            #     )
+                            # ),
+                            uiOutput(paste0("perSetHeatmap__", i)),
                             hr(),
                             fluidRow(
                                 if(mode != "casrn" | (originalEnrichMode == "substructure" | originalEnrichMode == "similarity")) {
@@ -3590,6 +3695,87 @@ shinyServer(function(input, output, session) {
                             )
                         )
                     )
+                    
+                    output[[paste0("perSetHeatmap__", i)]] <- renderUI(
+                        # Main heatmap per set
+                        fluidRow(
+                            column(1,
+                               radioButtons(inputId=paste0("lHeatmapColorControl__", i), label="Select 0 color for heatmap:", choices=c("white", "gray", "black", "red", "blue", "yellow", "green", "brown", "purple", "orange"), selected=lHeatmapColor[[paste0("color__", i)]]),
+                            ),
+                            column(1,
+                               radioButtons(inputId=paste0("hHeatmapColorControl__", i), label="Select 1 color for heatmap:", choices=c("white", "gray", "black", "red", "blue", "yellow", "green", "brown", "purple", "orange"), selected=hHeatmapColor[[paste0("color__", i)]])
+                            ),
+                            column(10,
+                                plot_ly(x=gctAnnoNames, y=gctCASRNNames, z=gctFileMatrix, colors=colorRamp(c(lHeatmapColor[[paste0("color__", i)]], hHeatmapColor[[paste0("color__", i)]])), type="heatmap", xgap=2, ygap=2 ) %>%
+                                layout(
+                                    autosize=TRUE,
+                                    showlegend=FALSE,
+                                    margin=list(r=200, b=200),
+                                    xaxis=list(title="<b>Annotations</b>", tickfont=list(size=9), tickangle=15, automargin=TRUE),
+                                    yaxis=list(title="<b>Input CASRNs</b>", type="category", automargin=TRUE),
+                                    plot_bgcolor="transparent",
+                                    paper_bgcolor="transparent",
+                                    font=list(color=theme$textcolor)
+                                ) %>% hide_colorbar()
+                            )
+                        )
+                    )
+                    
+                    # add observers for heatmap colors
+                    observeEvent(input[[paste0("lHeatmapColorControl__", i)]], {
+                        lHeatmapColor[[paste0("color__", i)]] <- input[[paste0("lHeatmapColorControl__", i)]]
+                        output[[paste0("perSetHeatmap__", i)]] <- renderUI(
+                                # Main heatmap per set
+                                fluidRow(
+                                    column(1,
+                                        radioButtons(inputId=paste0("lHeatmapColorControl__", i), label="Select 0 color for heatmap:", choices=c("white", "gray", "black", "red", "blue", "yellow", "green", "brown", "purple", "orange"), selected=lHeatmapColor[[paste0("color__", i)]]),
+                                    ),
+                                    column(1,
+                                        radioButtons(inputId=paste0("hHeatmapColorControl__", i), label="Select 1 color for heatmap:", choices=c("white", "gray", "black", "red", "blue", "yellow", "green", "brown", "purple", "orange"), selected=hHeatmapColor[[paste0("color__", i)]])
+                                    ),
+                                    column(10,
+                                        plot_ly(x=gctAnnoNames, y=gctCASRNNames, z=gctFileMatrix, colors=colorRamp(c(lHeatmapColor[[paste0("color__", i)]], hHeatmapColor[[paste0("color__", i)]])), type="heatmap", xgap=2, ygap=2 ) %>%
+                                        layout(
+                                            autosize=TRUE,
+                                            showlegend=FALSE,
+                                            margin=list(r=200, b=200),
+                                            xaxis=list(title="<b>Annotations</b>", tickfont=list(size=9), tickangle=15, automargin=TRUE),
+                                            yaxis=list(title="<b>Input CASRNs</b>", type="category", automargin=TRUE),
+                                            plot_bgcolor="transparent",
+                                            paper_bgcolor="transparent",
+                                            font=list(color=theme$textcolor)
+                                        ) %>% hide_colorbar()
+                                    )
+                                )
+                          )
+                    })
+                    observeEvent(input[[paste0("hHeatmapColorControl__", i)]], {
+                        hHeatmapColor[[paste0("color__", i)]] <- input[[paste0("hHeatmapColorControl__", i)]]
+                        output[[paste0("perSetHeatmap__", i)]] <- renderUI(
+                            # Main heatmap per set
+                            fluidRow(
+                                column(1,
+                                   radioButtons(inputId=paste0("lHeatmapColorControl__", i), label="Select 0 color for heatmap:", choices=c("white", "gray", "black", "red", "blue", "yellow", "green", "brown", "purple", "orange"), selected=lHeatmapColor[[paste0("color__", i)]]),
+                                ),
+                                column(1,
+                                   radioButtons(inputId=paste0("hHeatmapColorControl__", i), label="Select 1 color for heatmap:", choices=c("white", "gray", "black", "red", "blue", "yellow", "green", "brown", "purple", "orange"), selected=hHeatmapColor[[paste0("color__", i)]])
+                                ),
+                                column(10,
+                                    plot_ly(x=gctAnnoNames, y=gctCASRNNames, z=gctFileMatrix, colors=colorRamp(c(lHeatmapColor[[paste0("color__", i)]], hHeatmapColor[[paste0("color__", i)]])), type="heatmap", xgap=2, ygap=2 ) %>%
+                                    layout(
+                                        autosize=TRUE,
+                                        showlegend=FALSE,
+                                        margin=list(r=200, b=200),
+                                        xaxis=list(title="<b>Annotations</b>", tickfont=list(size=9), tickangle=15, automargin=TRUE),
+                                        yaxis=list(title="<b>Input CASRNs</b>", type="category", automargin=TRUE),
+                                        plot_bgcolor="transparent",
+                                        paper_bgcolor="transparent",
+                                        font=list(color=theme$textcolor)
+                                    ) %>% hide_colorbar()
+                                )
+                            )
+                        )
+                    })
                 } else {
                     # Get original input chemical if similarity or substructure
                     originalInputToDisplay <- NULL
@@ -4219,19 +4405,36 @@ shinyServer(function(input, output, session) {
             # Generate networks for chart & cluster
             chartFullNetwork <- generateNetwork(transactionId=transactionId, cutoff=cutoff, networkMode="chart", inputNetwork=names(enrichmentSets), qval=0.05, physicsEnabled=FALSE, smoothCurve=TRUE, keep=chartClasses)
             clusterFullNetwork <- generateNetwork(transactionId=transactionId, cutoff=cutoff, networkMode="cluster", inputNetwork=names(enrichmentSets), qval=0.05, physicsEnabled=FALSE, smoothCurve=TRUE, keep=clusterClasses)
+            
+            lHeatmapColorChart$color <- "white"
+            hHeatmapColorChart$color <- "red"
+            lHeatmapColorCluster$color <- "white"
+            hHeatmapColorCluster$color <- "red"
+            
             # Display heatmap/network panels
             output[["chartHeatmap"]] <- renderUI(
                 fluidRow(
                     column(12,
                         tabsetPanel(
-                            tabPanel("Chart Heatmap", plot_ly(x=gctCASRNNamesChart, y=gctAnnoNamesChart, z=gctFileChartMatrix, colors=colorRamp(c("white", "red")), type="heatmap", xgap=2, ygap=2, colorbar=list(title=list(text='<b>-log<sub>10</sub> (BH P-value)</b>'))) %>% 
-                                layout(
-                                    margin=list(l=300, r=200, b=160), 
-                                    xaxis=list(title="<b>Annotations</b>", tickfont=list(size=9), tickangle=15), 
-                                    yaxis=list(title="<b>Input Sets</b>", type="category"),
-                                    plot_bgcolor="transparent",
-                                    paper_bgcolor="transparent",
-                                    font=list(color=theme$textcolor)
+                            tabPanel("Chart Heatmap", 
+                                div(
+                                    column(1, 
+                                        radioButtons(inputId=paste0("lHeatmapColorControl__Chart"), label="Select 0 color for heatmap:", choices=c("white", "gray", "black", "red", "blue", "yellow", "green", "brown", "purple", "orange"), selected=lHeatmapColorChart$color),
+                                    ),
+                                    column(1,
+                                        radioButtons(inputId=paste0("hHeatmapColorControl__Chart"), label="Select 1 color for heatmap:", choices=c("white", "gray", "black", "red", "blue", "yellow", "green", "brown", "purple", "orange"), selected=hHeatmapColorChart$color)
+                                    ),
+                                    column(10,
+                                        plot_ly(x=gctCASRNNamesChart, y=gctAnnoNamesChart, z=gctFileChartMatrix, colors=colorRamp(c("white", "red")), type="heatmap", xgap=2, ygap=2, colorbar=list(title=list(text='<b>-log<sub>10</sub> (BH P-value)</b>'))) %>% 
+                                        layout(
+                                            margin=list(l=300, r=200, b=160), 
+                                            xaxis=list(title="<b>Annotations</b>", tickfont=list(size=9), tickangle=15), 
+                                            yaxis=list(title="<b>Input Sets</b>", type="category"),
+                                            plot_bgcolor="transparent",
+                                            paper_bgcolor="transparent",
+                                            font=list(color=theme$textcolor)
+                                        )
+                                    )
                                 )
                             ), 
                             tabPanel("Chart Network", 
@@ -4282,14 +4485,25 @@ shinyServer(function(input, output, session) {
                 fluidRow(
                     column(12,
                         tabsetPanel(
-                            tabPanel("Cluster Heatmap", plot_ly(x=gctCASRNNamesCluster, y=gctAnnoNamesCluster, z=gctFileClusterMatrix, colors=colorRamp(c("white", "red")), type="heatmap", xgap=2, ygap=2, colorbar=list(title=list(text='<b>-log<sub>10</sub> (BH P-value)</b>'))) %>% 
-                                layout(
-                                    margin=list(l=300, r=200, b=160), 
-                                    xaxis=list(title="<b>Annotation Clusters</b>", tickfont=list(size=9), tickangle=15), 
-                                    yaxis=list(title="<b>Input Sets</b>", type="category"),
-                                    plot_bgcolor="transparent",
-                                    paper_bgcolor="transparent",
-                                    font=list(color=theme$textcolor)
+                            tabPanel("Cluster Heatmap", 
+                                div(
+                                    column(1, 
+                                        radioButtons(inputId=paste0("lHeatmapColorControl__Cluster"), label="Select 0 color for heatmap:", choices=c("white", "gray", "black", "red", "blue", "yellow", "green", "brown", "purple", "orange"), selected=lHeatmapColorCluster$color),
+                                    ),
+                                    column(1,
+                                        radioButtons(inputId=paste0("hHeatmapColorControl__Cluster"), label="Select 1 color for heatmap:", choices=c("white", "gray", "black", "red", "blue", "yellow", "green", "brown", "purple", "orange"), selected=hHeatmapColorCluster$color)
+                                    ),
+                                    column(10,
+                                        plot_ly(x=gctCASRNNamesCluster, y=gctAnnoNamesCluster, z=gctFileClusterMatrix, colors=colorRamp(c(lHeatmapColorCluster$color, hHeatmapColorCluster$color)), type="heatmap", xgap=2, ygap=2, colorbar=list(title=list(text='<b>-log<sub>10</sub> (BH P-value)</b>'))) %>% 
+                                        layout(
+                                            margin=list(l=300, r=200, b=160), 
+                                            xaxis=list(title="<b>Annotation Clusters</b>", tickfont=list(size=9), tickangle=15), 
+                                            yaxis=list(title="<b>Input Sets</b>", type="category"),
+                                            plot_bgcolor="transparent",
+                                            paper_bgcolor="transparent",
+                                            font=list(color=theme$textcolor)
+                                        )
+                                    )
                                 )
                             ),
                             tabPanel("Cluster Network", 
@@ -4332,6 +4546,298 @@ shinyServer(function(input, output, session) {
                     )
                 )
             )
+            
+            # Observers for chart/cluster heatmap color selectors
+            observeEvent(input$lHeatmapColorControl__Chart, {
+                lHeatmapColorChart$color <- input$lHeatmapColorControl__Chart
+                # Display heatmap/network panels
+                output[["chartHeatmap"]] <- renderUI(
+                    fluidRow(
+                        column(12,
+                            tabsetPanel(
+                                tabPanel("Chart Heatmap", 
+                                    div(
+                                        column(1, 
+                                            radioButtons(inputId=paste0("lHeatmapColorControl__Chart"), label="Select 0 color for heatmap:", choices=c("white", "gray", "black", "red", "blue", "yellow", "green", "brown", "purple", "orange"), selected=lHeatmapColorChart$color),
+                                        ),
+                                        column(1,
+                                            radioButtons(inputId=paste0("hHeatmapColorControl__Chart"), label="Select 1 color for heatmap:", choices=c("white", "gray", "black", "red", "blue", "yellow", "green", "brown", "purple", "orange"), selected=hHeatmapColorChart$color)
+                                        ),
+                                        column(10,
+                                            plot_ly(x=gctCASRNNamesChart, y=gctAnnoNamesChart, z=gctFileChartMatrix, colors=colorRamp(c(lHeatmapColorChart$color, hHeatmapColorChart$color)), type="heatmap", xgap=2, ygap=2, colorbar=list(title=list(text='<b>-log<sub>10</sub> (BH P-value)</b>'))) %>% 
+                                            layout(
+                                                margin=list(l=300, r=200, b=160), 
+                                                xaxis=list(title="<b>Annotations</b>", tickfont=list(size=9), tickangle=15), 
+                                                yaxis=list(title="<b>Input Sets</b>", type="category"),
+                                                plot_bgcolor="transparent",
+                                                paper_bgcolor="transparent",
+                                                font=list(color=theme$textcolor)
+                                            )
+                                        )
+                                    )
+                                ), 
+                                tabPanel("Chart Network", 
+                                    fluidRow(
+                                        column(3, 
+                                            h4("Edge Selection Criteria"),
+                                            numericInput(inputId="chartqval", label="q-value", value=0.05, step=0.01, max=1.00, min=0.01),
+                                            checkboxGroupInput(label="Selected Input Sets", inputId="chartNetworkChoices", choices=names(enrichmentSets), selected=names(enrichmentSets)),
+                                            checkboxGroupInput(label="Selected Annotation Classes", inputId="chartNetworkClasses", choices=chartClasses, selected=chartClasses),
+                                            HTML("<h5><b>Other Options</b></h5>"),
+                                            checkboxInput(inputId="physicsEnabledChart", label="Enable physics?", value=FALSE),
+                                            checkboxInput(inputId="smoothCurveChart", label="Smooth curve for edges?", value=TRUE),
+                                            actionButton(inputId="chartNetworkUpdateButton", label="Update network"),
+                                            h4("More Information for Selected Annotation"),
+                                            HTML("<p>Click on any <b>node</b> to view additional information for the annotation in the selected node.</p>"),
+                                            h4("Overlapping Chemicals"),
+                                            HTML("<p>Click on any <b>edge</b> to view a Venn diagram of the chemicals associated with the annotations in its two nodes.</p>"),
+                                        ), 
+                                        column(9,
+                                            uiOutput("chartNetwork") %>% withSpinner()
+                                        )
+                                    ),
+                                    hidden(
+                                        fluidRow(id="nodeLinkChartMenu",
+                                            column(12, 
+                                                uiOutput("nodeLinkChart")
+                                            )
+                                        )
+                                    ),
+                                    hidden(
+                                        fluidRow(id="vennChartMenu",
+                                            column(4,
+                                                uiOutput("vennChartButtons")
+                                            ),
+                                            column(8,
+                                                plotOutput(
+                                                    outputId="vennChart"
+                                                ) %>% withSpinner()
+                                            )
+                                        )
+                                    )
+                                )
+                            )
+                        )
+                    )
+                )
+            })
+            
+            # Observers for chart/cluster heatmap color selectors
+            observeEvent(input$hHeatmapColorControl__Cluster, {
+                hHeatmapColorCluster$color <- input$hHeatmapColorControl__Cluster
+                # Display heatmap/network panels
+                output[["clusterHeatmap"]] <- renderUI(
+                    fluidRow(
+                        column(12,
+                            tabsetPanel(
+                                tabPanel("Cluster Heatmap", 
+                                    div(
+                                        column(1, 
+                                            radioButtons(inputId=paste0("lHeatmapColorControl__Cluster"), label="Select 0 color for heatmap:", choices=c("white", "gray", "black", "red", "blue", "yellow", "green", "brown", "purple", "orange"), selected=lHeatmapColorCluster$color),
+                                        ),
+                                        column(1,
+                                            radioButtons(inputId=paste0("hHeatmapColorControl__Cluster"), label="Select 1 color for heatmap:", choices=c("white", "gray", "black", "red", "blue", "yellow", "green", "brown", "purple", "orange"), selected=hHeatmapColorCluster$color)
+                                        ),
+                                        column(10,
+                                            plot_ly(x=gctCASRNNamesCluster, y=gctAnnoNamesCluster, z=gctFileClusterMatrix, colors=colorRamp(c(lHeatmapColorCluster$color, hHeatmapColorCluster$color)), type="heatmap", xgap=2, ygap=2, colorbar=list(title=list(text='<b>-log<sub>10</sub> (BH P-value)</b>'))) %>% 
+                                            layout(
+                                                margin=list(l=300, r=200, b=160), 
+                                                xaxis=list(title="<b>Annotation Clusters</b>", tickfont=list(size=9), tickangle=15), 
+                                                yaxis=list(title="<b>Input Sets</b>", type="category"),
+                                                plot_bgcolor="transparent",
+                                                paper_bgcolor="transparent",
+                                                font=list(color=theme$textcolor)
+                                            )
+                                        )
+                                    )
+                                ),
+                                tabPanel("Cluster Network", 
+                                    fluidRow(
+                                        column(3, 
+                                            h4("Edge Selection Criteria"),
+                                            numericInput(inputId="clusterqval", label="q-value", value=0.05, step=0.01, max=1.00, min=0.01),
+                                            checkboxGroupInput( label="Selected Input Sets", inputId="clusterNetworkChoices", choices=names(enrichmentSets), selected=names(enrichmentSets) ),
+                                            checkboxGroupInput( label="Selected Annotation Classes", inputId="clusterNetworkClasses", choices=clusterClasses, selected=clusterClasses ),
+                                            HTML("<h5><b>Other Options</b></h5>"),
+                                            checkboxInput(inputId="physicsEnabledCluster", label="Enable physics?", value=FALSE),
+                                            checkboxInput(inputId="smoothCurveCluster", label="Smooth curve for edges?", value=TRUE),
+                                            actionButton(inputId="clusterNetworkUpdateButton", label="Update network"),
+                                        ), 
+                                        column(9,
+                                            uiOutput("clusterNetwork") %>% withSpinner()
+                                        )
+                                    ),
+                                    hidden(
+                                        fluidRow(id="nodeLinkClusterMenu",
+                                            column(12, 
+                                                uiOutput("nodeLinkCluster")
+                                            )
+                                        )
+                                    ),
+                                    hidden(
+                                        fluidRow(id="vennClusterMenu",
+                                            column(4,
+                                                uiOutput("vennClusterButtons")
+                                            ),
+                                            column(8,
+                                                plotOutput(
+                                                    outputId="vennCluster"
+                                                ) %>% withSpinner()
+                                            )
+                                        )
+                                    )
+                                )
+                            )
+                        )
+                    )
+                )
+            })
+            
+            observeEvent(input$lHeatmapColorControl__Cluster, {
+                lHeatmapColorCluster$color <- input$lHeatmapColorControl__Cluster
+                # Display heatmap/network panels
+                output[["clusterHeatmap"]] <- renderUI(
+                    fluidRow(
+                        column(12,
+                            tabsetPanel(
+                                tabPanel("Cluster Heatmap", 
+                                    div(
+                                        column(1, 
+                                            radioButtons(inputId=paste0("lHeatmapColorControl__Cluster"), label="Select 0 color for heatmap:", choices=c("white", "gray", "black", "red", "blue", "yellow", "green", "brown", "purple", "orange"), selected=lHeatmapColorCluster$color),
+                                        ),
+                                        column(1,
+                                            radioButtons(inputId=paste0("hHeatmapColorControl__Cluster"), label="Select 1 color for heatmap:", choices=c("white", "gray", "black", "red", "blue", "yellow", "green", "brown", "purple", "orange"), selected=hHeatmapColorCluster$color)
+                                        ),
+                                        column(10,
+                                            plot_ly(x=gctCASRNNamesCluster, y=gctAnnoNamesCluster, z=gctFileClusterMatrix, colors=colorRamp(c(lHeatmapColorCluster$color, hHeatmapColorCluster$color)), type="heatmap", xgap=2, ygap=2, colorbar=list(title=list(text='<b>-log<sub>10</sub> (BH P-value)</b>'))) %>% 
+                                            layout(
+                                                margin=list(l=300, r=200, b=160), 
+                                                xaxis=list(title="<b>Annotation Clusters</b>", tickfont=list(size=9), tickangle=15), 
+                                                yaxis=list(title="<b>Input Sets</b>", type="category"),
+                                                plot_bgcolor="transparent",
+                                                paper_bgcolor="transparent",
+                                                font=list(color=theme$textcolor)
+                                            )
+                                        )
+                                    )
+                                ),
+                                tabPanel("Cluster Network", 
+                                    fluidRow(
+                                        column(3, 
+                                            h4("Edge Selection Criteria"),
+                                            numericInput(inputId="clusterqval", label="q-value", value=0.05, step=0.01, max=1.00, min=0.01),
+                                            checkboxGroupInput( label="Selected Input Sets", inputId="clusterNetworkChoices", choices=names(enrichmentSets), selected=names(enrichmentSets) ),
+                                            checkboxGroupInput( label="Selected Annotation Classes", inputId="clusterNetworkClasses", choices=clusterClasses, selected=clusterClasses ),
+                                            HTML("<h5><b>Other Options</b></h5>"),
+                                            checkboxInput(inputId="physicsEnabledCluster", label="Enable physics?", value=FALSE),
+                                            checkboxInput(inputId="smoothCurveCluster", label="Smooth curve for edges?", value=TRUE),
+                                            actionButton(inputId="clusterNetworkUpdateButton", label="Update network"),
+                                        ), 
+                                        column(9,
+                                            uiOutput("clusterNetwork") %>% withSpinner()
+                                        )
+                                    ),
+                                    hidden(
+                                        fluidRow(id="nodeLinkClusterMenu",
+                                            column(12, 
+                                                uiOutput("nodeLinkCluster")
+                                            )
+                                        )
+                                    ),
+                                    hidden(
+                                        fluidRow(id="vennClusterMenu",
+                                            column(4,
+                                                uiOutput("vennClusterButtons")
+                                            ),
+                                            column(8,
+                                                plotOutput(
+                                                    outputId="vennCluster"
+                                                ) %>% withSpinner()
+                                            )
+                                        )
+                                    )
+                                )
+                            )
+                        )
+                    )
+                )
+            })
+            
+            # Observers for chart/cluster heatmap color selectors
+            observeEvent(input$hHeatmapColorControl__Chart, {
+              hHeatmapColorChart$color <- input$hHeatmapColorControl__Chart
+              # Display heatmap/network panels
+              output[["chartHeatmap"]] <- renderUI(
+                fluidRow(
+                  column(12,
+                         tabsetPanel(
+                           tabPanel("Chart Heatmap", 
+                                    div(
+                                      column(1, 
+                                             radioButtons(inputId=paste0("lHeatmapColorControl__Chart"), label="Select 0 color for heatmap:", choices=c("white", "gray", "black", "red", "blue", "yellow", "green", "brown", "purple", "orange"), selected=lHeatmapColorChart$color),
+                                      ),
+                                      column(1,
+                                             radioButtons(inputId=paste0("hHeatmapColorControl__Chart"), label="Select 1 color for heatmap:", choices=c("white", "gray", "black", "red", "blue", "yellow", "green", "brown", "purple", "orange"), selected=hHeatmapColorChart$color)
+                                      ),
+                                      column(10,
+                                             plot_ly(x=gctCASRNNamesChart, y=gctAnnoNamesChart, z=gctFileChartMatrix, colors=colorRamp(c(lHeatmapColorChart$color, hHeatmapColorChart$color)), type="heatmap", xgap=2, ygap=2, colorbar=list(title=list(text='<b>-log<sub>10</sub> (BH P-value)</b>'))) %>% 
+                                               layout(
+                                                 margin=list(l=300, r=200, b=160), 
+                                                 xaxis=list(title="<b>Annotations</b>", tickfont=list(size=9), tickangle=15), 
+                                                 yaxis=list(title="<b>Input Sets</b>", type="category"),
+                                                 plot_bgcolor="transparent",
+                                                 paper_bgcolor="transparent",
+                                                 font=list(color=theme$textcolor)
+                                               )
+                                      )
+                                    )
+                           ), 
+                           tabPanel("Chart Network", 
+                                    fluidRow(
+                                      column(3, 
+                                             h4("Edge Selection Criteria"),
+                                             numericInput(inputId="chartqval", label="q-value", value=0.05, step=0.01, max=1.00, min=0.01),
+                                             checkboxGroupInput(label="Selected Input Sets", inputId="chartNetworkChoices", choices=names(enrichmentSets), selected=names(enrichmentSets)),
+                                             checkboxGroupInput(label="Selected Annotation Classes", inputId="chartNetworkClasses", choices=chartClasses, selected=chartClasses),
+                                             HTML("<h5><b>Other Options</b></h5>"),
+                                             checkboxInput(inputId="physicsEnabledChart", label="Enable physics?", value=FALSE),
+                                             checkboxInput(inputId="smoothCurveChart", label="Smooth curve for edges?", value=TRUE),
+                                             actionButton(inputId="chartNetworkUpdateButton", label="Update network"),
+                                             h4("More Information for Selected Annotation"),
+                                             HTML("<p>Click on any <b>node</b> to view additional information for the annotation in the selected node.</p>"),
+                                             h4("Overlapping Chemicals"),
+                                             HTML("<p>Click on any <b>edge</b> to view a Venn diagram of the chemicals associated with the annotations in its two nodes.</p>"),
+                                      ), 
+                                      column(9,
+                                             uiOutput("chartNetwork") %>% withSpinner()
+                                      )
+                                    ),
+                                    hidden(
+                                      fluidRow(id="nodeLinkChartMenu",
+                                               column(12, 
+                                                      uiOutput("nodeLinkChart")
+                                               )
+                                      )
+                                    ),
+                                    hidden(
+                                      fluidRow(id="vennChartMenu",
+                                               column(4,
+                                                      uiOutput("vennChartButtons")
+                                               ),
+                                               column(8,
+                                                      plotOutput(
+                                                        outputId="vennChart"
+                                                      ) %>% withSpinner()
+                                               )
+                                      )
+                                    )
+                           )
+                         )
+                  )
+                )
+              )
+            })
+            
             # Render networks in containers
             output$chartNetwork <- renderUI(chartFullNetwork)
             output$clusterNetwork <- renderUI(clusterFullNetwork)
@@ -5340,7 +5846,7 @@ shinyServer(function(input, output, session) {
                                 style="bootstrap",
                                 select="none",
                                 options=list( 
-                                    paging=TRUE,
+                                    paging=FALSE,
                                     dom="Bfrtip",
                                     pageLength=10,
                                     buttons=list("copy", "csv", "excel", "pdf", "print")
@@ -5445,22 +5951,47 @@ shinyServer(function(input, output, session) {
         loadEnrichList()
     })
     
-    # Set initial theme upon load
-    if(!file.exists(paste0(localDir, "theme-dark")) & !file.exists(paste0(localDir, "theme-light"))){
-        js$initDarkTheme("default") # Set dark theme as default if preferred by user's browser
-    } else if (file.exists(paste0(localDir, "theme-dark")) & !file.exists(paste0(localDir, "theme-light"))) {
-        js$initDarkTheme("dark") # Set theme to dark if last checked
-    } else {
-        js$initDarkTheme("light") # Set theme to light if last checked
-    }
-    observeEvent(input$initDarkTheme, {
-        if(!is.null(input$initDarkTheme)){
-            if(input$initDarkTheme == TRUE & !file.exists(paste0(localDir, "theme-light"))){
-                updateCheckboxInput(session, "changeThemeToggle", value=TRUE)
+    # Check default theme value
+    js$checkDefaultTheme()
+    observeEvent(input$defaultTheme, {
+        if(!is.null(input$defaultTheme)){
+            if(input$defaultTheme == 'dark'){
+                js$saveSessionTheme('dark')
             } else {
-                updateCheckboxInput(session, "changeThemeToggle", value=FALSE)
+                js$saveSessionTheme('light')
+            }
+        } else {
+            js$saveSessionTheme('light')
+        }
+    }, ignoreInit=TRUE, ignoreNULL=FALSE)
+    
+    js$getSessionTheme()
+    js$getSessionThemePreferred()
+    # First find the user's default theme and set
+    observeEvent(input$sessionTheme, {
+        # first, check if theme was set to preferred:
+        if(!is.null(input$sessionThemePref)){
+            if(input$sessionThemePref == "light"){
+                js$initDarkTheme("light")
+                theme$textcolor="#000000"
+                updateRadioButtons(session, "changeThemeToggle", selected="Light")
+            } else if (input$sessionThemePref == "dark"){
+                js$initDarkTheme("dark")
+                theme$textcolor="#FFFFFF"
+                updateRadioButtons(session, "changeThemeToggle", selected="Dark")
+            } else {
+                if(!is.null(input$sessionTheme)){
+                    js$initDarkTheme("default") # Set dark theme as default if preferred by user's browser
+                    if(input$sessionTheme == "dark"){
+                        theme$textcolor="#FFFFFF"
+                        updateRadioButtons(session, "changeThemeToggle", selected="Auto")
+                    } else if(input$sessionTheme == "light"){
+                        theme$textcolor="#000000"
+                        updateRadioButtons(session, "changeThemeToggle", selected="Auto")
+                    }
+                }
             }
         }
-    }, ignoreInit=FALSE, ignoreNULL=TRUE)
+    }, ignoreInit=TRUE, ignoreNULL=FALSE)
 })
 

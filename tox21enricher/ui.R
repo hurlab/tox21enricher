@@ -62,7 +62,7 @@ js_session <- "
             }
         }
         if(prevSessionId.length > 0){
-            Shiny.onInputChange('prevSessionId', prevSessionId);
+            Shiny.setInputValue('prevSessionId', prevSessionId);
         }
     }
     shinyjs.clearSession=function(params){
@@ -92,7 +92,7 @@ js_session <- "
                 hostInfo = tmpSplit[1];
             }
         }
-        Shiny.onInputChange('hostInfo', hostInfo);
+        Shiny.setInputValue('hostInfo', hostInfo);
     }
     shinyjs.clearHostInfo=function(){
         // delete cookie for previous session
@@ -104,8 +104,61 @@ js_session <- "
 "
 # Theme toggle js
 # vvv solution from here: https://stackoverflow.com/questions/61632272/r-shiny-light-dark-mode-switch vvv
-js_theme <-  "
+js_theme <- "
+    shinyjs.saveSessionTheme=function(params){
+        theme = params[0];
+        // save cookie
+        document.cookie = 'sessiontheme=' + theme + '; expires=' + 'Fri, 31 Dec 9999 23:59:59 GMT' + '; path=/; SameSite=Strict; Secure';
+    }
+    
+    shinyjs.saveSessionThemePreferred=function(params){
+        theme = params[0];
+        // save cookie
+        document.cookie = 'prefsessiontheme=' + theme + '; expires=' + 'Fri, 31 Dec 9999 23:59:59 GMT' + '; path=/; SameSite=Strict; Secure';
+    }
+    
+    shinyjs.getSessionTheme=function(){
+        // get cookie storing transaction ID if it exists
+        var sessionTheme = '';
+        var cookieList = document.cookie.split(';');
+        for(var i=0; i < cookieList.length; i++){
+            var tmp = cookieList[i].trim();
+            var tmpSplit = tmp.split('=');
+            if(tmpSplit[0].startsWith('sessiontheme')) {
+                sessionTheme = (tmpSplit[1]);
+            }
+        }
+        if(sessionTheme.length > 0){
+            Shiny.setInputValue('sessionTheme', sessionTheme);
+        }
+    }
+    
+    shinyjs.getSessionThemePreferred=function(){
+        // get cookie storing transaction ID if it exists
+        var sessionTheme = '';
+        var cookieList = document.cookie.split(';');
+        for(var i=0; i < cookieList.length; i++){
+            var tmp = cookieList[i].trim();
+            var tmpSplit = tmp.split('=');
+            if(tmpSplit[0].startsWith('prefsessiontheme')) {
+                sessionTheme = (tmpSplit[1]);
+            }
+        }
+        if(sessionTheme.length > 0){
+            Shiny.setInputValue('sessionThemePref', sessionTheme);
+        }
+    }
+
     shinyjs.init=function() {
+    
+        if (window.matchMedia('(prefers-color-scheme)').media !== 'not all') {  
+            if (window.matchMedia('(prefers-color-scheme: dark)').matches === true) {
+                Shiny.setInputValue('defaultTheme', 'dark');
+            } else { // light theme
+                Shiny.setInputValue('defaultTheme', 'light');
+            }
+        }
+    
         // define css theme filepaths
         const themes={
             dark: 'css/tox21enricher-dark.css',
@@ -155,6 +208,16 @@ js_theme <-  "
         })
     }
     
+    shinyjs.checkDefaultTheme=function() {
+        if (window.matchMedia('(prefers-color-scheme)').media !== 'not all') {
+            if (window.matchMedia('(prefers-color-scheme: dark)').matches === true) {
+                Shiny.setInputValue('defaultTheme', 'dark');
+            } else { // light theme
+                Shiny.setInputValue('defaultTheme', 'light');
+            }
+        }
+    }
+    
     shinyjs.initDarkTheme=function(params) {
         // detect user theme and change to dark theme if enabled
         // define css theme filepaths
@@ -197,24 +260,20 @@ js_theme <-  "
                     removeLink(themes.light);
                     head.appendChild(extraDarkThemeElement);
                     head.appendChild(darkTheme);
-                    Shiny.onInputChange('initDarkTheme', 'TRUE');
                 } else { // light theme
                     removeLink(themes.dark);
                     head.removeChild(extraDarkThemeElement);
                     head.appendChild(lightTheme);
-                    Shiny.onInputChange('initDarkTheme', 'FALSE');
                 }
             }
         } else if (params == 'dark') { // forced dark
             removeLink(themes.light);
             head.appendChild(extraDarkThemeElement);
             head.appendChild(darkTheme);
-            Shiny.onInputChange('initDarkTheme', 'TRUE');
         } else { // forced light
             removeLink(themes.dark);
             head.removeChild(extraDarkThemeElement);
             head.appendChild(lightTheme);
-            Shiny.onInputChange('initDarkTheme', 'FALSE');
         }
     }
 "
@@ -223,9 +282,6 @@ js_theme <-  "
 shinyUI(function(){
     # Get theme to load on start
     themeInit <- "css/tox21enricher-light.css"
-    if(file.exists("./www/local/theme-dark") & !file.exists("./www/local/theme-light-override")){
-        themeInit <- "css/tox21enricher-dark.css"
-    }
     fluidPage(
         # Theme
         theme=themeInit,
@@ -242,9 +298,9 @@ shinyUI(function(){
                 id="sidebar",
                 width=2,
                 style="position:fixed; overflow:visible; width:15%; height:600px; z-index:9999; overflow-y:scroll;",
-                useShinyjs(),
                 # Define JS for theme changing and host config
-                extendShinyjs(text=js_theme, functions=c('init', 'initDarkTheme')),
+                useShinyjs(),
+                extendShinyjs(text=js_theme, functions=c('init', 'initDarkTheme', 'saveSessionTheme', 'getSessionTheme', 'checkDefaultTheme', 'saveSessionThemePreferred', 'getSessionThemePreferred')),
                 extendShinyjs(text=js_cbx, functions=c('check', 'uncheck')),
                 extendShinyjs(text=js_session, functions=c('saveSession', 'getSession', 'clearSession', 'saveHostInfo', 'getHostInfo', 'clearHostInfo')),
                 p("Welcome to Tox21 Enricher! Please see this ", downloadLink(outputId="manualLink", label="link"), "for instructions on using this application and the descriptions about the chemical / biological categories. Other resources from the Tox21 toolbox can be viewed", tags$a(href="https://ntp.niehs.nih.gov/results/tox21/tbox/", "here."), "A sufficiently robust internet connection and JavaScript are required to use all of this application's features."),
@@ -259,8 +315,8 @@ shinyUI(function(){
                 },
                 # Search enrichments button
                 actionButton(inputId="searchButton", label="View previous results", icon=icon("search")),
-                # Theme toggle
-                checkboxInput(inputId="changeThemeToggle", label=HTML(paste0(icon("moon"), " Dark theme"))),
+                # Theme toggle - TODO: disabled until this is resolved
+                radioButtons(inputId="changeThemeToggle", label="Theme", choices=list("Auto", "Light", "Dark")),
                 uiOutput("themeStatus"),
                 hidden(
                     actionButton("refresh", "Start over", icon=icon("undo"))
