@@ -563,7 +563,7 @@ shinyServer(function(input, output, session) {
                 
                 # Include copy ID buttons for each UUID
                 prevSavedSessionsList <- unlist(lapply(prevSavedSessionsList, function(x){
-                    uuidWithButton <- HTML(paste0(x, "<br>", rclipButton(paste0("copyUUIDButtonPrev__", x), "Copy UUID to clipboard", x, icon("clipboard"))))
+                    uuidWithButton <- HTML(paste0(x, "<br>", rclipButton(paste0("copyUUIDButtonPrev__", x), HTML(paste0(icon("clipboard"), " Copy UUID to clipboard")), x)))
                     # Display confirmation message when copy UUID button is pressed
                     observeEvent(input[[paste0("copyUUIDButtonPrev__", x)]], {
                         showNotification(paste0("UUID copied!"), type="message")
@@ -1543,7 +1543,7 @@ shinyServer(function(input, output, session) {
     
     # Copies transaction ID to user's clipboard
     output$clipboard <- renderUI({
-        rclipButton("copyUUIDButton", "Copy UUID to clipboard", reactiveTransactionId$id, icon("clipboard"))
+        rclipButton("copyUUIDButton", HTML(paste0(icon("clipboard"), " Copy UUID to clipboard")), reactiveTransactionId$id)
     })
     # Display confirmation message when copy UUID button is pressed
     observeEvent(input$copyUUIDButton, {
@@ -5201,8 +5201,6 @@ shinyServer(function(input, output, session) {
         networkFullNodes <- networkFullNodes[!duplicated(networkFullNodes), ]
         # Remove nodes if their class is not in the "keep" list
         networkFullNodes <- networkFullNodes[complete.cases(networkFullNodes), ]
-        # Remove anything with missing information
-        networkFullNodes <- networkFullNodes %>% filter(networkFullNodes != "")
         # Generate list of edges for network
         networkFullEdges <- t(vapply(seq_len(nrow(outpNetwork)), function(p){
             if( (outpNetwork[[p, "class1"]] %in% keep) & (outpNetwork[[p, "class2"]] %in% keep) ){
@@ -5220,8 +5218,6 @@ shinyServer(function(input, output, session) {
         colnames(networkFullEdges) <- list("from", "to", "jaccard", "color", "id")
         # Remove edges if either node's class is not in the "keep" list
         networkFullEdges <- networkFullEdges[complete.cases(networkFullEdges), ]
-        # Remove anything with missing information
-        networkFullEdges <- networkFullEdges %>% filter(networkFullEdges != "")
         fullNetwork <- visNetwork(networkFullNodes, networkFullEdges, height="500px", width="100%") %>%
             visOptions(highlightNearest=TRUE, nodesIdSelection=TRUE, selectedBy=list(variable="group", multiple=TRUE)) %>%
             visLayout(randomSeed=runif(1)) %>%
@@ -5462,7 +5458,7 @@ shinyServer(function(input, output, session) {
                     showModal(
                         modalDialog(
                             title=paste0("Chemicals for ", termFrom),
-                            footer=div(rclipButton("clipboardChartFrom", "Copy chemical list to clipboard (comma-separated)", paste0(casrnsFrom, collapse=","), icon("clipboard"), modal=TRUE), actionButton(inputId="vennFromButtonCloseChart", label="Close")),
+                            footer=div(rclipButton("clipboardChartFrom", HTML(paste0(icon("clipboard"), " Copy chemical list to clipboard (comma-separated)")), paste0(casrnsFrom, collapse=","), modal=TRUE), actionButton(inputId="vennFromButtonCloseChart", label="Close")),
                             size="l",
                             fluidRow(
                                 column(12, 
@@ -5483,7 +5479,7 @@ shinyServer(function(input, output, session) {
                     showModal(
                         modalDialog(
                             title=paste0("Chemicals for ", termTo),
-                            footer=div(rclipButton("clipboardChartTo", "Copy chemical list to clipboard (comma-separated)", paste0(casrnsTo, collapse=","), icon("clipboard"), modal=TRUE), actionButton(inputId="vennToButtonCloseChart", label="Close")),
+                            footer=div(rclipButton("clipboardChartTo", HTML(paste0(icon("clipboard"), " Copy chemical list to clipboard (comma-separated)")), paste0(casrnsTo, collapse=","), modal=TRUE), actionButton(inputId="vennToButtonCloseChart", label="Close")),
                             size="l",
                             fluidRow(
                                 column(12, 
@@ -5504,7 +5500,7 @@ shinyServer(function(input, output, session) {
                     showModal(
                         modalDialog(
                             title=paste0("Shared chemicals"),
-                            footer=div(rclipButton("clipboardChartShared", "Copy chemical list to clipboard (comma-separated)", paste0(casrnsShared, collapse=","), icon("clipboard"), modal=TRUE), actionButton(inputId="vennSharedButtonCloseChart", label="Close")),
+                            footer=div(rclipButton("clipboardChartShared", HTML(paste0(icon("clipboard"), " Copy chemical list to clipboard (comma-separated)")), paste0(casrnsShared, collapse=","), modal=TRUE), actionButton(inputId="vennSharedButtonCloseChart", label="Close")),
                             size="l",
                             fluidRow(
                                 column(12, 
@@ -5568,7 +5564,7 @@ shinyServer(function(input, output, session) {
                     showModal(
                         modalDialog(
                             title=paste0("Chemicals for ", termFrom),
-                            footer=div(rclipButton("clipboardClusterFrom", "Copy chemical list to clipboard (comma-separated)", paste0(casrnsFrom, collapse=","), icon("clipboard"), modal=TRUE), actionButton(inputId="vennFromButtonCloseCluster", label="Close")),
+                            footer=div(rclipButton("clipboardClusterFrom", HTML(paste0(icon("clipboard"), " Copy chemical list to clipboard (comma-separated)")), paste0(casrnsFrom, collapse=","), modal=TRUE), actionButton(inputId="vennFromButtonCloseCluster", label="Close")),
                             size="l",
                             fluidRow(
                                 column(12, 
@@ -5589,7 +5585,7 @@ shinyServer(function(input, output, session) {
                     showModal(
                         modalDialog(
                             title=paste0("Chemicals for ", termTo),
-                            footer=div(rclipButton("clipboardClusterTo", "Copy chemical list to clipboard (comma-separated)", paste0(casrnsTo, collapse=","), icon("clipboard"), modal=TRUE), actionButton(inputId="vennToButtonCloseCluster", label="Close")),
+                            footer=div(rclipButton("clipboardClusterTo", HTML(paste0(icon("clipboard"), " Copy chemical list to clipboard (comma-separated)")), paste0(casrnsTo, collapse=","), modal=TRUE), actionButton(inputId="vennToButtonCloseCluster", label="Close")),
                             size="l",
                             fluidRow(
                                 column(12, 
@@ -5610,7 +5606,7 @@ shinyServer(function(input, output, session) {
                     showModal(
                         modalDialog(
                             title=paste0("Shared chemicals"),
-                            footer=div(rclipButton("clipboardClusterShared", "Copy chemical list to clipboard (comma-separated)", paste0(casrnsShared, collapse=","), icon("clipboard"), modal=TRUE), actionButton(inputId="vennSharedButtonCloseCluster", label="Close")),
+                            footer=div(rclipButton("clipboardClusterShared", HTML(paste0(icon("clipboard"), " Copy chemical list to clipboard (comma-separated)")), paste0(casrnsShared, collapse=","), modal=TRUE), actionButton(inputId="vennSharedButtonCloseCluster", label="Close")),
                             size="l",
                             fluidRow(
                                 column(12, 
@@ -5859,6 +5855,17 @@ shinyServer(function(input, output, session) {
             })))
         )
     }
+    
+    # Confirmation messages for Venn diagram copy buttons
+    observeEvent(input$clipboardChartFrom, {
+        showNotification(paste0("UUID copied!"), type="message")
+    }, ignoreNULL=TRUE, ignoreInit=TRUE)
+    observeEvent(input$clipboardChartTo, {
+        showNotification(paste0("UUID copied!"), type="message")
+    }, ignoreNULL=TRUE, ignoreInit=TRUE)
+    observeEvent(input$clipboardChartShared, {
+        showNotification(paste0("UUID copied!"), type="message")
+    }, ignoreNULL=TRUE, ignoreInit=TRUE)
 
     # Perform re-enrichment on selected result chemicals
     observeEvent(input$reenrichButton, {
