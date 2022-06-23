@@ -1049,10 +1049,14 @@ shinyServer(function(input, output, session) {
         } else if (input$changeThemeToggle == "Auto") { # auto
             js$saveSessionThemePreferred("auto")
             js$initDarkTheme("default")
-            if(input$sessionTheme == "dark"){
-                theme$textcolor="#FFFFFF"
-            } else if(input$sessionTheme == "light"){
+            if(is.null(input$sessionTheme)){
                 theme$textcolor="#000000"
+            } else {
+                if(input$sessionTheme == "dark"){
+                    theme$textcolor="#FFFFFF"
+                } else if(input$sessionTheme == "light"){
+                    theme$textcolor="#000000"
+                }
             }
         }
         # Fix for DT::DataTable labels showing up as the wrong color
@@ -1564,7 +1568,6 @@ shinyServer(function(input, output, session) {
         totalEnrichmentCount$count <- getEnrichmentCount() # Get new total count
         shinyjs::reset(id="enrichmentForm")
         shinyjs::reset(id="resultsContainer")
-        shinyjs::reset(id="sidebar")
         shinyjs::reset(id="apiConnection")
         shinyjs::reset(id="totalEnrichments")
         shinyjs::reset(id="select_all_annotations")
@@ -2869,7 +2872,7 @@ shinyServer(function(input, output, session) {
                             layout(
                                 autosize=TRUE,
                                 showlegend=FALSE,
-                                xaxis=list(title="<b>Input CASRNs</b>", automargin=TRUE),
+                                xaxis=list(title="<b>Input CASRNs</b>", automargin=TRUE, type="category"),
                                 yaxis=list(title="<b>Annotations</b>", tickfont=list(size=9), tickangle=15, type="category", automargin=TRUE),
                                 plot_bgcolor="transparent",
                                 paper_bgcolor="transparent",

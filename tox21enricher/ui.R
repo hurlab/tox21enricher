@@ -150,7 +150,6 @@ js_theme <- "
     }
 
     shinyjs.init=function() {
-    
         if (window.matchMedia('(prefers-color-scheme)').media !== 'not all') {  
             if (window.matchMedia('(prefers-color-scheme: dark)').matches === true) {
                 Shiny.setInputValue('defaultTheme', 'dark');
