@@ -642,7 +642,7 @@ shinyServer(function(input, output, session) {
                             }
                             # Set reactive UUID for this query
                             reactiveTransactionId$id <- transactionId
-                            # Check if request has been cancelled - if so, display error message
+                            # Check if request has been canceled - if so, display error message
                             resp <- GET(url=paste0(API_PROTOCOL, API_ADDR, "/isCancel"), query=list(transactionId=transactionId))
                             if(resp$status_code != 200) {
                                 showNotification(paste0("Error: Could not fetch data for this transaction."), type="error")
@@ -2406,7 +2406,7 @@ shinyServer(function(input, output, session) {
         changePage(page="enrichment")
         # Clear cookie storing this session
         js$clearSession(reactiveTransactionId$id)
-        showNotification("Request cancelled.", type="message")
+        showNotification("Request canceled.", type="message")
         return(FALSE)
     })
     
