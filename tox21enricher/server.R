@@ -242,12 +242,12 @@ shinyServer(function(input, output, session) {
             pingAPIUserConfig <- tryCatch({
                 resp <- GET(url=paste0(API_PROTOCOL, API_ADDR, "/ping"))
                 if(resp$status_code != 200) {
-                    showNotification("Error: Could not connect to Tox21 Enricher server using user-defined settings. Defaulting to use configuration file settings.", type="warning")
+                    showNotification("Error: Could not connect to Tox21Enricher server using user-defined settings. Defaulting to use configuration file settings.", type="warning")
                     API_HOST <<- tox21config$host
                     API_PORT <<- tox21config$port
                 } 
             }, error=function(cond){
-                showNotification("Error: Could not connect to Tox21 Enricher server using user-defined settings. Defaulting to use configuration file settings.", type="warning")
+                showNotification("Error: Could not connect to Tox21Enricher server using user-defined settings. Defaulting to use configuration file settings.", type="warning")
                 API_HOST <<- tox21config$host
                 API_PORT <<- tox21config$port
             })
@@ -260,24 +260,24 @@ shinyServer(function(input, output, session) {
             resp <- GET(url=paste0(API_PROTOCOL, API_ADDR, "/ping"))
             if(resp$status_code != 200) {
                 output$apiConnection <- renderUI({
-                    HTML(paste0("<div class=\"text-danger\">Could not connect to Tox21 Enricher server!</div>"))
+                    HTML(paste0("<div class=\"text-danger\">Could not connect to Tox21Enricher server!</div>"))
                 })
                 return(FALSE)
             } else {
                 output$apiConnection <- renderUI({
-                    HTML(paste0("<div class=\"text-success\">Connection with Tox21 Enricher server successfully established.</div>"))
+                    HTML(paste0("<div class=\"text-success\">Connection with Tox21Enricher server successfully established.</div>"))
                 })
                 return(TRUE)
             } 
         }, error=function(cond){
             output$apiConnection <- renderUI({
-                HTML(paste0("<div class=\"text-danger\">Could not connect to Tox21 Enricher server!</div>"))
+                HTML(paste0("<div class=\"text-danger\">Could not connect to Tox21Enricher server!</div>"))
             })
             return(FALSE)
         })
     }
     if(!apiStatus()){
-        showNotification(paste0("Could not connect to Tox21 Enricher server using defined connection settings. Please ensure your connection settings are correct and refresh the page to try again." ), id="autoretryNotification", duration=5, type="error")
+        showNotification(paste0("Could not connect to Tox21Enricher server using defined connection settings. Please ensure your connection settings are correct and refresh the page to try again." ), id="autoretryNotification", duration=5, type="error")
     }
     
     # Get cleanup time from server to save in cookie
@@ -303,7 +303,7 @@ shinyServer(function(input, output, session) {
                 column(12, 
                     h4("Change host"),
                     HTML(
-                        "<p>By default, Tox21 Enricher will attempt to connect to the host on the port defined in the config.yml file. To connect to a different host or on a different port,<br>
+                        "<p>By default, Tox21Enricher will attempt to connect to the host on the port defined in the config.yml file. To connect to a different host or on a different port,<br>
                         1) Update the host and port values here.<br>
                         2) Press the \"Update\" button, then the \"Close\" button to exit the settings menu.<br>
                         3) Reload the page.<br>
@@ -317,7 +317,7 @@ shinyServer(function(input, output, session) {
             )
         ))
     })
-    # Update address for Tox21 Enricher API with user-defined settings
+    # Update address for Tox21Enricher API with user-defined settings
     observeEvent(input$updateHostPort, {
         # display error if both fields are not specified
         if(nchar(input$hostUpdate) < 1 | nchar(input$portUpdate) < 1){
@@ -390,7 +390,7 @@ shinyServer(function(input, output, session) {
     # Display number of total enrichment requests performed
     output$totalEnrichments <- renderUI({
         totalEnrichmentCount$count <- getEnrichmentCount()
-        totalEnrichments <- HTML(paste0("<br>Total requests serviced by Tox21 Enricher this year: <b>", totalEnrichmentCount$count, "</b>"))
+        totalEnrichments <- HTML(paste0("<br>Total requests serviced by Tox21Enricher this year: <b>", totalEnrichmentCount$count, "</b>"))
         return(totalEnrichments)
     })
     
@@ -408,11 +408,11 @@ shinyServer(function(input, output, session) {
                 return(NULL)
             })
             if(is.null(tryManual)){
-                showNotification("Error: The application cannot connect to the Tox21 Enricher server. Please try again later.", type="error")
+                showNotification("Error: The application cannot connect to the Tox21Enricher server. Please try again later.", type="error")
                 return(FALSE)
             }
             appVersion <- content(resp)
-            # Next, check if we have previously downloaded the manual (Tox21 Enricher will cache previously-downloaded manuals). If yes, do nothing. If no, download the manual from the Plumber server
+            # Next, check if we have previously downloaded the manual (Tox21Enricher will cache previously-downloaded manuals). If yes, do nothing. If no, download the manual from the Plumber server
             # This should always get the most recent manual revision
             dir.create(paste0(tempdir(), "/docs/"))
             tryManualDL <- TRUE
@@ -425,7 +425,7 @@ shinyServer(function(input, output, session) {
                 })
             }
             if(is.null(tryManualDL)) {
-                showNotification("Error: The application cannot connect to the Tox21 Enricher server. Please try again later.", type="error")
+                showNotification("Error: The application cannot connect to the Tox21Enricher server. Please try again later.", type="error")
             } else {
                 file.copy(paste0(tempdir(), "/docs/Tox21Enricher_Manual_v", appVersion, ".pdf"), file) 
             }
@@ -459,7 +459,7 @@ shinyServer(function(input, output, session) {
                 return(FALSE)
             })
             if(!tryDelete){
-                showNotification("Error: The application cannot connect to the Tox21 Enricher server. Please try again later.", type="error")
+                showNotification("Error: The application cannot connect to the Tox21Enricher server. Please try again later.", type="error")
                 return(FALSE)
             } else {
                 deleteTime <- unlist(content(resp))
@@ -509,7 +509,7 @@ shinyServer(function(input, output, session) {
                         return(FALSE)
                     })
                     if(!tryInfo){
-                        showNotification("Error: The application cannot connect to the Tox21 Enricher server. Please try again later.", type="error")
+                        showNotification("Error: The application cannot connect to the Tox21Enricher server. Please try again later.", type="error")
                         return(FALSE)
                     } else {
                       if(length(content(resp)) > 0){
@@ -626,7 +626,7 @@ shinyServer(function(input, output, session) {
                             })
                             if(!tryPrevious){
                                 # error here
-                                showNotification("Error: The application cannot connect to the Tox21 Enricher server. Please try again later.", type="error")
+                                showNotification("Error: The application cannot connect to the Tox21Enricher server. Please try again later.", type="error")
                                 return(FALSE)
                             }
                             if(resp$status_code != 200 | content(resp) == -1){
@@ -636,7 +636,7 @@ shinyServer(function(input, output, session) {
                             } else {
                                 if(content(resp) == 0){
                                     #error here
-                                    showNotification("Error: The results for this request are missing on the Tox21 Enricher server. The request may not have completed yet, or it may have been deleted.", type="error")
+                                    showNotification("Error: The results for this request are missing on the Tox21Enricher server. The request may not have completed yet, or it may have been deleted.", type="error")
                                     return(FALSE)
                                 }
                             }
@@ -755,7 +755,7 @@ shinyServer(function(input, output, session) {
                                             return(FALSE)
                                         })
                                         if(!trySubstructure){
-                                            showNotification("Error: The application cannot connect to the Tox21 Enricher server. Please try again later.", type="error")
+                                            showNotification("Error: The application cannot connect to the Tox21Enricher server. Please try again later.", type="error")
                                             return(FALSE)
                                         }
                                         outputSubCasrns <- unlist(lapply(content(resp), function(x) x$casrn))
@@ -778,7 +778,7 @@ shinyServer(function(input, output, session) {
                                             return(FALSE)
                                         })
                                         if(!trySimilarity){
-                                            showNotification("Error: The application cannot connect to the Tox21 Enricher server. Please try again later.", type="error")
+                                            showNotification("Error: The application cannot connect to the Tox21Enricher server. Please try again later.", type="error")
                                             return(FALSE)
                                         }
                                         if(resp$status_code != 200){
@@ -876,7 +876,7 @@ shinyServer(function(input, output, session) {
                                 if(length(unlist(reenrichResults, recursive=FALSE)) < 1){
                                     changePage(page="enrichment")
                                     if(badConnectionFlag == TRUE){
-                                        showNotification("Error: The application cannot connect to the Tox21 Enricher server. Please try again later.", type="error")
+                                        showNotification("Error: The application cannot connect to the Tox21Enricher server. Please try again later.", type="error")
                                     } else {
                                         showNotification("Error: No valid input sets.", type="error")
                                     }
@@ -922,7 +922,7 @@ shinyServer(function(input, output, session) {
             return(FALSE)
         })
         if(!tryPrevious){
-            showNotification("Error: The application cannot connect to the Tox21 Enricher server. Please try again later.", type="error")
+            showNotification("Error: The application cannot connect to the Tox21Enricher server. Please try again later.", type="error")
             return(FALSE)
         } else {
             transactionTable <- data.frame(do.call(rbind, content(resp)), stringsAsFactors=FALSE)
@@ -952,7 +952,7 @@ shinyServer(function(input, output, session) {
         })
         if(!tryPrevious){
             # error here
-            showNotification("Error: The application cannot connect to the Tox21 Enricher server. Please try again later.", type="error")
+            showNotification("Error: The application cannot connect to the Tox21Enricher server. Please try again later.", type="error")
             return(FALSE)
         }
         if(resp$status_code != 200 | content(resp) == -1){
@@ -962,7 +962,7 @@ shinyServer(function(input, output, session) {
         } else {
             if(content(resp) == 0){
                 #error here
-                showNotification("Error: The results for this request are missing on the Tox21 Enricher server. The request may not have completed yet, or it may have been deleted.", type="error")
+                showNotification("Error: The results for this request are missing on the Tox21Enricher server. The request may not have completed yet, or it may have been deleted.", type="error")
                 return(FALSE)
             }
         }
@@ -1344,7 +1344,7 @@ shinyServer(function(input, output, session) {
             shinyjs::hide(id="tanimotoThreshold")
             shinyjs::disable(id="includeChemsWithWarnings")
             output[["inputInstructions"]] <- renderUI(
-                p("Enter the CASRNs for ", tags$a(href="https://comptox.epa.gov/dashboard/chemical_lists/TOX21SL", "chemicals in the Tox21 screening library"),  " (one per line) to view each of their associated annotations in Tox21 Enricher. Add \"#SetName\" before each set if using multiple sets at once. Set names may only be alphanumeric characters (A-Z, a-z, and 0-9) and spaces are ignored.")
+                p("Enter the CASRNs for ", tags$a(href="https://comptox.epa.gov/dashboard/chemical_lists/TOX21SL", "chemicals in the Tox21 screening library"),  " (one per line) to view each of their associated annotations in Tox21Enricher. Add \"#SetName\" before each set if using multiple sets at once. Set names may only be alphanumeric characters (A-Z, a-z, and 0-9) and spaces are ignored.")
             )
         } else {
             if(input$enrich_from == "chemicals with shared substructures") {
@@ -1484,7 +1484,7 @@ shinyServer(function(input, output, session) {
             return(FALSE)
         })
         if(!tryRefresh){
-            showNotification("Error: The application cannot connect to the Tox21 Enricher server. Please try again later.", type="error")
+            showNotification("Error: The application cannot connect to the Tox21Enricher server. Please try again later.", type="error")
             return(FALSE)
         }
         if(resp$status_code != 200) {
@@ -1722,7 +1722,7 @@ shinyServer(function(input, output, session) {
             return(FALSE)
         })
         if(!tryGenerateUUID) {
-            showNotification("Error: The application cannot connect to the Tox21 Enricher server. Please try again later.", type="error")
+            showNotification("Error: The application cannot connect to the Tox21Enricher server. Please try again later.", type="error")
             return(FALSE)
         } else {
             transactionId <- unlist(content(resp))
@@ -1801,7 +1801,7 @@ shinyServer(function(input, output, session) {
                             return(FALSE)
                         })
                         if(!trySubstructure){
-                            showNotification("Error: The application cannot connect to the Tox21 Enricher server. Please try again later.", type="error")
+                            showNotification("Error: The application cannot connect to the Tox21Enricher server. Please try again later.", type="error")
                             return(FALSE)
                         }
                         outputSubCasrns <- unlist(lapply(content(resp), function(x) x$casrn))
@@ -1824,7 +1824,7 @@ shinyServer(function(input, output, session) {
                             return(FALSE)
                         })
                         if(!trySimilarity){
-                            showNotification("Error: The application cannot connect to the Tox21 Enricher server. Please try again later.", type="error")
+                            showNotification("Error: The application cannot connect to the Tox21Enricher server. Please try again later.", type="error")
                             return(FALSE)
                         }
                         if(resp$status_code != 200){
@@ -1923,7 +1923,7 @@ shinyServer(function(input, output, session) {
             if(length(reenrichResults) < 1){
                 changePage(page="enrichment")
                 if(badConnectionFlag == TRUE){
-                    showNotification("Error: The application cannot connect to the Tox21 Enricher server. Please try again later.", type="error")
+                    showNotification("Error: The application cannot connect to the Tox21Enricher server. Please try again later.", type="error")
                 } else {
                     showNotification("Error: No valid input sets.", type="error")
                 }
@@ -1955,7 +1955,7 @@ shinyServer(function(input, output, session) {
             return(FALSE)
         })
         if(!tryTransactionSize){
-            showNotification("Error: The application cannot connect to the Tox21 Enricher server. Please try again later.", type="error")
+            showNotification("Error: The application cannot connect to the Tox21Enricher server. Please try again later.", type="error")
             changePage(page="enrichment")
             return(FALSE)
         } else {
@@ -1968,7 +1968,7 @@ shinyServer(function(input, output, session) {
         }
 
         # Generate colors for each input sets
-        # 16 = number of unique colors generated by getNetworkColors(). There may only be a max of 16 input sets in this version of Tox21 Enricher
+        # 16 = number of unique colors generated by getNetworkColors(). There may only be a max of 16 input sets in this version of Tox21Enricher
         randColor <- sample(seq_len(16), length(names(enrichmentSets)), replace=FALSE)
         # Generate a random color
         colorsAllSets <- unlist(lapply(randColor, function(color){
@@ -2029,7 +2029,7 @@ shinyServer(function(input, output, session) {
                         return(FALSE)
                     })
                     if(!tryReactive){
-                        showNotification("Error: The application cannot connect to the Tox21 Enricher server. Please try again later.", type="error")
+                        showNotification("Error: The application cannot connect to the Tox21Enricher server. Please try again later.", type="error")
                         return(NULL)
                     }
                     if(resp$status_code != 200){
@@ -2052,7 +2052,7 @@ shinyServer(function(input, output, session) {
                     return(FALSE)
                 })
                 if(!tryWarnings){
-                    showNotification("Error: The application cannot connect to the Tox21 Enricher server. Please try again later.", type="error")
+                    showNotification("Error: The application cannot connect to the Tox21Enricher server. Please try again later.", type="error")
                     changePage(page="enrichment")
                     return(FALSE)
                 } else {
@@ -2112,7 +2112,7 @@ shinyServer(function(input, output, session) {
         # Convert reenrichResultsList$reenrichResults into a form that is API-friendly
         reenrichResultsSanitized <- ""
         
-        # Show error if input chemical matches too many chemicals ( > 1500 in this version of Tox21 Enricher)
+        # Show error if input chemical matches too many chemicals ( > 1500 in this version of Tox21Enricher)
         badSets <- unlist(lapply(names(reenrichResultsList$reenrichResults), function(x) {
             # Display error is excessively long list of matches
             if(nrow(reenrichResultsList$reenrichResults[[x]]) > 1500) {
@@ -2171,7 +2171,7 @@ shinyServer(function(input, output, session) {
                 return(FALSE)
             })
             if(!tryTransaction){
-                showNotification("Error: The application cannot connect to the Tox21 Enricher server. Please try again later.", type="error")
+                showNotification("Error: The application cannot connect to the Tox21Enricher server. Please try again later.", type="error")
                 return(FALSE)
             }
             
@@ -2184,7 +2184,7 @@ shinyServer(function(input, output, session) {
                 return(FALSE)
             })
             if(!tryInput){
-                showNotification("Error: The application cannot connect to the Tox21 Enricher server. Please try again later.", type="error")
+                showNotification("Error: The application cannot connect to the Tox21Enricher server. Please try again later.", type="error")
                 return(FALSE)
             }
             if(resp$status_code != 200){
@@ -2232,7 +2232,7 @@ shinyServer(function(input, output, session) {
             return(FALSE)
         })
         if(!tryQueue){
-            showNotification("Error: The application cannot connect to the Tox21 Enricher server. Please try again later.", type="error")
+            showNotification("Error: The application cannot connect to the Tox21Enricher server. Please try again later.", type="error")
             return(FALSE)
         }
         
@@ -2285,7 +2285,7 @@ shinyServer(function(input, output, session) {
             return(FALSE)
         })
         if(!tryError){
-            showNotification("Error: The application cannot connect to the Tox21 Enricher server. Please try again later.", type="error")
+            showNotification("Error: The application cannot connect to the Tox21Enricher server. Please try again later.", type="error")
             return(FALSE)
         }
         # if enrichment runs into an error while performing the enrichment in the queue, cancel and show error on main UI
@@ -2313,7 +2313,7 @@ shinyServer(function(input, output, session) {
             return(FALSE)
         })
         if(!tryError){
-            showNotification("Error: The application cannot connect to the Tox21 Enricher server. Please try again later.", type="error")
+            showNotification("Error: The application cannot connect to the Tox21Enricher server. Please try again later.", type="error")
             return(FALSE)
         }
         # if enrichment runs into an error while performing the enrichment in the queue, cancel and show error on main UI
@@ -2333,7 +2333,7 @@ shinyServer(function(input, output, session) {
             return(FALSE)
         })
         if(!tryQueue){
-            showNotification("Error: The application cannot connect to the Tox21 Enricher server. Please try again later.", type="error")
+            showNotification("Error: The application cannot connect to the Tox21Enricher server. Please try again later.", type="error")
             return(FALSE)
         }
         # Show warning message if request fails
@@ -2397,7 +2397,7 @@ shinyServer(function(input, output, session) {
             return(FALSE)
         })
         if(!tryCancel){
-            showNotification("Error: The application cannot connect to the Tox21 Enricher server. Please try again later.", type="error")
+            showNotification("Error: The application cannot connect to the Tox21Enricher server. Please try again later.", type="error")
             return(FALSE)
         }
         # Remove modal
@@ -2438,7 +2438,7 @@ shinyServer(function(input, output, session) {
             return(FALSE)
         })
         if(!tryCheck){
-            showNotification("Error: The application cannot connect to the Tox21 Enricher server. Please try again later.", type="error")
+            showNotification("Error: The application cannot connect to the Tox21Enricher server. Please try again later.", type="error")
             return(FALSE)
         }
         if(resp$status_code != 200){
@@ -2507,7 +2507,7 @@ shinyServer(function(input, output, session) {
                 return(FALSE)
             })
             if(!tryResults){
-                showNotification("Error: The application cannot connect to the Tox21 Enricher server. Please try again later.", type="error")
+                showNotification("Error: The application cannot connect to the Tox21Enricher server. Please try again later.", type="error")
                 return(FALSE)
             }
             if(resp$status_code != 200){
@@ -2538,7 +2538,7 @@ shinyServer(function(input, output, session) {
                                 })
                             }
                             if(is.null(tryAnnotationDL)) {
-                                showNotification("Error: The application cannot connect to the Tox21 Enricher server. Please try again later.", type="error")
+                                showNotification("Error: The application cannot connect to the Tox21Enricher server. Please try again later.", type="error")
                             } else {
                                 # Check file size
                                 fSize <- file.info(paste0(tempdir(), "/output/", transactionId, "/", setFilesSplit[setFile]))$size
@@ -2608,7 +2608,7 @@ shinyServer(function(input, output, session) {
                             })
                         }
                         if(is.null(tryInputDL)) {
-                            showNotification("Error: The application cannot connect to the Tox21 Enricher server. Please try again later.", type="error")
+                            showNotification("Error: The application cannot connect to the Tox21Enricher server. Please try again later.", type="error")
                         } else {
                             # Check file size
                             fSize <- file.info(paste0(tempdir(), "/input/", transactionId, "/", i, ".txt"))$size
@@ -2673,7 +2673,7 @@ shinyServer(function(input, output, session) {
                             })
                         }
                         if(is.null(tryErrorDL)) {
-                            showNotification("Error: The application cannot connect to the Tox21 Enricher server. Please try again later.", type="error")
+                            showNotification("Error: The application cannot connect to the Tox21Enricher server. Please try again later.", type="error")
                         } else {
                             # Check file size
                             fSize <- file.info(paste0(tempdir(), "/output/", transactionId, "/", i, "__ErrorCASRNs.txt"))$size
@@ -2739,7 +2739,7 @@ shinyServer(function(input, output, session) {
                             })
                         }
                         if(is.null(tryFullMatrixDL)) {
-                            showNotification("Error: The application cannot connect to the Tox21 Enricher server. Please try again later.", type="error")
+                            showNotification("Error: The application cannot connect to the Tox21Enricher server. Please try again later.", type="error")
                         } else {
                             # Check file size
                             fSize <- file.info(paste0(tempdir(), "/output/", transactionId, "/", i, "__FullMatrix.txt"))$size
@@ -2809,7 +2809,7 @@ shinyServer(function(input, output, session) {
                         })
                     }
                     if(is.null(tryFullMatrixDL)) {
-                        showNotification("Error: The application cannot connect to the Tox21 Enricher server. Please try again later.", type="error")
+                        showNotification("Error: The application cannot connect to the Tox21Enricher server. Please try again later.", type="error")
                     } else {
                         # Check file size
                         fSize <- file.info(paste0(tempdir(), "/output/", transactionId, "/", i, "__FullMatrix.txt"))$size
@@ -2839,11 +2839,11 @@ shinyServer(function(input, output, session) {
                                                 if(endsWith(setFilesSplit[setFile], "__FullMatrix.txt")){
                                                     tipify( div(actionLink(inputId=paste0(i, "__FullMatrix.txt__link"), label=gsub("__FullMatrix.txt", " Full Matrix", setFilesSplit[setFile]))), "A matrix displaying all of the annotations and their corresponding chemicals for this set (.txt format).", placement="bottom")
                                                 } else if (endsWith(setFilesSplit[setFile], "ErrorCASRNs.txt")){ 
-                                                    tipify( div(actionLink(inputId=paste0(setFilesSplit[setFile], "__link"), label=paste0(i, " Error CASRNs"))), "A list of submitted CASRNs that were not found in the Tox21 Enricher database (.txt format).", placement="bottom")
+                                                    tipify( div(actionLink(inputId=paste0(setFilesSplit[setFile], "__link"), label=paste0(i, " Error CASRNs"))), "A list of submitted CASRNs that were not found in the Tox21Enricher database (.txt format).", placement="bottom")
                                                 } else if (endsWith(setFilesSplit[setFile], "__Input.txt")){ # Input file
                                                     tipify( div(actionLink(inputId=paste0(gsub("__Input", "", setFilesSplit[setFile]), "__link"), label=paste0(i, " Input"))), "A list of input chemicals for this set (.txt format).", placement="bottom")
                                                 } else { # CASRN file
-                                                    tipify( div(actionLink(inputId=paste0(setFilesSplit[setFile], "__link"), label=gsub(".txt", "", gsub(paste0(i, "__"), "", setFilesSplit[setFile])))), "A list of annotations in the Tox21 Enricher database for this chemical with respect to the given annotation classes (.txt format).", placement="bottom")
+                                                    tipify( div(actionLink(inputId=paste0(setFilesSplit[setFile], "__link"), label=gsub(".txt", "", gsub(paste0(i, "__"), "", setFilesSplit[setFile])))), "A list of annotations in the Tox21Enricher database for this chemical with respect to the given annotation classes (.txt format).", placement="bottom")
                                                 }
                                             )
                                         )
@@ -2910,7 +2910,7 @@ shinyServer(function(input, output, session) {
                         })
                     }
                     if(is.null(tryZipDL)) {
-                        showNotification("Error: The application cannot connect to the Tox21 Enricher server. Please try again later.", type="error")
+                        showNotification("Error: The application cannot connect to the Tox21Enricher server. Please try again later.", type="error")
                     } else {
                         file.copy(paste0(tempdir(), "/output/", transactionId, "/tox21enricher_", transactionId, ".zip"), file)
                     }
@@ -2936,7 +2936,7 @@ shinyServer(function(input, output, session) {
                         })
                     }
                     if(is.null(tryZipDL)) {
-                        showNotification("Error: The application cannot connect to the Tox21 Enricher server. Please try again later.", type="error")
+                        showNotification("Error: The application cannot connect to the Tox21Enricher server. Please try again later.", type="error")
                     } else {
                         file.copy(paste0(tempdir(), "/output/", transactionId, "/tox21enricher_", transactionId, ".zip"), file)
                     }
@@ -3028,7 +3028,7 @@ shinyServer(function(input, output, session) {
                     return(FALSE)
                 })
                 if(!tryGCT){
-                    showNotification("Error: The application cannot connect to the Tox21 Enricher server. Please try again later.", type="error")
+                    showNotification("Error: The application cannot connect to the Tox21Enricher server. Please try again later.", type="error")
                     return(FALSE)
                 }
                 if(resp$status_code != 200){
@@ -3101,7 +3101,7 @@ shinyServer(function(input, output, session) {
                         return(FALSE)
                     })
                     if(!tryResults){
-                        showNotification("Error: The application cannot connect to the Tox21 Enricher server. Please try again later.", type="error")
+                        showNotification("Error: The application cannot connect to the Tox21Enricher server. Please try again later.", type="error")
                         return(FALSE)
                     }
                     if(resp$status_code != 200){
@@ -3136,7 +3136,7 @@ shinyServer(function(input, output, session) {
                                 })
                             }
                             if(is.null(tryInputDL)){
-                                showNotification("Error: The application cannot connect to the Tox21 Enricher server. Please try again later.", type="error")
+                                showNotification("Error: The application cannot connect to the Tox21Enricher server. Please try again later.", type="error")
                             } else {
                                 # Check file size
                                 fSize <- file.info(paste0(tempdir(), "/input/", transactionId, "/", i, ".txt"))$size
@@ -3201,7 +3201,7 @@ shinyServer(function(input, output, session) {
                                 })
                             }
                             if(is.null(tryChartDL)){
-                                showNotification("Error: The application cannot connect to the Tox21 Enricher server. Please try again later.", type="error")
+                                showNotification("Error: The application cannot connect to the Tox21Enricher server. Please try again later.", type="error")
                             } else {
                                 # Check file size
                                 fSize <- file.info(paste0(tempdir(), "/output/", transactionId, "/", i, "__Chart.txt"))$size
@@ -3276,7 +3276,7 @@ shinyServer(function(input, output, session) {
                                 })
                             }
                             if(is.null(tryChartSimpleDL)){
-                                showNotification("Error: The application cannot connect to the Tox21 Enricher server. Please try again later.", type="error")
+                                showNotification("Error: The application cannot connect to the Tox21Enricher server. Please try again later.", type="error")
                             } else {
                                 # Check file size
                                 fSize <- file.info(paste0(tempdir(), "/output/", transactionId, "/", i, "__ChartSimple.txt"))$size
@@ -3351,7 +3351,7 @@ shinyServer(function(input, output, session) {
                                 })
                             }
                             if(is.null(tryClusterDL)){
-                                showNotification("Error: The application cannot connect to the Tox21 Enricher server. Please try again later.", type="error")
+                                showNotification("Error: The application cannot connect to the Tox21Enricher server. Please try again later.", type="error")
                             } else {
                                 # Check file size
                                 fSize <- file.info(paste0(tempdir(), "/output/", transactionId, "/", i, "__Cluster.txt"))$size
@@ -3492,7 +3492,7 @@ shinyServer(function(input, output, session) {
                                 })
                             }
                             if(is.null(tryMatrixDL)){
-                                showNotification("Error: The application cannot connect to the Tox21 Enricher server. Please try again later.", type="error")
+                                showNotification("Error: The application cannot connect to the Tox21Enricher server. Please try again later.", type="error")
                             } else {
                                 # Check file size
                                 fSize <- file.info(paste0(tempdir(), "/output/", transactionId, "/", i, "__Matrix.txt"))$size
@@ -3560,7 +3560,7 @@ shinyServer(function(input, output, session) {
                                 })
                             }
                             if(is.null(tryErrorDL)){
-                                showNotification("Error: The application cannot connect to the Tox21 Enricher server. Please try again later.", type="error")
+                                showNotification("Error: The application cannot connect to the Tox21Enricher server. Please try again later.", type="error")
                             } else {
                                 # Check file size
                                 fSize <- file.info(paste0(tempdir(), "/output/", transactionId, "/", i, "__ErrorCASRNs.txt"))$size
@@ -3657,7 +3657,7 @@ shinyServer(function(input, output, session) {
                                                 },
                                                 # Error CASRNs list
                                                 if(endsWith(resultFile, paste0(i, "__ErrorCASRNs.txt"))){
-                                                    column(3, id=paste0(tmpName[length(tmpName)]), tipify( div(actionLink(inputId=paste0(i, "__ErrorCASRNs.txt__link"), label=paste0(gsub("ErrorCASRNs", "Error CASRNs", gsub(".txt", "", gsub("__", " ", tmpName[length(tmpName)])))))), "A list of submitted CASRNs that were not found in the Tox21 Enricher database (.txt format).", placement="bottom") )
+                                                    column(3, id=paste0(tmpName[length(tmpName)]), tipify( div(actionLink(inputId=paste0(i, "__ErrorCASRNs.txt__link"), label=paste0(gsub("ErrorCASRNs", "Error CASRNs", gsub(".txt", "", gsub("__", " ", tmpName[length(tmpName)])))))), "A list of submitted CASRNs that were not found in the Tox21Enricher database (.txt format).", placement="bottom") )
                                                 }
                                             )
                                         }
@@ -3848,7 +3848,7 @@ shinyServer(function(input, output, session) {
                         return(FALSE)
                     })
                     if(!trySVG){
-                        showNotification("Error: The application cannot connect to the Tox21 Enricher server. Please try again later.", type="error")
+                        showNotification("Error: The application cannot connect to the Tox21Enricher server. Please try again later.", type="error")
                         return(FALSE)
                     }
                     
@@ -3887,7 +3887,7 @@ shinyServer(function(input, output, session) {
                             return(dummy)
                         })
                         if(!tryCasrn){
-                            showNotification("Error: The application cannot connect to the Tox21 Enricher server. Please try again later.", type="error")
+                            showNotification("Error: The application cannot connect to the Tox21Enricher server. Please try again later.", type="error")
                             return(dummy)
                         }
                         if(resp$status_code != 200){
@@ -4049,7 +4049,7 @@ shinyServer(function(input, output, session) {
                         return(FALSE)
                     })
                     if(!tryReactive){
-                        showNotification("Error: The application cannot connect to the Tox21 Enricher server. Please try again later.", type="error")
+                        showNotification("Error: The application cannot connect to the Tox21Enricher server. Please try again later.", type="error")
                         return(FALSE)
                     }
                     if(resp$status_code != 200){
@@ -4275,7 +4275,7 @@ shinyServer(function(input, output, session) {
                 return(FALSE)
             })
             if(!tryGCT){
-                showNotification("Error: The application cannot connect to the Tox21 Enricher server. Please try again later.", type="error")
+                showNotification("Error: The application cannot connect to the Tox21Enricher server. Please try again later.", type="error")
                 return(FALSE)
             }
             if(resp$status_code != 200){
@@ -4342,7 +4342,7 @@ shinyServer(function(input, output, session) {
                 return(FALSE)
             })
             if(!tryGCT){
-                showNotification("Error: The application cannot connect to the Tox21 Enricher server. Please try again later.", type="error")
+                showNotification("Error: The application cannot connect to the Tox21Enricher server. Please try again later.", type="error")
                 return(FALSE)
             }
             if(resp$status_code != 200){
@@ -4860,11 +4860,11 @@ shinyServer(function(input, output, session) {
                 return(FALSE)
             })
             if(!tryBargraph){
-                showNotification("Error: The application cannot connect to the Tox21 Enricher server. Please try again later.", type="error")
+                showNotification("Error: The application cannot connect to the Tox21Enricher server. Please try again later.", type="error")
                 return(FALSE)
             }
             if(resp$status_code != 200){
-                showNotification("Error: The application cannot connect to the Tox21 Enricher server. Please try again later.", type="error")
+                showNotification("Error: The application cannot connect to the Tox21Enricher server. Please try again later.", type="error")
                 return(FALSE)
             }
             bgChartAll <- lapply(content(resp), function(chartSimpleFile){
@@ -5262,7 +5262,7 @@ shinyServer(function(input, output, session) {
             return(FALSE)
         })
         if(!tryNode){
-            showNotification("Error: The application cannot connect to the Tox21 Enricher server. Please try again later.", type="error")
+            showNotification("Error: The application cannot connect to the Tox21Enricher server. Please try again later.", type="error")
             return(FALSE)
         }
         
@@ -5341,7 +5341,7 @@ shinyServer(function(input, output, session) {
                 return(FALSE)
             })
             if(!tryNode){
-                showNotification("Error: The application cannot connect to the Tox21 Enricher server. Please try again later.", type="error")
+                showNotification("Error: The application cannot connect to the Tox21Enricher server. Please try again later.", type="error")
                 return(FALSE)
             }
             
@@ -5709,7 +5709,7 @@ shinyServer(function(input, output, session) {
             return(FALSE)
         })
         if(!tryColor){
-            showNotification("Error: The application cannot connect to the Tox21 Enricher server. Please try again later.", type="error")
+            showNotification("Error: The application cannot connect to the Tox21Enricher server. Please try again later.", type="error")
             return(FALSE)
         }
         

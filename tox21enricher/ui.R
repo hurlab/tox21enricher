@@ -289,8 +289,8 @@ shinyUI(function(){
         # Set up clipboard copying
         rclipboardSetup(),
         # Application title
-        title="Tox21 Enricher",
-        titlePanel("Tox21 Enricher"),
+        title="Tox21Enricher",
+        titlePanel("Tox21Enricher"),
         # Sidebar with options
         sidebarLayout(
             sidebarPanel(
@@ -302,8 +302,8 @@ shinyUI(function(){
                 extendShinyjs(text=js_theme, functions=c('init', 'initDarkTheme', 'saveSessionTheme', 'getSessionTheme', 'checkDefaultTheme', 'saveSessionThemePreferred', 'getSessionThemePreferred')),
                 extendShinyjs(text=js_cbx, functions=c('check', 'uncheck')),
                 extendShinyjs(text=js_session, functions=c('saveSession', 'getSession', 'clearSession', 'saveHostInfo', 'getHostInfo', 'clearHostInfo')),
-                p("Welcome to Tox21 Enricher! Please see this ", downloadLink(outputId="manualLink", label="link"), "for instructions on using this application and the descriptions about the chemical / biological categories. Other resources from the Tox21 toolbox can be viewed", tags$a(href="https://ntp.niehs.nih.gov/results/tox21/tbox/", "here."), "A sufficiently robust internet connection and JavaScript are required to use all of this application's features."),
-                p("An older version of Tox21 Enricher using the", tags$a(href="https://grails.org/", "Grails framework"), "is hosted", tags$a(href="http://hurlab.med.und.edu/tox21enricher-grails", "here.")),
+                p("Welcome to Tox21Enricher! Please see this ", downloadLink(outputId="manualLink", label="link"), "for instructions on using this application and the descriptions about the chemical / biological categories. Other resources from the Tox21 toolbox can be viewed", tags$a(href="https://ntp.niehs.nih.gov/results/tox21/tbox/", "here."), "A sufficiently robust internet connection and JavaScript are required to use all of this application's features."),
+                p("An older version of Tox21Enricher using the", tags$a(href="https://grails.org/", "Grails framework"), "is hosted", tags$a(href="http://hurlab.med.und.edu/tox21enricher-grails", "here.")),
                 # Display API connection status
                 uiOutput("apiConnection"),
                 # Display enrichment total count
@@ -423,7 +423,7 @@ shinyUI(function(){
                         actionButton(inputId="submit", "Submit", icon=icon("arrow-alt-circle-right"))
                     ), 
                     column(9,
-                        tipify(checkboxInput(inputId="includeChemsWithWarnings", label="Ignore chemicals with reactive structure warnings?", value=TRUE), title="A submitted chemical may contain a reactive functional group (nitrile, isocyanate, aldehyde, and/or epoxide) that does not appear in one or more similar chemicals. The opposite may also occur in which similar chemicals contain a reactive functional group not present in the submitted chemical. Checking this box will cause Tox21 Enricher to ignore all similar chemicals that have a reactive functional group discrepancy with the submitted chemical. These chemicals will not be used in enrichment.", placement="top")
+                        tipify(checkboxInput(inputId="includeChemsWithWarnings", label="Ignore chemicals with reactive structure warnings?", value=TRUE), title="A submitted chemical may contain a reactive functional group (nitrile, isocyanate, aldehyde, and/or epoxide) that does not appear in one or more similar chemicals. The opposite may also occur in which similar chemicals contain a reactive functional group not present in the submitted chemical. Checking this box will cause Tox21Enricher to ignore all similar chemicals that have a reactive functional group discrepancy with the submitted chemical. These chemicals will not be used in enrichment.", placement="top")
                     )
                 ),
                 # Results page, hidden by default until request has completed
