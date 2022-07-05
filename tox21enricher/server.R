@@ -4174,9 +4174,12 @@ shinyServer(function(input, output, session) {
                     }
                     # Remove dataframe row names so they will just be numbered
                     rownames(fullTable) <- seq_len(nrow(fullTable))
+                    # Remove select column from hide menu
+                    colsRemove <- 1
                     # Check if chemicals with warnings exist
                     if(length(unlist(warningList$warnings[[i]], recursive=FALSE)) > 0){
                         haveWarnings$warnings <<- TRUE
+                        colsRemove <- 2 # Remove warning column from hide menu
                     }
                     if(mode != "casrn" | (originalEnrichMode == "substructure" | originalEnrichMode == "similarity")) {
                         output[[paste0("table_", i)]] <- renderUI(
@@ -4194,7 +4197,7 @@ shinyServer(function(input, output, session) {
                                         drawCallback=JS('function() { Shiny.bindAll(this.api().table().node()); } '),
                                         dom="Bfrtip",
                                         pageLength=10,
-                                        buttons=list("copy", "csv", "excel", "pdf", "print", list( extend="colvis", columns=as.vector(seq_len((ncol(fullTable)-1)))))  
+                                        buttons=list("copy", "csv", "excel", "pdf", "print", list(extend="colvis", columns= as.vector(seq_len(ncol(fullTable) - colsRemove))))
                                         #                                                           ^^ this is so we always keep the select checkboxes in the table (user can't hide them)
                                     ),
                                     extensions="Buttons"
