@@ -340,6 +340,84 @@ shinyServer(function(input, output, session) {
         showNotification("Host and port info cleared. Using settings from configuration file. These changes will take effect upon the next page refresh.", type="message")
         return(TRUE)
     })
+    
+    # Display annotation category selection criteria information
+    observeEvent(input$annotationSelectionInfoLink, {
+        showModal(modalDialog(
+            HTML(paste0("
+                <p>We have curated the Tox21Enricher database's annotations using the following data sources:</p>
+                <hr>
+                
+                <h3>Comparative Toxicogenomics Database (CTD)</h3>
+                <b>Link(s)</b>:
+                <br>
+                <a href='http://ctdbase.org/reports/CTD_chem_gene_ixns.tsv.gz'>Direct download (CTD_chem_gene_ixns.tsv.gz)</a>
+                <br>
+                <a href='http://ctdbase.org/reports/CTD_pheno_term_ixns.tsv.gz'>Direct download (CTD_pheno_term_ixns.tsv.gz)</a>
+                <br>
+                <a href='http://ctdbase.org/reports/CTD_chemicals_diseases.tsv.gz'>Direct download (CTD_chemicals_diseases.tsv.gz)</a>
+                <br>
+                <a href='http://ctdbase.org/reports/CTD_chem_pathways_enriched.tsv.gz'>Direct download (CTD_chem_pathways_enriched.tsv.gz)</a>
+                <br>
+                <b>Version</b>:
+                <br>
+                <p>2020-06-24</p>
+                <br>
+                <b>Description</b>:
+                <br>
+                <p>The raw files for the CTD were downloaded directly through the provided links. The date stamp is embedded in each one of the files (report created: Wednesday, June 24, 2020, 17:38:06 EDT). We created Perl scripts for parsing the relevant information out of these files into the proper format for use in Tox21Enricher.</p>
+                <p></p>
+                <hr>
+                
+                <h3>DrugBank</h3>
+                <b>Link(s)</b>:
+                <br>
+                <a href='https://go.drugbank.com/releases/latest/'>Direct download (DrugBank account required)</a>
+                <br>
+                <b>Version</b>:
+                <br>
+                <p>2020-04-02</p>
+                <br>
+                <b>Description</b>:
+                <br>
+                <p>The DrugBank database may be downloaded as a large XML file. To parse the data for use in Tox21Enricher, we wrote an iPython script that converts data from XML to TSV/CSV files. These files are then processed by a Perl script to further manipulate the data into the right format for Tox21Enricher.</p>
+                <p></p>
+                <hr>
+                
+                <h3>ToxRefDB</h3>
+                <b>Link(s)</b>:
+                <br>
+                <a href='https://gaftp.epa.gov/COMPTOX/High_Throughput_Screening_Data/Animal_Tox_Data/current/'>Direct download</a>
+                <br>
+                <b>Version</b>:
+                <br>
+                <p>2019 - 2020</p>
+                <br>
+                <b>Description</b>:
+                <br>
+                <p>This is a static MySQL database that can be downloaded and sourced on an existing MySQL instance. Not all the guideline studies tested all the endpoints (at least, we are under that assumption). Therefore, the <i>Study by Endpoint</i> connection had to have a row en try in the BMD table to get in this list.</p>
+                <p>In our case, we first converted the ToxRefDB database into PostgreSQL. We then tagged all tables with the prefix <i>toxrefdb_</i> for the following query to work:</p>
+                <i>SELECT DISTINCT tc.casrn, concat(ts.study_type, '_', ts.species, '_', ts.study_type_guideline, '_', te.endpoint_category, '_', te.endpoint_type, '_', te.endpoint_target) FROM toxrefdb_study ts, toxrefdb_chemical tc, toxrefdb_endpoint te, toxrefdb_bmd_models tb WHERE tc.chemical_id=ts.chemical_id AND tb.study_id=ts.study_id AND tb.endpoint_id=te.endpoint_id;</i>
+                <hr>
+                
+                <h3>T3DB</h3>
+                <b>Link(s)</b>:
+                <br>
+                <a href='http://www.t3db.ca/'>Website</a>
+                <br>
+                <b>Version</b>:
+                <br>
+                <p>2017-04-06</p>
+                <br>
+                <b>Description</b>:
+                <br>
+                <p>The T3DB database may be downloaded as a large XML file. To parse the data for use in Tox21Enricher, we wrote an iPython script that converts data from XML to TSV/CSV files. These files are then processed by a Perl script to further manipulate the data into the right format for Tox21Enricher.</p>
+                <hr>
+            ")),
+            title="Annotation selection information",
+            footer=tagList(modalButton("Close"))
+        ))
+    })
 
     # Display enrichment type on title
     titleStatus <- reactiveValues(option=character())

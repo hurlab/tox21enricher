@@ -344,6 +344,19 @@ shinyUI(function(){
                     # Annotation selection
                     fluidRow(
                         h3("Select Chemical/Biological Annotation Categories"),
+                        column(12, 
+                            HTML(paste0("
+                                <p>Select any number of annotation categories in the tabs below to allow Tox21Enricher to search them for relevant annotations during the enrichment process. Annotation categories are divided into five groups:</p>
+                                <ul>
+                                <li><b>PubChem Compound Annotations</b>: annotations retrieved from PubChem</li>
+                                <li><b>DrugMatrix Annotations</b>: annotations retrieved from DrugMatrix</li>
+                                <li><b>DrugBank Annotations</b>: annotations retrieved from DrugBank</li>
+                                <li><b>CTD Annotations</b>: annotations retrieved from the Comparative Toxicogenomics Database (CTD)</li>
+                                <li><b>Other Annotations</b>: annotations retrieved from miscellaneous sources</li>
+                                </ul>
+                                ", actionLink(inputId="annotationSelectionInfoLink", label="Click here to view our sources and selection criteria for the annotations."), "<br><br>"
+                            ))
+                        ),
                         column(4,
                             actionButton("select_all_annotations", "Deselect all"),
                             tipify(actionButton("selectAllLarge", "Deselect all large classes"), "Deselect/select all annotation classes with more than 1000 terms. Deselecting large classes may enhance performance.", placement="right")
