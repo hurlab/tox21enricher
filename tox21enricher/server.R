@@ -5462,57 +5462,36 @@ shinyServer(function(input, output, session) {
             colorFrom <- rgb(classColorsFrom[1], classColorsFrom[2], classColorsFrom[3], maxColorValue=255)
             # Color from class of TO annotation
             colorTo <- rgb(classColorsTo[1], classColorsTo[2], classColorsTo[3], maxColorValue=255)
-            # Average color from classes of FROM and TO annotations
-            darkenValue <- 0
-            if(colorFrom == colorTo){
-                darkenValue <- 50 # If both region colors are identical, just darken it a bit
-            }
-            greenAvg <- as.integer(((strtoi(classColorsFrom[1]) + strtoi(classColorsTo[1]))/2)-darkenValue)
-            redAvg <- as.integer(((strtoi(classColorsFrom[2]) + strtoi(classColorsTo[2]))/2)-darkenValue)
-            blueAvg <- as.integer(((strtoi(classColorsFrom[3]) + strtoi(classColorsTo[3]))/2)-darkenValue)
-            if(greenAvg < 0) {
-                greenAvg <- 0
-            }
-            if(redAvg < 0) {
-                redAvg <- 0
-            }
-            if(blueAvg < 0) {
-                blueAvg <- 0
-            }
-            colorBoth <- rgb(greenAvg, redAvg, blueAvg, maxColorValue=255)
           
             # Prepare data and create Venn diagram
             vennList <- list(casrnsFrom, casrnsTo)
             names(vennList) <- list(str_wrap(paste0(classFrom, " | ", termFrom), 30) , str_wrap(paste0(classTo, " | ", termTo), 30)) 
-            venn <- Venn(vennList)
-            vennData <- process_data(venn)
-            vennDiagramPlot <- ggplot() +
-                geom_sf(aes(fill=list(colorFrom, colorTo, colorBoth)), data=venn_region(vennData)) +
-                geom_sf(size=1, lty="solid", color=theme$textcolor, data=venn_setedge(vennData), show.legend=FALSE) +
-                geom_sf_text(aes(label=name), fontface="bold", color=theme$textcolor, nudge_y=c(1, 1, 1), data=venn_setlabel(vennData)) +
-                geom_sf_label(size=18, aes(label=count), fontface="bold", data=venn_region(vennData)) +
-                expand_limits(x=c(-4, 4), y=c(-4, 6)) + # expand y-axis of graph to make room for top set labels
-                theme_void() +
-                theme(
-                    legend.position="none",
-                    panel.background=element_rect(
-                      fill=vennColorBG,
-                      color=NA,
-                      size=0,
-                      linetype="solid"
-                    )
-                ) # remove legend, not really needed
-            vennDiagram <- ggplotGrob(vennDiagramPlot)
-            vennDiagram$respect <- FALSE
-          
+            
+            flog.threshold(ERROR, name="VennDiagramLogger") # suppress logging when generating Venn diagrams
+            vennDiagram <- venn.diagram(
+                x=vennList,
+                category.names=names(vennList),
+                filename=NULL,
+                disable.logging=TRUE,
+                euler.d=TRUE,
+                cex=5,
+                fill=c(colorFrom, colorTo),
+                alpha=0.75,
+                scaled=FALSE,
+                cat.cex=1.5,
+                cat.pos=0,
+                cat.dist=0.1
+            )
+            
             if(networkMode == "chart"){
                 # Render Venn diagram
                 shinyjs::show("vennChartMenu")
                 shinyjs::show("vennChart")
                 shinyjs::hide("nodeLinkChartMenu")
-                output[["vennChart"]] <- renderPlot(
-                    plot(vennDiagram)
-                )
+                output[["vennChart"]] <- renderPlot({
+                    grid.newpage()
+                    grid.draw(vennDiagram)
+                })
               
                 # Render buttons for Venn diagram
                 shinyjs::show("vennChartButtons")
@@ -5616,9 +5595,10 @@ shinyServer(function(input, output, session) {
                 shinyjs::show("vennClusterMenu")
                 shinyjs::show("vennCluster")
                 shinyjs::hide("nodeLinkClusterMenu")
-                output[["vennCluster"]] <- renderPlot(
-                    plot(vennDiagram)
-                )
+                output[["vennCluster"]] <- renderPlot({
+                    grid.newpage()
+                    grid.draw(vennDiagram)
+                })
                 
                 # Render buttons for venn diagram
                 shinyjs::show("vennClusterButtons")
