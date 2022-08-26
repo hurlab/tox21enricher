@@ -1507,6 +1507,10 @@ kappa_cluster <- function(x, deg=NULL, useTerm=FALSE, cutoff=0.5, overlap=0.5, m
         return(NULL)
     }
     termpair2kappaOverThreshold <- tapply(unlist(termpair2kappaOverThreshold, use.names=FALSE), rep(names(termpair2kappaOverThreshold), lengths(termpair2kappaOverThreshold)), FUN=c)
+
+    # Filter sortedFunCatTerms so it only includes terms with kappa scores over the threshold
+    sortedFunCatTerms <- sortedFunCatTerms[sortedFunCatTerms %in% names(termpair2kappaOverThreshold)]
+    sortedFunCatTermsCount <- length(sortedFunCatTerms)
     
     # Step#2: Create qualified initial seeding groups
     # Each term could form a initial seeding group (initial seeds) as long as it has close relationships (kappa > 0.35 or any designated number) with more than > 2 or any designated number of other members. 
