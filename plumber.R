@@ -52,6 +52,10 @@ pvalue_trycatch <- tryCatch({
     print("Error: invalid p-value in config at 'pvaluedisplay'. Setting to 0.2.")
     PVALUE_DISPLAY <- 0.2
 })
+if(is.null(tox21queue$pvaluedisplay)){
+    print("Error: invalid p-value in config at 'pvaluedisplay'. Setting to 0.2.")
+    PVALUE_DISPLAY <- 0.2
+}
 if(is.na(PVALUE_DISPLAY)){
     print("Error: invalid p-value in config at 'pvaluedisplay'. Setting to 0.2.")
     PVALUE_DISPLAY <- 0.2
