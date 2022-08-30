@@ -45,6 +45,17 @@ if(INPUT_MAX > 16){ # Tox21 Enricher only supports a max of 16 concurrent input 
     print("Warning: Found an inputMax value less than 1 in config.yml. Tox21 Enricher only supports a minimum of 1 set. INPUT_MAX will be set to 1.")
     INPUT_MAX <- 1
 }
+PVALUE_DISPLAY <- 0.2
+pvalue_trycatch <- tryCatch({
+    PVALUE_DISPLAY <- as.numeric(tox21queue$pvaluedisplay)
+}, error=function(e){
+    print("Error: invalid p-value in config at 'pvaluedisplay'. Setting to 0.2.")
+    PVALUE_DISPLAY <- 0.2
+})
+if(is.na(PVALUE_DISPLAY)){
+    print("Error: invalid p-value in config at 'pvaluedisplay'. Setting to 0.2.")
+    PVALUE_DISPLAY <- 0.2
+}
 
 # Reusable function for generating database connection
 conn <- function(){
@@ -220,7 +231,7 @@ performEnrichment <- function(enrichmentUUID="-1", annoSelectStr=fullAnnoClassSt
     inDir <- paste0(APP_DIR, IN_DIR, enrichmentUUID) # Directory for input files for enrichment set
     outDir <- paste0(APP_DIR, OUT_DIR, enrichmentUUID) # Directory for output files for enrichment set
     # DSSTox Chart
-    pvalueThresholdToDisplay <- 0.2 # p-value < 0.1 to be printed
+    pvalueThresholdToDisplay <- PVALUE_DISPLAY # p-value that determines which terms are to be printed
     # DSSTox Clustering
     similarityThreshold <- 0.50
     initialGroupMembership <- 3
@@ -1233,7 +1244,7 @@ perform_CASRN_enrichment_analysis <- function(CASRNRef, outputBaseDir, outfileBa
         return(tmp_sigTerm2CASRNMatrix)
     }), recursive=FALSE)
     sigTerm2CASRNMatrix <- sigTerm2CASRNMatrix[lapply(sigTerm2CASRNMatrix, length ) > 0]
-
+    
     localTermsList <- mclapply(names(funCat2Selected), mc.cores=CORES, mc.silent=FALSE, function(x){
         casrns_filtered <- CASRN2funCatTerm[names(mappedCASRNs)]
         tmp_localTermsList <- lapply(casrns_filtered, function(inner_list) {
@@ -1537,7 +1548,7 @@ kappa_cluster <- function(x, deg=NULL, useTerm=FALSE, cutoff=0.5, overlap=0.5, m
         names(term2sToPass) <- lapply(seq_len(sortedFunCatTermsCount), function(i) sortedFunCatTerms[i])
         term2sToPassNames <- names(term2sToPass)
     }
-
+    
     qualifiedSeeds <- mclapply(seq_len(sortedFunCatTermsCount), mc.cores=CORES, mc.silent=FALSE, function(i){
         # Seed condition #1: initial group membership
         if (!is.null(termpair2kappaOverThreshold[[sortedFunCatTerms[i]]]) & length(termpair2kappaOverThreshold[[sortedFunCatTerms[i]]]) >= (initialGroupMembership - 1)) {
@@ -1561,7 +1572,7 @@ kappa_cluster <- function(x, deg=NULL, useTerm=FALSE, cutoff=0.5, overlap=0.5, m
         return(NULL)
     })
     ml <- qualifiedSeeds[!vapply(qualifiedSeeds, is.null, FUN.VALUE=logical(1))]
-
+    
     #  Step#3: Iteratively merge qualifying seeds
     # Update status file
     # Connect to DB to get status info

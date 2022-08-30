@@ -46,5 +46,7 @@ default:
     # NOTE: Do not set this larger than 16! Only 16 colors may be generated at a time for right now, and having this many enrichment
     #       sets can make things very slow. If this is set to be larger than 16, the app will just set it to 16.
     inputMax: 16
+    # The value that determines how significant an annotation's p-value must be to be included in result files. Default of 0.2 if not set or set to an invalid value.
+    pvaluedisplay: 0.2
     # Your API key needed to access the ipstack API to fetch user geolocation data: https://ipstack.com
     apikey: 'xxxxxxxxxxxxxxxxxxxxxxxxxxxx'
