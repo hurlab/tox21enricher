@@ -9,6 +9,26 @@
 
 # Define server logic
 shinyServer(function(input, output, session) {
+    # Get URL params
+    observe({
+        queryStr <- parseQueryString(session$clientData$url_search)
+        # Add SMILES to input box
+        if(!is.null(queryStr$smiles)){
+            if(nchar(queryStr$smiles) > 0){
+                updateTextAreaInput(session=session, inputId="submitted_chemicals", value=paste0(queryStr$smiles, "\n"))
+            }
+        }
+        if(!is.null(queryStr$mode)){
+            if(nchar(queryStr$mode) > 0){
+                if(queryStr$mode == "substructure"){
+                    updateTextAreaInput(session=session, inputId="enrich_from", value="chemicals with shared substructures")
+                } else if(queryStr$mode == "similarity"){
+                    updateTextAreaInput(session=session, inputId="enrich_from", value="chemicals with structural similarity")
+                }
+            }
+        }
+    })
+  
     # List of observers
     setFilesObservers <- reactiveValues(observers=list())
     

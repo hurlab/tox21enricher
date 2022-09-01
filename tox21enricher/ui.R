@@ -6,7 +6,6 @@
 #
 #    http://shiny.rstudio.com/
 #
-
 # Load user configuration
 tox21config <- config::get("tox21enricher-client")
 USER_MODE <- tox21config$mode
