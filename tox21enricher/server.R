@@ -5248,7 +5248,7 @@ shinyServer(function(input, output, session) {
             showNotification("Error: An error occurred while generating the network.", type="error")
             return(HTML("<p class=\"text-danger\"><b>Error:</b> The generated network has zero nodes.</p>"))
         }
-        outpNetwork <- t(vapply(content(resp), function(x){
+        outpNetwork <- lapply(content(resp), function(x){
             return(list(
                 "pairwiseid"=x[["pairwiseid"]],
                 "term1uid"=x[["term1uid"]],
@@ -5267,9 +5267,10 @@ shinyServer(function(input, output, session) {
                 "url1"=x[["url1"]],
                 "url2"=x[["url2"]]
             ))
-        }, FUN.VALUE=list(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16)))
-        outpNetwork <- as.data.frame(outpNetwork)
+        })
+        outpNetwork <- do.call(rbind.data.frame, outpNetwork)
         rownames(outpNetwork) <- seq_len(nrow(outpNetwork))
+        
         # Define class colors
         classColors <- generateAnnoClassColors()
         
@@ -5283,30 +5284,30 @@ shinyServer(function(input, output, session) {
         classes <- list(unlist(classes1), unlist(classes2))
         classes <- unique(unlist(classes, recursive=FALSE))
         # Generate list of nodes for network
-        networkFullNodes <- t(vapply(rowsSet, function(x){
+        networkFullNodes <- lapply(rowsSet, function(x){
             rowsSetSplit <- unlist(str_split(x, "_@_"))
-            # split: 1=Term, 2=Class (Category), 3=URL, 4=Color 
+            # split: 1=Term, 2=Class (Category), 3=URL, 4=Color
             id <- paste0(rowsSetSplit[1], "_@_", rowsSetSplit[2], "_@_", networkMode)
             url <- paste0(rowsSetSplit[3], rowsSetSplit[1])
-            rgbCss <- rowsSetSplit[4]
             # Put blank row if the class is not in the "keep" list
             if(!(rowsSetSplit[2] %in% keep)) {
-                nodeList <- c(id="", label="", group="", shape="", url="", color="")
+              nodeList <- c(id="", label="", group="", shape="", url="")
                 return(nodeList)
             }
-            nodeList <- c(id=id, label=rowsSetSplit[1], group=rowsSetSplit[2], shape="ellipse", url=url, color=rgbCss)
+            nodeList <- c(id=id, label=rowsSetSplit[1], group=rowsSetSplit[2], shape="ellipse", url=url)
             return(nodeList)
-        }, FUN.VALUE=character(6))) # 6 because of the number of columns: id, label, group, shape, url, color
-        networkFullNodes <- data.frame(matrix(unlist(networkFullNodes), nrow=nrow(networkFullNodes)), stringsAsFactors=FALSE)
+        })
+        networkFullNodes <- do.call(rbind.data.frame, networkFullNodes)
         rownames(networkFullNodes) <- seq_len(nrow(networkFullNodes))
-        colnames(networkFullNodes) <- list("id", "label", "group", "shape", "url", "color")
+        colnames(networkFullNodes) <- c("id", "label", "group", "shape", "url")
         
         # Remove duplicates
-        networkFullNodes <- networkFullNodes[!duplicated(networkFullNodes), ]
+        networkFullNodes <- networkFullNodes[!duplicated(networkFullNodes[c("id", "group")]), ]
         # Remove nodes if their class is not in the "keep" list
         networkFullNodes <- networkFullNodes[complete.cases(networkFullNodes), ]
+        
         # Generate list of edges for network
-        networkFullEdges <- t(vapply(seq_len(nrow(outpNetwork)), function(p){
+        networkFullEdges <- lapply(seq_len(nrow(outpNetwork)), function(p){
             if( (outpNetwork[[p, "class1"]] %in% keep) & (outpNetwork[[p, "class2"]] %in% keep) ){
                 rgbCss=generateJaccardColor(as.numeric(outpNetwork[[p, "jaccardindex"]]))
                 edgeUUID <- paste0(UUIDgenerate(), "__", paste0(outpNetwork[[p, "name1"]], "_@_", outpNetwork[[p, "class1"]]), "_@_", networkMode, "__", paste0(outpNetwork[[p, "name2"]], "_@_", outpNetwork[[p, "class2"]]), "_@_", networkMode, "__", networkMode)
@@ -5316,10 +5317,11 @@ shinyServer(function(input, output, session) {
             # If one node has a class not in the "keep" list, discard it
             edgeList <- c(from="", to="", jaccard="", color="", id="")
             return(edgeList)
-        }, FUN.VALUE=character(5))) # 5 because of the number of columns: from, to, jaccard, color, id
-        networkFullEdges <- data.frame(matrix(unlist(networkFullEdges), nrow=nrow(networkFullEdges)), stringsAsFactors=FALSE)
+        })
+        networkFullEdges <- do.call(rbind.data.frame, networkFullEdges)
         rownames(networkFullEdges) <- seq_len(nrow(networkFullEdges))
         colnames(networkFullEdges) <- list("from", "to", "jaccard", "color", "id")
+        
         # Remove edges if either node's class is not in the "keep" list
         networkFullEdges <- networkFullEdges[complete.cases(networkFullEdges), ]
         fullNetwork <- visNetwork(networkFullNodes, networkFullEdges, height="500px", width="100%") %>%
@@ -5774,7 +5776,7 @@ shinyServer(function(input, output, session) {
     # Get colors for corresponding network nodes
     classToColor <- function(annoClass, classColors) {
         if (!is.null(classColors[[annoClass]])) {
-            return(paste0("rgb(", paste0(classColors[[annoClass]], collapse=", "), ")"))
+            return(rgb(red=classColors[[annoClass]][1], green=classColors[[annoClass]][2], blue=classColors[[annoClass]][3], maxColorValue=255))
         } else {
             return(NULL)
         }
