@@ -47,6 +47,9 @@ shinyServer(function(input, output, session) {
     
     lHeatmapColorCluster <- reactiveValues(color="white")
     hHeatmapColorCluster <- reactiveValues(color="red")
+    
+    # List of observers
+    setColorsObservers <- reactiveValues(observers=list())
 
     output[["themeStatus"]] <- renderUI({
         tags$style(HTML(paste0('
@@ -1430,6 +1433,7 @@ shinyServer(function(input, output, session) {
             shinyjs::enable(id="nodeCutoff")
             shinyjs::hide(id="tanimotoThreshold")
             shinyjs::disable(id="includeChemsWithWarnings")
+            shinyjs::enable(id="includeClustering")
             output[["inputInstructions"]] <- renderUI(
                 p("Add \"#SetName\" before each set if using multiple sets at once. Set names may only be alphanumeric characters (A-Z, a-z, and 0-9) and spaces are ignored.")
             )
@@ -1441,6 +1445,7 @@ shinyServer(function(input, output, session) {
             shinyjs::disable(id="nodeCutoff")
             shinyjs::hide(id="tanimotoThreshold")
             shinyjs::disable(id="includeChemsWithWarnings")
+            shinyjs::disable(id="includeClustering")
             output[["inputInstructions"]] <- renderUI(
                 p("Enter the CASRNs for ", tags$a(href="https://comptox.epa.gov/dashboard/chemical_lists/TOX21SL", "chemicals in the Tox21 screening library"),  " (one per line) to view each of their associated annotations in Tox21Enricher. Add \"#SetName\" before each set if using multiple sets at once. Set names may only be alphanumeric characters (A-Z, a-z, and 0-9) and spaces are ignored.")
             )
@@ -1456,6 +1461,7 @@ shinyServer(function(input, output, session) {
             shinyjs::show(id="smilesExamples")
             shinyjs::enable(id="nodeCutoff")
             shinyjs::enable(id="includeChemsWithWarnings")
+            shinyjs::enable(id="includeClustering")
             output[["inputInstructions"]] <- renderUI(
                 HTML(paste0("Enter partial or complete SMILES or InChI strings, one per line. <div class='text-warning'>Warning: Chemicals that contain metals may not produce expected results.</div>"))
             )
@@ -1687,6 +1693,8 @@ shinyServer(function(input, output, session) {
         # Reset setFilesObservers$observers
         lapply(setFilesObservers$observers, function(x) x$destroy())
         setFilesObservers$observers <- NULL
+        lapply(setColorsObservers$observers, function(x) x$destroy())
+        setColorsObservers$observers <- NULL
         output[["resultsTabset"]] <- renderUI(
             div(id="resultsTmp")
         )
@@ -2324,7 +2332,7 @@ shinyServer(function(input, output, session) {
         # Query API to put request in queue
         resp <- NULL
         tryQueue <- tryCatch({
-            resp <- POST(url=paste0(API_PROTOCOL, API_ADDR, "/queue"), query=list(mode=enrichmentType$enrichType, enrichmentUUID=transactionId, annoSelectStr=annoSelectStr, nodeCutoff=cutoff, setNames=paste0(names(enrichmentSets), collapse="\n")))
+            resp <- POST(url=paste0(API_PROTOCOL, API_ADDR, "/queue"), query=list(mode=enrichmentType$enrichType, enrichmentUUID=transactionId, annoSelectStr=annoSelectStr, nodeCutoff=cutoff, setNames=paste0(names(enrichmentSets), collapse="\n"), clustering=input$includeClustering))
             TRUE
         }, error=function(cond){
             return(FALSE)
@@ -3097,7 +3105,7 @@ shinyServer(function(input, output, session) {
                         )
                     ),
                     fluidRow(
-                        column(12,
+                        column(12, id="clusterDiv",
                             h3("Cluster Heatmap"),
                             uiOutput("clusterHeatmap")
                         )
@@ -3116,6 +3124,7 @@ shinyServer(function(input, output, session) {
                     ),
                 )
             })
+            
             lapply(names(enrichmentSets), function(i) {
                 # Fetch setFiles from server via API
                 resp <- NULL
@@ -3911,6 +3920,7 @@ shinyServer(function(input, output, session) {
                     )
                 }
             })
+            
             # Render reenrichment if Substructure or Similarity
             reenrichResultsTotalLength <- length(unlist(lapply(names(reenrichResults), function(i) unlist(reenrichResults[[i]][, "casrn"]))))
             reenrichResultsTotalLength <- reenrichResultsTotalLength + sum(unlist(lapply(names(reenrichResults), function(i) nrow(reenrichResults[[i]]))))
@@ -4585,63 +4595,66 @@ shinyServer(function(input, output, session) {
                     )
                 )
             )
-            output[["clusterHeatmap"]] <- renderUI(
-                fluidRow(
-                    column(12,
-                        tabsetPanel(
-                            tabPanel("Cluster Heatmap", 
-                                div(
-                                    column(1, 
-                                        radioButtons(inputId=paste0("lHeatmapColorControl__Cluster"), label="Select 0 color for heatmap:", choices=c("white", "gray", "black", "red", "blue", "yellow", "green", "brown", "purple", "orange"), selected=lHeatmapColorCluster$color),
-                                    ),
-                                    column(1,
-                                        radioButtons(inputId=paste0("hHeatmapColorControl__Cluster"), label="Select 1 color for heatmap:", choices=c("white", "gray", "black", "red", "blue", "yellow", "green", "brown", "purple", "orange"), selected=hHeatmapColorCluster$color)
-                                    ),
-                                    column(10,
-                                        plot_ly(x=gctCASRNNamesCluster, y=gctAnnoNamesCluster, z=gctFileClusterMatrix, colors=colorRamp(c(lHeatmapColorCluster$color, hHeatmapColorCluster$color)), type="heatmap", xgap=2, ygap=2, colorbar=list(title=list(text='<b>-log<sub>10</sub> (BH P-value)</b>'))) %>% 
-                                        layout(
-                                            margin=list(l=300, r=200, b=160), 
-                                            xaxis=list(title="<b>Annotation Clusters</b>", tickfont=list(size=9), tickangle=15), 
-                                            yaxis=list(title="<b>Input Sets</b>", type="category"),
-                                            plot_bgcolor="transparent",
-                                            paper_bgcolor="transparent",
-                                            font=list(color=theme$textcolor)
-                                        )
-                                    )
-                                )
-                            ),
-                            tabPanel("Cluster Network", 
-                                fluidRow(
-                                    column(3, 
-                                        h4("Edge Selection Criteria"),
-                                        numericInput(inputId="clusterqval", label="q-value", value=0.05, step=0.01, max=1.00, min=0.01),
-                                        checkboxGroupInput( label="Selected Input Sets", inputId="clusterNetworkChoices", choices=names(enrichmentSets), selected=names(enrichmentSets) ),
-                                        checkboxGroupInput( label="Selected Annotation Classes", inputId="clusterNetworkClasses", choices=clusterClasses, selected=clusterClasses ),
-                                        HTML("<h5><b>Other Options</b></h5>"),
-                                        checkboxInput(inputId="physicsEnabledCluster", label="Enable physics?", value=FALSE),
-                                        checkboxInput(inputId="smoothCurveCluster", label="Smooth curve for edges?", value=TRUE),
-                                        actionButton(inputId="clusterNetworkUpdateButton", label="Update network"),
-                                    ), 
-                                    column(9,
-                                        uiOutput("clusterNetwork") %>% withSpinner()
-                                    )
-                                ),
-                                hidden(
-                                    fluidRow(id="nodeLinkClusterMenu",
-                                        column(12, 
-                                            uiOutput("nodeLinkCluster")
-                                        )
-                                    )
-                                ),
-                                hidden(
-                                    fluidRow(id="vennClusterMenu",
-                                        column(4,
-                                            uiOutput("vennClusterButtons")
+            
+            if(!is.null(gctFileClusterMatrix)){
+                output[["clusterHeatmap"]] <- renderUI(
+                    fluidRow(
+                        column(12,
+                            tabsetPanel(
+                                tabPanel("Cluster Heatmap", 
+                                    div(
+                                        column(1, 
+                                            radioButtons(inputId=paste0("lHeatmapColorControl__Cluster"), label="Select 0 color for heatmap:", choices=c("white", "gray", "black", "red", "blue", "yellow", "green", "brown", "purple", "orange"), selected=lHeatmapColorCluster$color),
                                         ),
-                                        column(8,
-                                            plotOutput(
-                                                outputId="vennCluster"
-                                            ) %>% withSpinner()
+                                        column(1,
+                                            radioButtons(inputId=paste0("hHeatmapColorControl__Cluster"), label="Select 1 color for heatmap:", choices=c("white", "gray", "black", "red", "blue", "yellow", "green", "brown", "purple", "orange"), selected=hHeatmapColorCluster$color)
+                                        ),
+                                        column(10,
+                                            plot_ly(x=gctCASRNNamesCluster, y=gctAnnoNamesCluster, z=gctFileClusterMatrix, colors=colorRamp(c(lHeatmapColorCluster$color, hHeatmapColorCluster$color)), type="heatmap", xgap=2, ygap=2, colorbar=list(title=list(text='<b>-log<sub>10</sub> (BH P-value)</b>'))) %>% 
+                                            layout(
+                                                margin=list(l=300, r=200, b=160), 
+                                                xaxis=list(title="<b>Annotation Clusters</b>", tickfont=list(size=9), tickangle=15), 
+                                                yaxis=list(title="<b>Input Sets</b>", type="category"),
+                                                plot_bgcolor="transparent",
+                                                paper_bgcolor="transparent",
+                                                font=list(color=theme$textcolor)
+                                            )
+                                        )
+                                    )
+                                ),
+                                tabPanel("Cluster Network", 
+                                    fluidRow(
+                                        column(3, 
+                                            h4("Edge Selection Criteria"),
+                                            numericInput(inputId="clusterqval", label="q-value", value=0.05, step=0.01, max=1.00, min=0.01),
+                                            checkboxGroupInput( label="Selected Input Sets", inputId="clusterNetworkChoices", choices=names(enrichmentSets), selected=names(enrichmentSets) ),
+                                            checkboxGroupInput( label="Selected Annotation Classes", inputId="clusterNetworkClasses", choices=clusterClasses, selected=clusterClasses ),
+                                            HTML("<h5><b>Other Options</b></h5>"),
+                                            checkboxInput(inputId="physicsEnabledCluster", label="Enable physics?", value=FALSE),
+                                            checkboxInput(inputId="smoothCurveCluster", label="Smooth curve for edges?", value=TRUE),
+                                            actionButton(inputId="clusterNetworkUpdateButton", label="Update network"),
+                                        ), 
+                                        column(9,
+                                            uiOutput("clusterNetwork") %>% withSpinner()
+                                        )
+                                    ),
+                                    hidden(
+                                        fluidRow(id="nodeLinkClusterMenu",
+                                            column(12, 
+                                                uiOutput("nodeLinkCluster")
+                                            )
+                                        )
+                                    ),
+                                    hidden(
+                                        fluidRow(id="vennClusterMenu",
+                                            column(4,
+                                                uiOutput("vennClusterButtons")
+                                            ),
+                                            column(8,
+                                                plotOutput(
+                                                    outputId="vennCluster"
+                                                ) %>% withSpinner()
+                                            )
                                         )
                                     )
                                 )
@@ -4649,10 +4662,12 @@ shinyServer(function(input, output, session) {
                         )
                     )
                 )
-            )
+            } else {
+                output$clusterHeatmap <- renderUI({h4("No clusters generated.")})
+            }
             
             # Observers for chart/cluster heatmap color selectors
-            observeEvent(input$lHeatmapColorControl__Chart, {
+            setColorsObservers$observers[["heatmapColorChartH"]] <- observeEvent(input$lHeatmapColorControl__Chart, {
                 lHeatmapColorChart$color <- input$lHeatmapColorControl__Chart
                 # Display heatmap/network panels
                 output[["chartHeatmap"]] <- renderUI(
@@ -4724,10 +4739,13 @@ shinyServer(function(input, output, session) {
                         )
                     )
                 )
-            })
+            }, ignoreInit=TRUE)
             
             # Observers for chart/cluster heatmap color selectors
-            observeEvent(input$hHeatmapColorControl__Cluster, {
+            setColorsObservers$observers[["heatmapColorClusterH"]] <- observeEvent(input$hHeatmapColorControl__Cluster, {
+                if(is.null(gctFileClusterMatrix)){
+                    return(FALSE)
+                }
                 hHeatmapColorCluster$color <- input$hHeatmapColorControl__Cluster
                 # Display heatmap/network panels
                 output[["clusterHeatmap"]] <- renderUI(
@@ -4795,9 +4813,12 @@ shinyServer(function(input, output, session) {
                         )
                     )
                 )
-            })
+            }, ignoreInit=TRUE)
             
-            observeEvent(input$lHeatmapColorControl__Cluster, {
+            setColorsObservers$observers[["heatmapColorClusterL"]] <- observeEvent(input$lHeatmapColorControl__Cluster, {
+                if(is.null(gctFileClusterMatrix)){
+                    return(FALSE)
+                }
                 lHeatmapColorCluster$color <- input$lHeatmapColorControl__Cluster
                 # Display heatmap/network panels
                 output[["clusterHeatmap"]] <- renderUI(
@@ -4865,82 +4886,82 @@ shinyServer(function(input, output, session) {
                         )
                     )
                 )
-            })
+            }, ignoreInit=TRUE)
             
             # Observers for chart/cluster heatmap color selectors
-            observeEvent(input$hHeatmapColorControl__Chart, {
-              hHeatmapColorChart$color <- input$hHeatmapColorControl__Chart
-              # Display heatmap/network panels
-              output[["chartHeatmap"]] <- renderUI(
-                fluidRow(
-                  column(12,
-                         tabsetPanel(
-                           tabPanel("Chart Heatmap", 
+            setColorsObservers$observers[["heatmapColorChartL"]] <- observeEvent(input$hHeatmapColorControl__Chart, {
+                hHeatmapColorChart$color <- input$hHeatmapColorControl__Chart
+                # Display heatmap/network panels
+                output[["chartHeatmap"]] <- renderUI(
+                    fluidRow(
+                        column(12,
+                            tabsetPanel(
+                                tabPanel("Chart Heatmap", 
                                     div(
-                                      column(1, 
-                                             radioButtons(inputId=paste0("lHeatmapColorControl__Chart"), label="Select 0 color for heatmap:", choices=c("white", "gray", "black", "red", "blue", "yellow", "green", "brown", "purple", "orange"), selected=lHeatmapColorChart$color),
-                                      ),
-                                      column(1,
-                                             radioButtons(inputId=paste0("hHeatmapColorControl__Chart"), label="Select 1 color for heatmap:", choices=c("white", "gray", "black", "red", "blue", "yellow", "green", "brown", "purple", "orange"), selected=hHeatmapColorChart$color)
-                                      ),
-                                      column(10,
-                                             plot_ly(x=gctCASRNNamesChart, y=gctAnnoNamesChart, z=gctFileChartMatrix, colors=colorRamp(c(lHeatmapColorChart$color, hHeatmapColorChart$color)), type="heatmap", xgap=2, ygap=2, colorbar=list(title=list(text='<b>-log<sub>10</sub> (BH P-value)</b>'))) %>% 
-                                               layout(
-                                                 margin=list(l=300, r=200, b=160), 
-                                                 xaxis=list(title="<b>Annotations</b>", tickfont=list(size=9), tickangle=15), 
-                                                 yaxis=list(title="<b>Input Sets</b>", type="category"),
-                                                 plot_bgcolor="transparent",
-                                                 paper_bgcolor="transparent",
-                                                 font=list(color=theme$textcolor)
-                                               )
-                                      )
+                                        column(1, 
+                                            radioButtons(inputId=paste0("lHeatmapColorControl__Chart"), label="Select 0 color for heatmap:", choices=c("white", "gray", "black", "red", "blue", "yellow", "green", "brown", "purple", "orange"), selected=lHeatmapColorChart$color),
+                                        ),
+                                        column(1,
+                                            radioButtons(inputId=paste0("hHeatmapColorControl__Chart"), label="Select 1 color for heatmap:", choices=c("white", "gray", "black", "red", "blue", "yellow", "green", "brown", "purple", "orange"), selected=hHeatmapColorChart$color)
+                                        ),
+                                        column(10,
+                                            plot_ly(x=gctCASRNNamesChart, y=gctAnnoNamesChart, z=gctFileChartMatrix, colors=colorRamp(c(lHeatmapColorChart$color, hHeatmapColorChart$color)), type="heatmap", xgap=2, ygap=2, colorbar=list(title=list(text='<b>-log<sub>10</sub> (BH P-value)</b>'))) %>% 
+                                            layout(
+                                                margin=list(l=300, r=200, b=160), 
+                                                xaxis=list(title="<b>Annotations</b>", tickfont=list(size=9), tickangle=15), 
+                                                yaxis=list(title="<b>Input Sets</b>", type="category"),
+                                                plot_bgcolor="transparent",
+                                                paper_bgcolor="transparent",
+                                                font=list(color=theme$textcolor)
+                                            )
+                                        )
                                     )
-                           ), 
-                           tabPanel("Chart Network", 
+                                ), 
+                                tabPanel("Chart Network", 
                                     fluidRow(
-                                      column(3, 
-                                             h4("Edge Selection Criteria"),
-                                             numericInput(inputId="chartqval", label="q-value", value=0.05, step=0.01, max=1.00, min=0.01),
-                                             checkboxGroupInput(label="Selected Input Sets", inputId="chartNetworkChoices", choices=names(enrichmentSets), selected=names(enrichmentSets)),
-                                             checkboxGroupInput(label="Selected Annotation Classes", inputId="chartNetworkClasses", choices=chartClasses, selected=chartClasses),
-                                             HTML("<h5><b>Other Options</b></h5>"),
-                                             checkboxInput(inputId="physicsEnabledChart", label="Enable physics?", value=FALSE),
-                                             checkboxInput(inputId="smoothCurveChart", label="Smooth curve for edges?", value=TRUE),
-                                             actionButton(inputId="chartNetworkUpdateButton", label="Update network"),
-                                             h4("More Information for Selected Annotation"),
-                                             HTML("<p>Click on any <b>node</b> to view additional information for the annotation in the selected node.</p>"),
-                                             h4("Overlapping Chemicals"),
-                                             HTML("<p>Click on any <b>edge</b> to view a Venn diagram of the chemicals associated with the annotations in its two nodes.</p>"),
-                                      ), 
-                                      column(9,
-                                             uiOutput("chartNetwork") %>% withSpinner()
-                                      )
+                                        column(3, 
+                                            h4("Edge Selection Criteria"),
+                                            numericInput(inputId="chartqval", label="q-value", value=0.05, step=0.01, max=1.00, min=0.01),
+                                            checkboxGroupInput(label="Selected Input Sets", inputId="chartNetworkChoices", choices=names(enrichmentSets), selected=names(enrichmentSets)),
+                                            checkboxGroupInput(label="Selected Annotation Classes", inputId="chartNetworkClasses", choices=chartClasses, selected=chartClasses),
+                                            HTML("<h5><b>Other Options</b></h5>"),
+                                            checkboxInput(inputId="physicsEnabledChart", label="Enable physics?", value=FALSE),
+                                            checkboxInput(inputId="smoothCurveChart", label="Smooth curve for edges?", value=TRUE),
+                                            actionButton(inputId="chartNetworkUpdateButton", label="Update network"),
+                                            h4("More Information for Selected Annotation"),
+                                            HTML("<p>Click on any <b>node</b> to view additional information for the annotation in the selected node.</p>"),
+                                            h4("Overlapping Chemicals"),
+                                            HTML("<p>Click on any <b>edge</b> to view a Venn diagram of the chemicals associated with the annotations in its two nodes.</p>"),
+                                        ), 
+                                        column(9,
+                                            uiOutput("chartNetwork") %>% withSpinner()
+                                        )
                                     ),
                                     hidden(
-                                      fluidRow(id="nodeLinkChartMenu",
-                                               column(12, 
-                                                      uiOutput("nodeLinkChart")
-                                               )
-                                      )
+                                        fluidRow(id="nodeLinkChartMenu",
+                                            column(12, 
+                                                uiOutput("nodeLinkChart")
+                                            )
+                                        )
                                     ),
                                     hidden(
-                                      fluidRow(id="vennChartMenu",
-                                               column(4,
-                                                      uiOutput("vennChartButtons")
-                                               ),
-                                               column(8,
-                                                      plotOutput(
-                                                        outputId="vennChart"
-                                                      ) %>% withSpinner()
-                                               )
-                                      )
+                                        fluidRow(id="vennChartMenu",
+                                            column(4,
+                                                uiOutput("vennChartButtons")
+                                            ),
+                                            column(8,
+                                                plotOutput(
+                                                    outputId="vennChart"
+                                                ) %>% withSpinner()
+                                            )
+                                        )
                                     )
-                           )
-                         )
-                  )
+                                )
+                            )
+                        )
+                    )
                 )
-              )
-            })
+            }, ignoreInit=TRUE)
             
             # Render networks in containers
             output$chartNetwork <- renderUI(chartFullNetwork)
@@ -5768,6 +5789,8 @@ shinyServer(function(input, output, session) {
         # Reset setFilesObservers$observers
         lapply(setFilesObservers$observers, function(x) x$destroy())
         setFilesObservers$observers <- NULL
+        lapply(setColorsObservers$observers, function(x) x$destroy())
+        setColorsObservers$observers <- NULL
         if(!performEnrichment(updateNetworkBox, reenrichFlag=TRUE)){
             changePage(page="enrichment")
         }
@@ -6026,7 +6049,8 @@ shinyServer(function(input, output, session) {
         # Reset setFilesObservers$observers
         lapply(setFilesObservers$observers, function(x) x$destroy())
         setFilesObservers$observers <- NULL
-      
+        lapply(setColorsObservers$observers, function(x) x$destroy())
+        setColorsObservers$observers <- NULL
         # Perform enrichment again
         if(!performEnrichment(reenrichCASRNBox, reenrichFlag=TRUE, originalNamesToReturn=originalNamesToReturn)){
             changePage(page="enrichment")
