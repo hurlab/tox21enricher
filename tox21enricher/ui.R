@@ -289,7 +289,7 @@ shinyUI(function(){
         rclipboardSetup(),
         # Application title
         title="Tox21Enricher",
-        titlePanel(HTML("<a href='/'>Tox21Enricher</a>")),
+        titlePanel(HTML("<a href='/Tox21Enricher/'>Tox21Enricher</a>")),
         # Sidebar with options
         sidebarLayout(
             sidebarPanel(
