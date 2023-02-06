@@ -16,7 +16,6 @@ Tools used in the development of Tox21 Enricher:
 
 <br/>Plumber
 <br/>PostgreSQL
-<br/>Python
 <br/>RDKit
 <br/>R
 <br/>Shiny
