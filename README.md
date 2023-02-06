@@ -3,6 +3,8 @@ Tox21 Enricher is a web application that is still currently under development. I
 
 The Tox21Enricher database may be downloaded in its entirety [here](http://hurlab.med.und.edu/tox21enricher_db.tar.gz).
 
+An empty copy of Tox21Enricher's "queue" database used during processing of enrichment requests can be downloaded [here](http://hurlab.med.und.edu/tox21enricher_queue.sql).
+
 <h2>Process</h2>
 Chemicals are specified directly via their corresponding CASRN or indirectly with a SMILE/InChI string upon which a substructure search is executed. Once chemicals containing the given chemical string(s) are identified, CASRNs are used and enrichment proceeds as if the system was given CASRN input originally. Enrichment is then performed on the CASRNs.
 
