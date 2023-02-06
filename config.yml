@@ -19,8 +19,6 @@ default:
     outdir: "Output/"
     # Location of the application's archive directory where it will save records of old requests
     archivedir: "Archive/"
-    # Location of your Python installation
-    python: "/home/username/anaconda3/envs/my-rdkit-env/bin/python3.X"
     # Number of cores for multithreading
     cores: 1
     # Host/port/protocol of Plumber API: used for error handling.
