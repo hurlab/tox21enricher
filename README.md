@@ -1,7 +1,7 @@
 <h1>Tox21Enricher-Shiny</h1>
 Tox21Enricher-Shiny is a web application built using the Shiny framework for R. It performs PubChem enrichment analysis on a set or sets of chemicals included in the the Tox21 chemical dataset, and it is being devloped in collaboration with the NIEHS as part of their suite of Tox21-related tools.
 
-The Hur Lab at the University of North Dakota School of Medicine and Health Sciences hosts an instance of the Tox21Enricher-Shiny application [here](http://hurlab.med.und.edu/tox21enricher) and an instance of the API [here](http://hurlab.med.und.edu/tox21enricher-api)
+The Hur Lab at the University of North Dakota School of Medicine and Health Sciences hosts an instance of the Tox21Enricher-Shiny application [here](http://hurlab.med.und.edu/tox21enricher) and an instance of the API [here](http://hurlab.med.und.edu/tox21enricher-api).
 
 The Tox21Enricher database may be downloaded in its entirety [here](http://hurlab.med.und.edu/tox21enricher_db.tar.gz). (You may need to right-click, copy the link address, and paste it in a new window to download.)
 
