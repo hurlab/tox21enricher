@@ -3,7 +3,7 @@ Tox21Enricher-Shiny is a web application built using the Shiny framework for R. 
 
 <br/>
 <br/>
-The Hur Lab at the University of North Dakota School of Medicine and Health Sciences hosts an instance of the Tox21Enricher-Shiny application at [hurlab(dot)med(dot)und(dot)edu/tox21enricher](hurlab.med.und.edu/tox21enricher) and an instance of the API at [hurlab(dot)med(dot)und(dot)edu/tox21enricher-api](hurlab.med.und.edu/tox21enricher-api)
+The Hur Lab at the University of North Dakota School of Medicine and Health Sciences hosts an instance of the Tox21Enricher-Shiny application at [http://hurlab(dot)med(dot)und(dot)edu/tox21enricher](http://hurlab.med.und.edu/tox21enricher) and an instance of the API at [http://hurlab(dot)med(dot)und(dot)edu/tox21enricher-api](http://hurlab.med.und.edu/tox21enricher-api)
 
 <br/>
 <br/>
