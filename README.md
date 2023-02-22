@@ -3,15 +3,15 @@ Tox21Enricher-Shiny is a web application built using the Shiny framework for R. 
 
 <br/>
 <br/>
-The Hur Lab at the University of North Dakota School of Medicine and Health Sciences hosts an instance of the Tox21Enricher-Shiny application at [http://hurlab(dot)med(dot)und(dot)edu/tox21enricher](http://hurlab.med.und.edu/tox21enricher) and an instance of the API at [http://hurlab(dot)med(dot)und(dot)edu/tox21enricher-api](http://hurlab.med.und.edu/tox21enricher-api)
+The Hur Lab at the University of North Dakota School of Medicine and Health Sciences hosts an instance of the Tox21Enricher-Shiny application [here](http://hurlab.med.und.edu/tox21enricher) and an instance of the API [here](http://hurlab.med.und.edu/tox21enricher-api)
 
 <br/>
 <br/>
-The Tox21Enricher database may be downloaded in its entirety here: [http://hurlab(dot)med(dot)und(dot)edu/tox21enricher_db.tar.gz](http://hurlab.med.und.edu/tox21enricher_db.tar.gz). (You may need to right-click, copy the link address, and paste it in a new window to download.)
+The Tox21Enricher database may be downloaded in its entirety [here](http://hurlab.med.und.edu/tox21enricher_db.tar.gz). (You may need to right-click, copy the link address, and paste it in a new window to download.)
 
 <br/>
 <br/>
-An empty copy of Tox21Enricher's "queue" database used during processing of enrichment requests can be downloaded here: [http://hurlab(dot)med(dot)und(dot)edu/tox21enricher_queue.sql](http://hurlab.med.und.edu/tox21enricher_queue.sql). (You may need to right-click, copy the link address, and paste it in a new window to download.)
+An empty copy of Tox21Enricher's "queue" database used during processing of enrichment requests can be downloaded [here](http://hurlab.med.und.edu/tox21enricher_queue.sql). (You may need to right-click, copy the link address, and paste it in a new window to download.)
 
 <h2>Process</h2>
 Chemicals are specified directly via their corresponding CASRN or indirectly with a SMILE/InChI string upon which a substructure search is executed. Once chemicals containing the given chemical string(s) are identified, CASRNs are used and enrichment proceeds as if the system was given CASRN input originally. Enrichment is then performed on the CASRNs.
