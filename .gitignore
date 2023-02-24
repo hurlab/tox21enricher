@@ -37,12 +37,3 @@ vignettes/*.pdf
 
 # R Environment Variables
 .Renviron
-
-# Database backup (too big to push to GitHub)
-tox21enricher-database/tox21enricher-database.sql
-
-# Config files (to avoid accidentally pushing a config file with sensitive data)
-config.yml
-tox21enricher/config.yml
-config.yaml
-tox21enricher/config.yaml
