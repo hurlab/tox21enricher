@@ -1,0 +1,1 @@
+If rebuilding the Docker image, place the (uncompressed) database dumps (.sql files) in **this** directory.

@@ -1,0 +1,49 @@
+version: '2'
+services:
+  # Postgres Database container
+  db:
+    # Image name - should be tox21enricher/db
+    image: tox21enricher/db
+    # Host name of container on internal network (this is the db host that should be in the API's config.yml file)
+    hostname: tox21enricher-db
+    # This container should always restart unless stopped by the user
+    restart: unless-stopped
+    # This forces the db container to remain alive after launching
+    command: tail -F /dev/null
+    # Tells the container to use the internal network "tox21enricher-network"
+    networks:
+     - tox21enricher-network
+
+  # Plumber API container
+  api:
+    # Image name - should be tox21enricher/api
+    image: tox21enricher/api
+    # Host name of container on internal network (this is the API host that should be in the Shiny app's config.yml file)
+    hostname: tox21enricher-api
+    # This container should always restart unless stopped by the user
+    restart: unless-stopped
+    # Tells the container to use the internal network "tox21enricher-network"
+    networks:
+     - tox21enricher-network
+    # Expose the API to the host machine on port 9990. Change 9990 to another open port number to map the API server to that port instead
+    ports:
+     - "9990:8000"
+    
+  # Shiny application server container
+  shiny:
+    # Image name - should be tox21enricher/shiny
+    image: tox21enricher/shiny
+    # Host name of container on internal network (the host name here shouldn't really matter unlike the db and API containers, but it is called "tox21enricher-shiny" for consistency here)
+    hostname: tox21enricher-shiny
+    # This container should always restart unless stopped by the user
+    restart: unless-stopped
+    # Tells the container to use the internal network "tox21enricher-network"
+    networks:
+     - tox21enricher-network
+    # Expose the Shiny server to the host machine on port 9991. Change 9991 to another open port number to map the Shiny server to that port instead
+    ports:
+     - "9991:3838"
+
+# Define internal network to allow Database, API, and Shiny app containers to communicate with each other
+networks:
+  tox21enricher-network: {}

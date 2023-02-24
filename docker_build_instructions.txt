@@ -1,0 +1,16 @@
+##### tox21enricher/db #####
+cd database && docker build -t tox21enricher/db -f Dockerfile . --progress=plain --no-cache \
+--build-arg USER_USERNAME='user' \
+--build-arg USER_PASSWORD='password' \
+--build-arg POSTGRES_DATABASE_USERNAME='tox21enricher_user' \
+--build-arg POSTGRES_DATABASE_PASSWORD='tox21enricher_pass' \
+--build-arg POSTGRES_QUEUE_USERNAME='tox21enricher_queuemanager' \
+--build-arg POSTGRES_QUEUE_PASSWORD='tox21enricher_pass2'
+
+##### tox21enricher/api #####
+cd tox21enricher-api && docker build -t tox21enricher/api -f Dockerfile . --progress=plain --no-cache \
+--build-arg USER_USERNAME='user' \
+--build-arg USER_PASSWORD='password'
+
+##### tox21enricher/shiny #####
+cd tox21enricher && docker build -t tox21enricher/shiny -f Dockerfile . --progress=plain --no-cache

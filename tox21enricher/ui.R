@@ -1,19 +1,3 @@
-#
-# This is the user-interface definition of a Shiny web application. You can
-# run the application by clicking 'Run App' above.
-#
-# Find out more about building applications with Shiny here:
-#
-#    http://shiny.rstudio.com/
-#
-# Load user configuration
-tox21config <- config::get("tox21enricher-client")
-USER_MODE <- tox21config$mode
-if(USER_MODE != "client" & USER_MODE != "server"){ # default to 'client' mode if user enters something that isn't 'client' or 'server'
-    print(paste0("Error: Unknown configuration mode '", USER_MODE, "'. Setting to 'client' mode..."))
-    USER_MODE <- "client"
-}
-
 # Custom javascript for checking/unchecking checkboxes
 js_cbx <- "
     shinyjs.check=function(cbx){
@@ -101,221 +85,35 @@ js_session <- "
         document.cookie = 'host_info=; expires=' + date.toUTCString() + '; path=/; SameSite=Strict;';
     }
 "
-# Theme toggle js
-# vvv solution from here: https://stackoverflow.com/questions/61632272/r-shiny-light-dark-mode-switch vvv
-js_theme <- "
-    shinyjs.saveSessionTheme=function(params){
-        theme = params[0];
-        // save cookie
-        document.cookie = 'sessiontheme=' + theme + '; expires=' + 'Fri, 31 Dec 9999 23:59:59 GMT' + '; path=/; SameSite=Strict;';
-    }
-    
-    shinyjs.saveSessionThemePreferred=function(params){
-        theme = params[0];
-        // save cookie
-        document.cookie = 'prefsessiontheme=' + theme + '; expires=' + 'Fri, 31 Dec 9999 23:59:59 GMT' + '; path=/; SameSite=Strict;';
-    }
-    
-    shinyjs.getSessionTheme=function(){
-        // get cookie storing transaction ID if it exists
-        var sessionTheme = '';
-        var cookieList = document.cookie.split(';');
-        for(var i=0; i < cookieList.length; i++){
-            var tmp = cookieList[i].trim();
-            var tmpSplit = tmp.split('=');
-            if(tmpSplit[0].startsWith('sessiontheme')) {
-                sessionTheme = (tmpSplit[1]);
-            }
-        }
-        if(sessionTheme.length > 0){
-            Shiny.setInputValue('sessionTheme', sessionTheme);
-        }
-    }
-    
-    shinyjs.getSessionThemePreferred=function(){
-        // get cookie storing transaction ID if it exists
-        var sessionTheme = '';
-        var cookieList = document.cookie.split(';');
-        for(var i=0; i < cookieList.length; i++){
-            var tmp = cookieList[i].trim();
-            var tmpSplit = tmp.split('=');
-            if(tmpSplit[0].startsWith('prefsessiontheme')) {
-                sessionTheme = (tmpSplit[1]);
-            }
-        }
-        if(sessionTheme.length > 0){
-            Shiny.setInputValue('sessionThemePref', sessionTheme);
-        }
-    }
-
-    shinyjs.init=function() {
-        if (window.matchMedia('(prefers-color-scheme)').media !== 'not all') {  
-            if (window.matchMedia('(prefers-color-scheme: dark)').matches === true) {
-                Shiny.setInputValue('defaultTheme', 'dark');
-            } else { // light theme
-                Shiny.setInputValue('defaultTheme', 'light');
-            }
-        }
-    
-        // define css theme filepaths
-        const themes={
-            dark: 'css/tox21enricher-dark.css',
-            light: 'css/tox21enricher-light.css'
-        }
-        
-        // function that creates a new link element
-        function newLink(theme) {
-            let el=document.createElement('link');
-            el.setAttribute('rel', 'stylesheet');
-            el.setAttribute('text', 'text/css');
-            el.setAttribute('href', theme);
-            return el;
-        }
-    
-        // function that remove <link> of current theme by href
-        function removeLink(theme) {
-            let el=document.querySelector(`link[href='${theme}']`)
-            return el.parentNode.removeChild(el);
-        }
-    
-        // define vars
-        const darkTheme=newLink(themes.dark);
-        const lightTheme=newLink(themes.light);
-        const head=document.getElementsByTagName('head')[0];
-        const toggle=document.getElementById('changeThemeToggle');
-    
-        // define extra css and add as default
-        const extraDarkThemeCSS='.dataTables_length label, .dataTables_filter label, .dataTables_info {color: white!important;} .paginate_button { background: white!important;} thead { color: white;}'
-        const extraDarkThemeElement=document.createElement('style');
-        extraDarkThemeElement.appendChild(document.createTextNode(extraDarkThemeCSS));
-        head.appendChild(extraDarkThemeElement);
-
-        // define event - checked === 'light'
-        toggle.addEventListener('input', function(event) {
-            // if checked, switch to dark theme
-            if (toggle.checked) {
-                removeLink(themes.light);
-                head.appendChild(extraDarkThemeElement);
-                head.appendChild(darkTheme);
-            }  else {
-                // else add light theme
-                removeLink(themes.dark);
-                head.removeChild(extraDarkThemeElement);
-                head.appendChild(lightTheme);
-            }
-        })
-    }
-    
-    shinyjs.checkDefaultTheme=function() {
-        if (window.matchMedia('(prefers-color-scheme)').media !== 'not all') {
-            if (window.matchMedia('(prefers-color-scheme: dark)').matches === true) {
-                Shiny.setInputValue('defaultTheme', 'dark');
-            } else { // light theme
-                Shiny.setInputValue('defaultTheme', 'light');
-            }
-        }
-    }
-    
-    shinyjs.initDarkTheme=function(params) {
-        // detect user theme and change to dark theme if enabled
-        // define css theme filepaths
-        const themes={
-            dark: 'css/tox21enricher-dark.css',
-            light: 'css/tox21enricher-light.css'
-        }
-        
-        // function that creates a new link element
-        function newLink(theme) {
-            let el=document.createElement('link');
-            el.setAttribute('rel', 'stylesheet');
-            el.setAttribute('text', 'text/css');
-            el.setAttribute('href', theme);
-            return el;
-        }
-    
-        // function that remove <link> of current theme by href
-        function removeLink(theme) {
-            let el=document.querySelector(`link[href='${theme}']`)
-            return el.parentNode.removeChild(el);
-        }
-    
-        // define vars
-        const darkTheme=newLink(themes.dark);
-        const lightTheme=newLink(themes.light);
-        const head=document.getElementsByTagName('head')[0];
-        const toggle=document.getElementById('changeThemeToggle');
-      
-        // define extra css and add as default
-        const extraDarkThemeCSS='.dataTables_length label, .dataTables_filter label, .dataTables_info {color: white!important;} .paginate_button { background: white!important;} thead { color: white;}'
-        const extraDarkThemeElement=document.createElement('style');
-        extraDarkThemeElement.appendChild(document.createTextNode(extraDarkThemeCSS));
-        head.appendChild(extraDarkThemeElement);
-        
-        // default/grabbing from preference
-        if(params == 'default') {
-            if (window.matchMedia('(prefers-color-scheme)').media !== 'not all') {
-                if (window.matchMedia('(prefers-color-scheme: dark)').matches === true) {
-                    removeLink(themes.light);
-                    head.appendChild(extraDarkThemeElement);
-                    head.appendChild(darkTheme);
-                } else { // light theme
-                    removeLink(themes.dark);
-                    head.removeChild(extraDarkThemeElement);
-                    head.appendChild(lightTheme);
-                }
-            }
-        } else if (params == 'dark') { // forced dark
-            removeLink(themes.light);
-            head.appendChild(extraDarkThemeElement);
-            head.appendChild(darkTheme);
-        } else { // forced light
-            removeLink(themes.dark);
-            head.removeChild(extraDarkThemeElement);
-            head.appendChild(lightTheme);
-        }
-    }
-"
 
 # Define UI for Tox21Enricher application
 shinyUI(function(){
-    # Get theme to load on start
-    themeInit <- "css/tox21enricher-light.css"
     fluidPage(
-        # Theme
-        theme=themeInit,
         # Lang
         lang="en",
         # Set up clipboard copying
         rclipboardSetup(),
         # Application title
         title="Tox21Enricher",
-        titlePanel(HTML("<a href='/Tox21Enricher/'>Tox21Enricher</a>")),
+        titlePanel(HTML("<a href='/'>Tox21Enricher</a>")),
         # Sidebar with options
         sidebarLayout(
             sidebarPanel(
                 id="sidebar",
                 width=2,
                 style="position:fixed; overflow:visible; width:15%; height:600px; z-index:9999; overflow-y:scroll;",
-                # Define JS for theme changing and host config
+                # Define JS for additional config & functions
                 useShinyjs(),
-                extendShinyjs(text=js_theme, functions=c('init', 'initDarkTheme', 'saveSessionTheme', 'getSessionTheme', 'checkDefaultTheme', 'saveSessionThemePreferred', 'getSessionThemePreferred')),
                 extendShinyjs(text=js_cbx, functions=c('check', 'uncheck')),
                 extendShinyjs(text=js_session, functions=c('saveSession', 'getSession', 'clearSession', 'saveHostInfo', 'getHostInfo', 'clearHostInfo')),
-                p("Welcome to Tox21Enricher! Please see this ", downloadLink(outputId="manualLink", label="link"), "for instructions on using this application and the descriptions about the chemical / biological categories. Other resources from the Tox21 toolbox can be viewed", tags$a(href="https://ntp.niehs.nih.gov/results/tox21/tbox/", "here."), "A sufficiently robust internet connection and JavaScript are required to use all of this application's features."),
+                p("Welcome to Tox21Enricher! Please see this ", tags$a(href="https://github.com/hurlab/tox21enricher/blob/main/docs/Tox21Enricher_Manual.pdf", "link"), "for instructions on using this application and the descriptions about the chemical / biological categories. Other resources from the Tox21 toolbox can be viewed", tags$a(href="https://ntp.niehs.nih.gov/whatwestudy/tox21/toolbox/index.html", "here."), "A sufficiently robust internet connection and JavaScript are required to use all of this application's features."),
                 p("An older version of Tox21Enricher using the", tags$a(href="https://grails.org/", "Grails framework"), "is hosted", tags$a(href="http://hurlab.med.und.edu/tox21enricher-grails", "here.")),
                 # Display API connection status
                 uiOutput("apiConnection"),
                 # Display enrichment total count
                 uiOutput("totalEnrichments"),
-                # Settings button
-                if(USER_MODE == 'client'){
-                    actionButton(inputId="settingsButton", label="Settings", icon=icon("cog"))
-                },
-                # Search enrichments button
+                # Search enrichment requests button
                 actionButton(inputId="searchButton", label="View previous results", icon=icon("search")),
-                # Theme toggle - TODO: disabled until this is resolved
-                radioButtons(inputId="changeThemeToggle", label="Theme", choices=list("Auto", "Light", "Dark")),
-                uiOutput("themeStatus"),
                 hidden(
                     actionButton("refresh", "Start over", icon=icon("undo"))
                 )

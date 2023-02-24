@@ -1,0 +1,1 @@
+Output files for completed enrichment requests should be created in this directory.

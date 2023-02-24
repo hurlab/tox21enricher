@@ -1,12 +1,3 @@
-#
-# This is the server logic of a Shiny web application. You can run the
-# application by clicking 'Run App' above.
-#
-# Find out more about building applications with Shiny here:
-#
-#    http://shiny.rstudio.com/
-#
-
 # Define server logic
 shinyServer(function(input, output, session) {
     # Get URL params
@@ -35,9 +26,6 @@ shinyServer(function(input, output, session) {
     # List of chems with warnings
     firstCaseWarningChems <- reactiveValues(casrns=list())
   
-    # Theme info
-    theme <- reactiveValues(textcolor="#000000")
-    
     # Heatmap color memory
     lHeatmapColor <- reactiveValues()
     hHeatmapColor <- reactiveValues()
@@ -51,14 +39,6 @@ shinyServer(function(input, output, session) {
     # List of observers
     setColorsObservers <- reactiveValues(observers=list())
 
-    output[["themeStatus"]] <- renderUI({
-        tags$style(HTML(paste0('
-            .dataTables_length label, .dataTables_filter label, .dataTables_info {
-                color: ', theme$textcolor, '!important;
-            }
-        ')))
-    })
-    
     # Quick functions for changing pages
     changePage <- function(page="enrichment"){
         if(page == "enrichment"){
@@ -85,9 +65,6 @@ shinyServer(function(input, output, session) {
             # Enable view previous button
             shinyjs::show(id="searchButton")
             shinyjs::enable(id="searchButton")
-            # Enable settings button
-            shinyjs::show(id="settingsButton")
-            shinyjs::enable(id="settingsButton")
             # Enable button for getting results for previous request
             shinyjs::hide(id="searchPrevButton")
             shinyjs::disable(id="searchPrevButton")
@@ -121,9 +98,6 @@ shinyServer(function(input, output, session) {
             # Enable view previous button
             shinyjs::show(id="searchButton")
             shinyjs::enable(id="searchButton")
-            # Enable settings button
-            shinyjs::show(id="settingsButton")
-            shinyjs::enable(id="settingsButton")
             # Enable button for getting results for previous request
             shinyjs::show(id="searchPrevButton")
             shinyjs::enable(id="searchPrevButton")
@@ -157,9 +131,6 @@ shinyServer(function(input, output, session) {
             # Disable View previous results button
             shinyjs::hide(id="searchButton")
             shinyjs::disable(id="searchButton")
-            # Enable settings button
-            shinyjs::show(id="settingsButton")
-            shinyjs::enable(id="settingsButton")
             # Hide/disable button for getting results for previous request
             shinyjs::hide(id="searchPrevButton")
             shinyjs::disable(id="searchPrevButton")
@@ -198,9 +169,6 @@ shinyServer(function(input, output, session) {
             # Disable View previous results button
             shinyjs::hide(id="searchButton")
             shinyjs::disable(id="searchButton")
-            # Enable settings button
-            shinyjs::show(id="settingsButton")
-            shinyjs::enable(id="settingsButton")
             # Hide/disable button for getting results for previous request
             shinyjs::hide(id="searchPrevButton")
             shinyjs::disable(id="searchPrevButton")
@@ -315,54 +283,6 @@ shinyServer(function(input, output, session) {
     if(tryCleanup){
         cleanupTime$hours <- unlist(content(resp))
     }
-
-    # Show settings menu
-    observeEvent(input$settingsButton, {
-        showModal(modalDialog(
-            title="Settings",
-            footer=tagList(modalButton("Close")),
-            size="l",
-            fluidRow(
-                column(12, 
-                    h4("Change host"),
-                    HTML(
-                        "<p>By default, Tox21Enricher will attempt to connect to the host on the port defined in the config.yml file. To connect to a different host or on a different port,<br>
-                        1) Update the host and port values here.<br>
-                        2) Press the \"Update\" button, then the \"Close\" button to exit the settings menu.<br>
-                        3) Reload the page.<br>
-                        </p>"
-                    ),
-                    textInput(inputId="hostUpdate", label="Host", placeholder="i.e., \"hurlab.med.und.edu\""),
-                    textInput(inputId="portUpdate", label="Port", placeholder="i.e., \"80\""),
-                    actionButton(input="updateHostPort", label="Update"),
-                    actionButton(input="clearHostPort", label="Clear")
-                )
-            )
-        ))
-    })
-    # Update address for Tox21Enricher API with user-defined settings
-    observeEvent(input$updateHostPort, {
-        # display error if both fields are not specified
-        if(nchar(input$hostUpdate) < 1 | nchar(input$portUpdate) < 1){
-            showNotification("Error: Both a host address and port value must be specified.", type="error")
-            return(FALSE)
-        }
-        if(is.na(strtoi(input$portUpdate))) { # if port is not a valid integer
-            showNotification("Error: Invalid port.", type="error")
-            return(FALSE)
-        }
-        # Create cookie with new host & port info 
-        js$saveHostInfo(input$hostUpdate, input$portUpdate)
-        showNotification("Host and port updated. These changes will take effect upon the next page refresh.", type="message")
-        return(TRUE)
-    })
-    
-    # Clear cookie for the above settings
-    observeEvent(input$clearHostPort, {
-        js$clearHostInfo()
-        showNotification("Host and port info cleared. Using settings from configuration file. These changes will take effect upon the next page refresh.", type="message")
-        return(TRUE)
-    })
     
     # Display annotation category selection criteria information
     observeEvent(input$annotationSelectionInfoLink, {
@@ -495,43 +415,6 @@ shinyServer(function(input, output, session) {
         return(totalEnrichments)
     })
     
-    # Download user manual when link is clicked
-    output$manualLink <- downloadHandler(
-        filename=function(){
-            return(paste0("Tox21Enricher_User_Manual.pdf"))
-        },
-        content=function(file){
-            # First, query API to get most recent version of manual
-            resp <- NULL
-            tryManual <- tryCatch({
-                resp <- GET(url=paste0(API_PROTOCOL, API_ADDR, "/getAppVersion"))
-            }, error=function(cond){
-                return(NULL)
-            })
-            if(is.null(tryManual)){
-                showNotification("Error: The application cannot connect to the Tox21Enricher server. Please try again later.", type="error")
-                return(FALSE)
-            }
-            appVersion <- content(resp)
-            # Next, check if we have previously downloaded the manual (Tox21Enricher will cache previously-downloaded manuals). If yes, do nothing. If no, download the manual from the Plumber server
-            # This should always get the most recent manual revision
-            dir.create(paste0(tempdir(), "/docs/"))
-            tryManualDL <- TRUE
-            if(!file.exists(paste0(tempdir(), "/docs/Tox21Enricher_Manual_v", appVersion, ".pdf"))){
-                # TODO: error check if download fails
-                tryManualDL <- tryCatch({
-                    download.file(paste0(API_PROTOCOL, API_ADDR, "/serveManual"), destfile=paste0(tempdir(), "/docs/Tox21Enricher_Manual_v", appVersion, ".pdf"))
-                }, error=function(cond){
-                    return(NULL)
-                })
-            }
-            if(is.null(tryManualDL)) {
-                showNotification("Error: The application cannot connect to the Tox21Enricher server. Please try again later.", type="error")
-            } else {
-                file.copy(paste0(tempdir(), "/docs/Tox21Enricher_Manual_v", appVersion, ".pdf"), file) 
-            }
-        }
-    )
     searchStatus <- reactiveValues(option=character())
     searchStatus$option <- "search"
     resultsButtonsReactiveList <- reactiveValues(observers=NULL)
@@ -714,8 +597,6 @@ shinyServer(function(input, output, session) {
                             shinyjs::disable(id="waitingTable")
                             shinyjs::disable(id="clipboard")
                             shinyjs::disable(id="cancelEnrichment")
-                            # Disable settings button
-                            shinyjs::disable(id="settingsButton")
                             
                             # Check if result (Input/Output) files exist on the server
                             resp <- NULL
@@ -1123,52 +1004,6 @@ shinyServer(function(input, output, session) {
         setColors$color <- colorsList
         enrichmentResults(mode, transactionId, annoSelectStr, nodeCutoff, enrichmentSets, originalNames, reenrichResults, originalMode, colorsList)
     })
-    
-    # update theme data when checkbox is clicked
-    observeEvent(input$changeThemeToggle, {
-        # Reset Venn diagrams on theme change
-        output[["vennChart"]] <- renderPlot({})
-        output[["vennCluster"]] <- renderPlot({})
-        output[["vennChartButtons"]] <- renderUI({})
-        output[["vennClusterButtons"]] <- renderUI({})
-        shinyjs::hide(id="vennChart")
-        shinyjs::hide(id="vennCluster")
-        shinyjs::hide(id="vennChartButtons")
-        shinyjs::hide(id="vennClusterButtons")
-        shinyjs::hide(id="vennChartMenu")
-        shinyjs::hide(id="vennClusterMenu")
-        shinyjs::hide(id="nodeLinkChartMenu")
-        shinyjs::hide(id="nodeLinkClusterMenu")
-        if(input$changeThemeToggle == "Dark"){ # dark
-            theme$textcolor <- "#FFFFFF"
-            js$saveSessionThemePreferred("dark")
-            js$initDarkTheme("dark")
-        } else if (input$changeThemeToggle == "Light") { # light
-            theme$textcolor <- "#000000"
-            js$saveSessionThemePreferred("light")
-            js$initDarkTheme("light")
-        } else if (input$changeThemeToggle == "Auto") { # auto
-            js$saveSessionThemePreferred("auto")
-            js$initDarkTheme("default")
-            if(is.null(input$sessionTheme)){
-                theme$textcolor="#000000"
-            } else {
-                if(input$sessionTheme == "dark"){
-                    theme$textcolor="#FFFFFF"
-                } else if(input$sessionTheme == "light"){
-                    theme$textcolor="#000000"
-                }
-            }
-        }
-        # Fix for DT::DataTable labels showing up as the wrong color
-        output[["themeStatus"]] <- renderUI({
-            tags$style(HTML(paste0('
-                .dataTables_length label, .dataTables_filter label, .dataTables_info {
-                    color: ', theme$textcolor, '!important;
-                }
-            ')))
-        })
-    }, ignoreInit=TRUE, ignoreNULL=TRUE)
     
     # Display list of annotations to select
     output$annotations <- renderUI({
@@ -2461,7 +2296,6 @@ shinyServer(function(input, output, session) {
         # Re-enable buttons
         shinyjs::enable(id="clipboard")
         shinyjs::enable(id="cancelEnrichment")
-        shinyjs::enable(id="settingsButton")
     }
     
     observe({
@@ -2982,7 +2816,7 @@ shinyServer(function(input, output, session) {
                                 yaxis=list(title="<b>Annotations</b>", tickfont=list(size=9), tickangle=15, type="category", automargin=TRUE),
                                 plot_bgcolor="transparent",
                                 paper_bgcolor="transparent",
-                                font=list(color=theme$textcolor)
+                                font=list(color="#000000")
                             ) %>% hide_colorbar()
                         )
                     )
@@ -3541,7 +3375,7 @@ shinyServer(function(input, output, session) {
                                             class="row-border stripe compact",
                                             style="bootstrap",
                                             select="none",
-                                            caption=HTML(paste0("<span style='color:", theme$textcolor, ";'>", x, " - ", enrichmentScores[x], "</span>")),
+                                            caption=HTML(paste0("<span style='color:", "#000000", ";'>", x, " - ", enrichmentScores[x], "</span>")),
                                             options=list( 
                                                 paging=FALSE,
                                                 scrollX=TRUE,
@@ -3771,28 +3605,6 @@ shinyServer(function(input, output, session) {
                                     })  
                                 )
                             ),
-                            # Main heatmap per set
-                            # fluidRow(
-                            #     column(1, 
-                            #         radioButtons(inputId=paste0("lHeatmapColorControl__", i), label="Select 0 color for heatmap:", choices=c("white", "gray", "black", "red", "blue", "yellow", "green", "brown", "purple", "orange"), selected="white"),
-                            #     ),
-                            #     column(1,
-                            #         radioButtons(inputId=paste0("hHeatmapColorControl__", i), label="Select 1 color for heatmap:", choices=c("white", "gray", "black", "red", "blue", "yellow", "green", "brown", "purple", "orange"), selected="red")
-                            #     ),
-                            #     column(10,
-                            #         plot_ly(x=gctAnnoNames, y=gctCASRNNames, z=gctFileMatrix, colors=colorRamp(c(lHeatmapColor[[paste0("color__", i)]], hHeatmapColor[[paste0("color__", i)]])), type="heatmap", xgap=2, ygap=2 ) %>% 
-                            #         layout(
-                            #             autosize=TRUE, 
-                            #             showlegend=FALSE, 
-                            #             margin=list(r=200, b=200), 
-                            #             xaxis=list(title="<b>Annotations</b>", tickfont=list(size=9), tickangle=15, automargin=TRUE), 
-                            #             yaxis=list(title="<b>Input CASRNs</b>", type="category", automargin=TRUE),
-                            #             plot_bgcolor="transparent",
-                            #             paper_bgcolor="transparent",
-                            #             font=list(color=theme$textcolor)
-                            #         ) %>% hide_colorbar()
-                            #     )
-                            # ),
                             uiOutput(paste0("perSetHeatmap__", i)),
                             hr(),
                             fluidRow(
@@ -3825,7 +3637,7 @@ shinyServer(function(input, output, session) {
                                     yaxis=list(title="<b>Input CASRNs</b>", type="category", automargin=TRUE),
                                     plot_bgcolor="transparent",
                                     paper_bgcolor="transparent",
-                                    font=list(color=theme$textcolor)
+                                    font=list(color="#000000")
                                 ) %>% hide_colorbar()
                             )
                         )
@@ -3853,7 +3665,7 @@ shinyServer(function(input, output, session) {
                                             yaxis=list(title="<b>Input CASRNs</b>", type="category", automargin=TRUE),
                                             plot_bgcolor="transparent",
                                             paper_bgcolor="transparent",
-                                            font=list(color=theme$textcolor)
+                                            font=list(color="#000000")
                                         ) %>% hide_colorbar()
                                     )
                                 )
@@ -3880,7 +3692,7 @@ shinyServer(function(input, output, session) {
                                         yaxis=list(title="<b>Input CASRNs</b>", type="category", automargin=TRUE),
                                         plot_bgcolor="transparent",
                                         paper_bgcolor="transparent",
-                                        font=list(color=theme$textcolor)
+                                        font=list(color="#000000")
                                     ) %>% hide_colorbar()
                                 )
                             )
@@ -4546,7 +4358,7 @@ shinyServer(function(input, output, session) {
                                             yaxis=list(title="<b>Input Sets</b>", type="category"),
                                             plot_bgcolor="transparent",
                                             paper_bgcolor="transparent",
-                                            font=list(color=theme$textcolor)
+                                            font=list(color="#000000")
                                         )
                                     )
                                 )
@@ -4617,7 +4429,7 @@ shinyServer(function(input, output, session) {
                                                 yaxis=list(title="<b>Input Sets</b>", type="category"),
                                                 plot_bgcolor="transparent",
                                                 paper_bgcolor="transparent",
-                                                font=list(color=theme$textcolor)
+                                                font=list(color="#000000")
                                             )
                                         )
                                     )
@@ -4690,7 +4502,7 @@ shinyServer(function(input, output, session) {
                                                 yaxis=list(title="<b>Input Sets</b>", type="category"),
                                                 plot_bgcolor="transparent",
                                                 paper_bgcolor="transparent",
-                                                font=list(color=theme$textcolor)
+                                                font=list(color="#000000")
                                             )
                                         )
                                     )
@@ -4768,7 +4580,7 @@ shinyServer(function(input, output, session) {
                                                 yaxis=list(title="<b>Input Sets</b>", type="category"),
                                                 plot_bgcolor="transparent",
                                                 paper_bgcolor="transparent",
-                                                font=list(color=theme$textcolor)
+                                                font=list(color="#000000")
                                             )
                                         )
                                     )
@@ -4841,7 +4653,7 @@ shinyServer(function(input, output, session) {
                                                 yaxis=list(title="<b>Input Sets</b>", type="category"),
                                                 plot_bgcolor="transparent",
                                                 paper_bgcolor="transparent",
-                                                font=list(color=theme$textcolor)
+                                                font=list(color="#000000")
                                             )
                                         )
                                     )
@@ -4912,7 +4724,7 @@ shinyServer(function(input, output, session) {
                                                 yaxis=list(title="<b>Input Sets</b>", type="category"),
                                                 plot_bgcolor="transparent",
                                                 paper_bgcolor="transparent",
-                                                font=list(color=theme$textcolor)
+                                                font=list(color="#000000")
                                             )
                                         )
                                     )
@@ -5237,8 +5049,6 @@ shinyServer(function(input, output, session) {
         shinyjs::enable(id="refresh")
         # Re-enable results page
         shinyjs::enable(id="enrichmentResults")
-        # Enable settings button
-        shinyjs::enable(id="settingsButton")
     }
     
     # Re-order bar graphs with respect to given input set
@@ -5485,16 +5295,9 @@ shinyServer(function(input, output, session) {
                 casrnsShared <- "No shared chemicals."
             }
           
-            # Set venn diagram color to match theme settings
+            # Venn diagram color settings
             vennColor <- "black"
             vennColorBG <- "#FFFFFF"
-            if(theme$textcolor == "#FFFFFF"){ # Dark theme
-                vennColor <- "white"
-                vennColorBG <- "#333333"
-            } else { # Light theme
-                vennColor <- "black"
-                vennColorBG <- "#FFFFFF"
-            }
             
             # Get annotation colors
             classColors <- generateAnnoClassColors()
@@ -5927,7 +5730,7 @@ shinyServer(function(input, output, session) {
                     autosize=FALSE,
                     plot_bgcolor="transparent",
                     paper_bgcolor="transparent",
-                    font=list(color=theme$textcolor)
+                    font=list(color="#000000")
                 )
                 # Remove first input set since we have already plotted it
                 tmpBgCleaned <- tmpBgCleaned[-1]
@@ -6067,48 +5870,5 @@ shinyServer(function(input, output, session) {
     observeEvent(input$prevSessionLink, {
         loadEnrichList()
     })
-    
-    # Check default theme value
-    js$checkDefaultTheme()
-    observeEvent(input$defaultTheme, {
-        if(!is.null(input$defaultTheme)){
-            if(input$defaultTheme == 'dark'){
-                js$saveSessionTheme('dark')
-            } else {
-                js$saveSessionTheme('light')
-            }
-        } else {
-            js$saveSessionTheme('light')
-        }
-    }, ignoreInit=TRUE, ignoreNULL=FALSE)
-    
-    js$getSessionTheme()
-    js$getSessionThemePreferred()
-    # First find the user's default theme and set
-    observeEvent(input$sessionTheme, {
-        # first, check if theme was set to preferred:
-        if(!is.null(input$sessionThemePref)){
-            if(input$sessionThemePref == "light"){
-                js$initDarkTheme("light")
-                theme$textcolor="#000000"
-                updateRadioButtons(session, "changeThemeToggle", selected="Light")
-            } else if (input$sessionThemePref == "dark"){
-                js$initDarkTheme("dark")
-                theme$textcolor="#FFFFFF"
-                updateRadioButtons(session, "changeThemeToggle", selected="Dark")
-            } else {
-                if(!is.null(input$sessionTheme)){
-                    js$initDarkTheme("default") # Set dark theme as default if preferred by user's browser
-                    if(input$sessionTheme == "dark"){
-                        theme$textcolor="#FFFFFF"
-                        updateRadioButtons(session, "changeThemeToggle", selected="Auto")
-                    } else if(input$sessionTheme == "light"){
-                        theme$textcolor="#000000"
-                        updateRadioButtons(session, "changeThemeToggle", selected="Auto")
-                    }
-                }
-            }
-        }
-    }, ignoreInit=TRUE, ignoreNULL=FALSE)
 })
 

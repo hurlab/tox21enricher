@@ -1,6 +1,0 @@
-If you have the startQueue.sh script configured to always restart on crash but need to kill the process for whatever reason,
-follow these directions (note that these instructions are intended for the server admin with superuser privileges only):
-
-1) run "ps aux | gep startQueue.sh" to get the PID of the queue process
-2) run "sudo gdb -p <PID of queue process>" to hook into the process
-3) run "call exit(0)" from within gdb to exit the process with status code = 0

@@ -1,0 +1,1 @@
+Compressed archives of enrichment result files should be stored in this directory.

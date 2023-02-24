@@ -1,0 +1,1 @@
+Input files for received enrichment requests should be created in this directory.
