@@ -30,9 +30,74 @@ tox21queue <- config::get("tox21enricher-queue")
 APP_DIR <- tox21config$appdir
 IN_DIR <- tox21config$indir
 OUT_DIR <- tox21config$outdir
+ARCHIVE_DIR <- tox21queue$archivedir
 CORES <- tox21config$cores
-CLEANUP_TIME <- tox21queue$cleanupTime
-DELETE_TIME <- tox21queue$deleteTime
+
+if(nchar(APP_DIR) < 1){
+    print("Error: please define APP_DIR.")
+    stop()
+}
+if(nchar(IN_DIR) < 1){
+    print("Error: please define IN_DIR.")
+    stop()
+}
+if(nchar(OUT_DIR) < 1){
+    print("Error: please define OUT_DIR.")
+    stop()
+}
+if(APP_DIR == "/"){
+    print("Error: invalid value for APP_DIR. Cannot be root directory.")
+    stop()
+}
+if(IN_DIR == "/"){
+    print("Error: invalid value for IN_DIR. Cannot be root directory.")
+    stop()
+}
+if(OUT_DIR == "/"){
+    print("Error: invalid value for OUT_DIR. Cannot be root directory.")
+    stop()
+}
+# If not setting archive directory, warn user that files will not be archived
+if(nchar(ARCHIVE_DIR) < 1){
+    print("Warning: ARCHIVE_DIR not set. Previous request data will not be archived.")
+}
+
+if(is.na(as.numeric(tox21queue$cleanupTime))){
+    print("Error: cleanupTime must be a number.")
+    stop()
+}
+
+if(is.na(as.numeric(tox21queue$deleteTime))){
+    print("Error: deleteTime must be a number.")
+    stop()
+}
+
+if(as.numeric(tox21queue$cleanupTime) %% 1 != 0){
+    print("Error: cleanupTime must be an integer.")
+    stop()
+}
+
+if(as.numeric(tox21queue$deleteTime) %% 1 != 0){
+    print("Error: deleteTime must be an integer.")
+    stop()
+}
+
+if(as.numeric(tox21queue$cleanupTime) < 1){
+    print("Error: cleanupTime must be at least 1.")
+    stop()
+}
+
+if(as.numeric(tox21queue$deleteTime) < 1){
+    if(as.numeric(tox21queue$deleteTime) != -1){
+        print("Error: deleteTime must be at least 1 to enable archival or equal to -1 to disable archival.")
+        stop()
+    }
+}
+
+CLEANUP_TIME <- as.numeric(tox21queue$cleanupTime)
+DELETE_TIME <- as.numeric(tox21queue$deleteTime)
+
+
 INPUT_MAX <- tox21queue$inputMax
 if(INPUT_MAX > 16){ # Tox21Enricher only supports a max of 16 concurrent input sets and a minimum of 1 set.
     print("Warning: Found an inputMax value exceeding 16 in config.yml. Tox21Enricher only supports a maximum of 16 sets. INPUT_MAX will be set to 16.")
@@ -87,6 +152,99 @@ connQueue <- function(){
         idleTimeout=3600000
     ))
 }
+
+# Function for queue cleanup - should be called whenever a new request is received
+queueCleanup <- function(){
+    # Check if anything has been sitting in the queue for longer than a day, and auto cancel those
+    currentDate <- Sys.time()
+    # Connect to DB
+    pool <- connQueue()
+    query <- sqlInterpolate(ANSI(), paste0("SELECT queue.uuid, queue.finished, transaction.timestamp_posted, transaction.timestamp_started, transaction.timestamp_finished FROM queue LEFT JOIN transaction ON queue.uuid=transaction.uuid WHERE finished=0;"), id="getIncomplete")
+    outp <- dbGetQuery(pool, query)
+    poolClose(pool)
+    if(nrow(outp) > 0){
+        badTransactions <- unname(unlist(apply(outp, 1, function(x){
+            if(is.na(x["timestamp_posted"]) | is.na(x["timestamp_started"])) {
+                return(NULL)
+            }
+            if(x["timestamp_started"] == "not started") {
+                return(NULL)
+            }
+            if(as.numeric(difftime(currentDate, as.POSIXlt(x["timestamp_started"]), units="hours")) > CLEANUP_TIME) {
+                return(x["uuid"])
+            }
+            return(NULL)
+        })))
+        print("Clearing the following transactions...")
+        print(badTransactions)
+        pool <- connQueue()
+        lapply(badTransactions, function(x){
+            query <- sqlInterpolate(ANSI(), paste0("UPDATE queue SET finished=1, cancel=1, error='Cancelled by queue cleanup.' WHERE uuid='", x, "';"), id="updateBad")
+            outp <- dbExecute(pool, query)
+            query <- sqlInterpolate(ANSI(), paste0("UPDATE transaction SET cancel=1 WHERE uuid='", x, "';"), id="updateBad")
+            outp <- dbExecute(pool, query)
+        })
+        poolClose(pool)
+    }
+    
+    ## Check if any request has been around for longer than the max time to be stored
+    # Connect to DB
+    pool <- connQueue()
+    query <- sqlInterpolate(ANSI(), paste0("SELECT queue.uuid, queue.finished, queue.cancel, transaction.timestamp_posted, transaction.timestamp_started, transaction.timestamp_finished FROM queue LEFT JOIN transaction ON queue.uuid=transaction.uuid WHERE transaction.delete=0;"), id="getAllToDelete")
+    outp <- dbGetQuery(pool, query)
+    poolClose(pool)
+    
+    # Remove result files for old transactions from the filesystem (preserve in database)
+    if(nrow(outp) > 0){
+        oldTransactions <- unname(unlist(apply(outp, 1, function(x){
+            if(is.na(x["timestamp_posted"]) | is.na(x["timestamp_started"])) {
+                return(NULL)
+            }
+            if(x["cancel"] == 1) { # if cancel flag = 1, delete no matter what
+                return(x["uuid"])
+            }
+            if(as.numeric(difftime(currentDate, as.POSIXlt(x["timestamp_posted"]), units="days")) > DELETE_TIME) { # If posted date exceeds set date to delete
+                return(x["uuid"])
+            }
+            return(NULL)
+        })))
+        
+        if(length(oldTransactions) > 0){
+            print("Deleting the following old transaction data from the filesystem...")
+            print(oldTransactions)
+            lapply(oldTransactions, function(x){
+                # define input/output/archive directories
+                inDir <- paste0(APP_DIR, IN_DIR, "/", x)
+                outDir <- paste0(APP_DIR, OUT_DIR, "/", x)
+                
+                # if archive directory is defined, then zip result files (output) and move to archive directory
+                if(nchar(ARCHIVE_DIR) >= 1){
+                    archiveDir <- paste0(APP_DIR, ARCHIVE_DIR)
+                    zipFile <- paste0(outDir, "/tox21enricher_", x, ".zip")
+                    if(file.exists(zipFile)){
+                        file.copy(zipFile, paste0(archiveDir, "/tox21enricher_", x, ".zip"), copy.date=TRUE) # move zip file to archive directory
+                    }
+                }
+                
+                # delete files from filesystem input and output directories
+                inFiles <- Sys.glob(paste0(inDir, "/*"), dirmark=FALSE)
+                outFiles <- Sys.glob(paste0(outDir, "/*"), dirmark=FALSE)
+                lapply(inFiles, function(y) unlink(y, recursive=TRUE))
+                lapply(outFiles, function(y) unlink(y, recursive=TRUE))
+                unlink(inDir, recursive=TRUE)
+                unlink(outDir, recursive=TRUE)
+                
+                # set delete flag in database = 1 so this won't be reprocessed
+                # Connect to DB
+                poolDelete <- connQueue()
+                query <- sqlInterpolate(ANSI(), paste0("UPDATE transaction SET delete=1 WHERE uuid='", x, "';"), id="setDeleteFlags")
+                outp <- dbExecute(poolDelete, query)
+                poolClose(poolDelete)
+            })
+        }
+    }
+}
+
 
 # API connectivity details
 # Change host address and port in config.yml
@@ -1880,6 +2038,13 @@ getAnnotationsFunc <- function(enrichmentUUID="-1", annoSelectStr=fullAnnoClassS
 
 # Re-run enrichment request in queue
 queueResubmit <- function(res, req, mode="", enrichmentUUID="-1", annoSelectStr=fullAnnoClassStr, nodeCutoff=10, setNames){
+    # Clean up queue
+    if(DELETE_TIME != -1){
+        future({
+            queueCleanup()
+        }, seed=TRUE)
+    }
+    
     future({
         # Connect to DB to get status info
         poolStatus <- connQueue()
@@ -2039,6 +2204,13 @@ queue <- function(res, req, mode="", enrichmentUUID="-1", annoSelectStr=fullAnno
     # Close pool
     poolClose(poolQueue)
     
+    # Clean up queue
+    if(DELETE_TIME != -1){
+        future({
+            queueCleanup()
+        }, seed=TRUE)
+    }
+
     future({
         # Connect to DB to get status info
         poolStatus <- connQueue()

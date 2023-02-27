@@ -13,8 +13,6 @@ default:
     # Location of the application's input/output directories
     indir: "Input/"
     outdir: "Output/"
-    # Location of the application's archive directory where it will save records of old requests
-    archivedir: "Archive/"
     # Number of cores for multithreading
     cores: 4
     # Host/port/protocol of Plumber API: used for error handling.
@@ -28,15 +26,17 @@ default:
     pwd: "tox21enricher_pass2"
     port: 5432
     database: 'tox21queue'
-    # The number of HOURS:
-    #   - a transaction will be kept alive in the queue before being marked for deletion.
-    #   - until the expiration of the cookie on the client storing the previous request's uuid.
-    cleanupTime: 20
-    # The number of DAYS before the result files of a transaction will be deleted on the host filesystem.
-    deleteTime: 30
     # The maximum number of input sets that may be processed at the same time for a single request
     # NOTE: Do not set this larger than 16! Only 16 colors may be generated at a time for right now, and having this many enrichment
     #       sets can make things very slow. If this is set to be larger than 16, the app will just set it to 16.
     inputMax: 16
     # The value that determines how significant an annotation's p-value must be to be included in result files. Default of 0.2 if not set or set to an invalid value.
     pvaluedisplay: 1.0
+    # Location of the application's archive directory where it will save records of old requests. If blank, requests will be deleted instead of archived.
+    archivedir: "Archive/"
+    # The number of HOURS:
+    #   - a transaction will be kept alive in the queue before being marked for deletion.
+    #   - until the expiration of the cookie on the client storing the previous request's uuid.
+    cleanupTime: 20
+    # The number of DAYS before the result files of a transaction will be compressed and archived or deleted on the host filesystem. If -1, result files will never be archived or deleted.
+    deleteTime: 30
