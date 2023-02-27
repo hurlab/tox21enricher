@@ -7,6 +7,8 @@ The Tox21Enricher database may be downloaded in its entirety [here](http://hurla
 
 An empty copy of Tox21Enricher's "queue" database used during processing of enrichment requests can be downloaded [here](http://hurlab.med.und.edu/tox21enricher_queue.sql). (You may need to right-click, copy the link address, and paste it in a new window to download.)
 
+A Docker Compose project to deploy Tox21Enricher-Shiny on your own machine can be found [here](http://hurlab.med.und.edu/tox21enricher-docker.zip).
+
 <h2>Process</h2>
 Chemicals are specified directly via their corresponding CASRN or indirectly with a SMILE/InChI string upon which a substructure search is executed. Once chemicals containing the given chemical string(s) are identified, CASRNs are used and enrichment proceeds as if the system was given CASRN input originally. Enrichment is then performed on the CASRNs.
 
