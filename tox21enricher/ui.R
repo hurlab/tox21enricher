@@ -1,3 +1,8 @@
+# Custom javascript for dynamic link navigation
+js_link <- "
+    Shiny.addCustomMessageHandler('msg', function(message) { window.location = message;});
+"
+
 # Custom javascript for checking/unchecking checkboxes
 js_cbx <- "
     shinyjs.check=function(cbx){
@@ -89,13 +94,14 @@ js_session <- "
 # Define UI for Tox21Enricher application
 shinyUI(function(){
     fluidPage(
-        # Lang
+        # Language
         lang="en",
         # Set up clipboard copying
         rclipboardSetup(),
         # Application title
         title="Tox21Enricher",
-        titlePanel(HTML("<a href='/'>Tox21Enricher</a>")),
+        tags$head(tags$script(js_link)),
+        titlePanel(actionLink(inputId="titleLink", label="Tox21Enricher")),
         # Sidebar with options
         sidebarLayout(
             sidebarPanel(

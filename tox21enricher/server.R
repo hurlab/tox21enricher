@@ -1,5 +1,12 @@
 # Define server logic
 shinyServer(function(input, output, session) {
+  
+    # Refresh page when header link is clicked
+    observeEvent(input$titleLink, {
+        sessionURL <- paste0(session$clientData$url_protocol, "//", session$clientData$url_hostname, ":", session$clientData$url_port, session$clientData$url_pathname)
+        session$sendCustomMessage("msg", sessionURL)
+    })
+  
     # Get URL params
     observe({
         queryStr <- parseQueryString(session$clientData$url_search)
