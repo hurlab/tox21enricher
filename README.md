@@ -66,4 +66,4 @@ Additionally, building the project images using Docker or running the project us
 
 <br/>
 
-Parallel processing is not supported if running the API directly on a Windows machine. Parallel processing also needs to allocate at least 1,048,576,000 mebibytes (MiB) of memory to function properly.
+Parallel processing is not supported if running the API directly on a Windows machine. Parallel processing also needs to allocate at least 1000 MiB or 1 GiB of memory to function properly.
