@@ -16,6 +16,7 @@ After performing enrichment, the results are displayed (heatmap images per set, 
 
 <h2>Specifications and Dependencies</h2>
 Packages, libraries, and tools required to build Tox21Enricher-Shiny from source:
+
 | Dependency       | Version                           | Additional Notes                                      |
 | ---------------- | --------------------------------- | ----------------------------------------------------- |
 | Ubuntu           | 20.04 LTS                         | OS, necessary for parallel processing                 |
@@ -55,7 +56,6 @@ Packages, libraries, and tools required to build Tox21Enricher-Shiny from source
 | VennDiagram      | 1.6.20                            | R package                                             |
 | visNetwork       | 2.0.9                             | R package                                             |
 
-<br/>
 
 Additionally, building the project images using Docker or running the project using Docker Compose requires the following:
 | Dependency       | Version                           | Additional Notes                                      |
