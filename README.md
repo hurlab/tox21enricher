@@ -58,6 +58,7 @@ Packages, libraries, and tools required to build Tox21Enricher-Shiny from source
 
 
 Additionally, building the project images using Docker or running the project using Docker Compose requires the following:
+
 | Dependency       | Version                           | Additional Notes                                      |
 | ---------------- | --------------------------------- | ----------------------------------------------------- |
 | Docker           | 23.0.1                            |                                                       |
