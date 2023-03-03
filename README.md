@@ -14,11 +14,56 @@ Chemicals are specified directly via their corresponding CASRN or indirectly wit
 
 After performing enrichment, the results are displayed (heatmap images per set, .gct, .xls, .txt files, cluster and chart full heatmaps) along with an option to view the cluster and chart full heatmaps visualized as networks. In the networks displayed, two nodes with a connecting edge indicate two annotations that have a statistically significant connection.
 
-<h2>Development Tools</h2>
-Tools used in the development of Tox21Enricher-Shiny:
+<h2>Specifications and Dependencies</h2>
+Packages, libraries, and tools required to build Tox21Enricher-Shiny from source:
 
-<br/>Plumber
-<br/>PostgreSQL
-<br/>RDKit
-<br/>R
-<br/>Shiny
+| Dependency       | Version                           | Additional Notes                                      |
+| ---------------- | --------------------------------- | ----------------------------------------------------- |
+| Ubuntu           | 20.04 LTS                         | OS, necessary for parallel processing                 |
+| PostgreSQL       | 12.2                              | Database management                                   |
+| RDKit            | 3.8                               | Postgres database extension                           |
+| R                | 3.6.3 "Holding the Windsock"      |                                                       |
+| bslib            | 0.2.4                             | R package                                             |
+| catmaply         | 0.9.0                             | R package                                             |
+| config           | 0.3.1                             | R package                                             |
+| data.table       | 1.14.0                            | R package                                             |
+| DBI              | 1.1.1                             | R package                                             |
+| dplyr            | 1.0.5                             | R package                                             |
+| DT               | 0.18                              | R package                                             |
+| future           | 1.31.0                            | R package                                             |
+| ggplot2          | 3.3.3                             | R package                                             |
+| httr             | 1.4.2                             | R package                                             |
+| igraph           | 1.2.6                             | R package                                             |
+| igraphdata       | 1.0.1                             | R package                                             |
+| parallel         | 3.6.3                             | R package                                             |
+| plotly           | 4.9.3                             | R package                                             |
+| plumber          | 1.1.0                             | R package                                             |
+| plyr             | 1.8.6                             | R package                                             |
+| pool             | 0.1.6                             | R package                                             |
+| promises         | 1.2.0.1                           | R package                                             |
+| rclipboard       | 0.1.3                             | R package                                             |
+| rjson            | 0.2.20                            | R package                                             |
+| RPostgres        | 1.3.3                             | R package                                             |
+| shiny            | 1.6.0                             | R package                                             |
+| shinyBS          | 0.61                              | R package                                             |
+| shinycssloaders  | 1.0.0                             | R package                                             |
+| shinydashboard   | 0.7.1                             | R package                                             |
+| shinyjs          | 2.0.0                             | R package                                             |
+| stringr          | 1.4.0                             | R package                                             |
+| tidyverse        | 1.3.0                             | R package                                             |
+| utils            | 3.6.3                             | R package                                             |
+| uuid             | 0.1.4                             | R package                                             |
+| VennDiagram      | 1.6.20                            | R package                                             |
+| visNetwork       | 2.0.9                             | R package                                             |
+
+
+Additionally, building the project images using Docker or running the project using Docker Compose requires the following:
+
+| Dependency       | Version                           | Additional Notes                                      |
+| ---------------- | --------------------------------- | ----------------------------------------------------- |
+| Docker           | 23.0.1                            |                                                       |
+| Docker Compose   | 1.25.0                            |                                                       |
+
+<br/>
+
+Parallel processing is not supported if running the API directly on a Windows machine. Parallel processing also needs to allocate at least 1000 MiB or 1 GiB of memory to function properly.
