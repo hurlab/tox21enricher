@@ -38,6 +38,9 @@ RUN rm -rf /var/lib/apt/lists/*
     # Copy /www/ directory from local filesystem to image
     COPY ./www/ $HOME/tox21enricher/www/
 
+# Enable logging
+ENV SHINY_LOG_STDERR=1
+
 USER shiny
 # Pass R Plumber API as argument
 CMD ["/usr/bin/shiny-server"]
