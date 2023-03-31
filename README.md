@@ -15,7 +15,7 @@ Chemicals are specified directly via their corresponding CASRN or indirectly wit
 After performing enrichment, the results are displayed (heatmap images per set, .gct, .xls, .txt files, cluster and chart full heatmaps) along with an option to view the cluster and chart full heatmaps visualized as networks. In the networks displayed, two nodes with a connecting edge indicate two annotations that have a statistically significant connection.
 
 <h2>Specifications and Dependencies</h2>
-Packages, libraries, and tools required to build Tox21Enricher-Shiny from source:
+The following packages, libraries, and tools are required to build Tox21Enricher-Shiny from source. Similar operating systems and versions of packages different from those specified may work, but were not tested and are not guaranteed to perform correctly:
 
 | Dependency       | Version                           | Additional Notes                                      |
 | ---------------- | --------------------------------- | ----------------------------------------------------- |
