@@ -231,11 +231,8 @@ shinyUI(function(){
                         column(12,
                             uiOutput("inputInstructions"),
                         ),
-                        column(6,
-                               tipify(checkboxInput(inputId="includeChemsWithWarnings", label="Ignore chemicals with reactive structure warnings?", value=TRUE), title="A submitted chemical may contain a reactive functional group (nitrile, isocyanate, aldehyde, and/or epoxide) that does not appear in one or more similar chemicals. The opposite may also occur in which similar chemicals contain a reactive functional group not present in the submitted chemical. Checking this box will cause Tox21Enricher to ignore all similar chemicals that have a reactive functional group discrepancy with the submitted chemical. These chemicals will not be used in enrichment.", placement="top")
-                        ),
-                        column(6,
-                               tipify(checkboxInput(inputId="includeClustering", label="Perform clustering? (may take longer)", value=FALSE), title="Check this option to perform clustering. Enabling this may cause the enrichment process to take longer, depending on the size of the input.", placement="top")
+                        column(12,
+                            tipify(checkboxInput(inputId="includeChemsWithWarnings", label="Ignore chemicals with reactive structure warnings?", value=TRUE), title="A submitted chemical may contain a reactive functional group (nitrile, isocyanate, aldehyde, and/or epoxide) that does not appear in one or more similar chemicals. The opposite may also occur in which similar chemicals contain a reactive functional group not present in the submitted chemical. Checking this box will cause Tox21Enricher to ignore all similar chemicals that have a reactive functional group discrepancy with the submitted chemical. These chemicals will not be used in enrichment.", placement="top")
                         ),
                         column(12,
                             textAreaInput(inputId="submitted_chemicals", label=NULL, rows=12, width="100%", value="", resize="both"),
