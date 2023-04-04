@@ -1437,7 +1437,6 @@ perform_CASRN_enrichment_analysis <- function(CASRNRef, outputBaseDir, outfileBa
         writeLines(paste0(""), MATRIX)
         close(OUTFILE)
         close(SIMPLE)
-        close(MATRIX)
         # Open and create a blank cluster file
         outfileCluster <- paste0(outputBaseDir, outputBaseDir, "__Cluster.txt")
         file.create(outfileCluster)
@@ -1582,7 +1581,7 @@ perform_CASRN_enrichment_analysis <- function(CASRNRef, outputBaseDir, outfileBa
     matrixPrintToFile <- rbind.fill.matrix(tmp_mat_split)
     # Write matrix to file
     fwrite(matrixPrintToFile, file=MATRIX, row.names=FALSE, col.names=TRUE, sep="\t")
-    
+
     # Perform functional term clustering
     # Calculate enrichment score
     res <- kappa_cluster(outputBaseDir=outputBaseDir, outfileBase=outfileBase, sortedFunCatTerms=sortedFunCatTerms, sigTerm2CASRNMatrix=sigTerm2CASRNMatrix, sortedFunCatTermsCount=sortedFunCatTermsCount, inputCASRNsCount=inputCASRNsCount, similarityThreshold=similarityThreshold, initialGroupMembership=initialGroupMembership, multipleLinkageThreshold=multipleLinkageThreshold, EASEThreshold=EASEThreshold, term2Pvalue=term2Pvalue, term2Contents=term2Contents, enrichmentUUID=enrichmentUUID, inputCASRNs=inputCASRNs)
@@ -1782,7 +1781,10 @@ kappa_cluster <- function(x, overlap=0.5, outputBaseDir=NULL, outfileBase=NULL, 
         return(NULL)
     }))
     writeToClusterFile <- writeToClusterFile[!vapply(writeToClusterFile, is.null, FUN.VALUE=logical(1))]
-    writeLines(writeToClusterFile, CLUSTER)
+    if(length(writeToClusterFile) > 0){
+        writeLines(writeToClusterFile, CLUSTER)
+    }
+    close(CLUSTER)
     return(1)
 }
 
