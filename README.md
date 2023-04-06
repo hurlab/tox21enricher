@@ -1,13 +1,18 @@
 <h1>Tox21Enricher-Shiny</h1>
 Tox21Enricher-Shiny is a web application built using the Shiny framework for R. It performs PubChem enrichment analysis on a set or sets of chemicals included in the the Tox21 chemical dataset, and it is being devloped in collaboration with the NIEHS as part of their suite of Tox21-related tools.
 
-The Hur Lab at the University of North Dakota School of Medicine and Health Sciences hosts an instance of the Tox21Enricher-Shiny application [here](http://hurlab.med.und.edu/tox21enricher) and an instance of the API [here](http://hurlab.med.und.edu/tox21enricher-api).
+The **user manual** for Tox21Enricher-Shiny can be found [in the docs/ subdirectory](https://github.com/hurlab/tox21enricher/blob/main/docs/Tox21Enricher_Manual.pdf).
+Additional documentation for acquiring, configuring, and deploying Tox21Enricher-Shiny can also be found [in the docs/ subdirectory](https://github.com/hurlab/tox21enricher/blob/main/docs/Tox21Enricher_Setup.pdf).
 
-The Tox21Enricher database may be downloaded in its entirety [here](http://hurlab.med.und.edu/tox21enricher_db.tar.gz). (You may need to right-click, copy the link address, and paste it in a new window to download.)
+The Hur Lab at the University of North Dakota School of Medicine and Health Sciences hosts an **instance of the Tox21Enricher-Shiny application** [here](http://hurlab.med.und.edu/tox21enricher) and an instance of the API [here](http://hurlab.med.und.edu/tox21enricher-api).
 
-An empty copy of Tox21Enricher's "queue" database used during processing of enrichment requests can be downloaded [here](http://hurlab.med.und.edu/tox21enricher_queue.sql). (You may need to right-click, copy the link address, and paste it in a new window to download.)
+The **Tox21Enricher database** may be downloaded in its entirety [here](http://hurlab.med.und.edu/tox21enricher_db.tar.gz). (You may need to right-click, copy the link address, and paste it in a new window to download.)
 
-A Docker Compose project to deploy Tox21Enricher-Shiny on your own machine can be found [here](http://hurlab.med.und.edu/tox21enricher-docker.zip).
+An empty **copy of Tox21Enricher's "queue" database** used during processing of enrichment requests can be downloaded [here](http://hurlab.med.und.edu/tox21enricher_queue.sql). (You may need to right-click, copy the link address, and paste it in a new window to download.)
+
+**A Docker Compose project to deploy Tox21Enricher-Shiny** on your own machine can be found [here](http://hurlab.med.und.edu/tox21enricher-docker.zip).
+
+
 
 <h2>Process</h2>
 Chemicals are specified directly via their corresponding CASRN or indirectly with a SMILE/InChI string upon which a substructure search is executed. Once chemicals containing the given chemical string(s) are identified, CASRNs are used and enrichment proceeds as if the system was given CASRN input originally. Enrichment is then performed on the CASRNs.
@@ -20,7 +25,7 @@ The following packages, libraries, and tools are required to build Tox21Enricher
 | Dependency       | Version                           | Additional Notes                                      | Citation                                      |
 | ---------------- | --------------------------------- | ----------------------------------------------------- | --------------------------------------------- |
 | Ubuntu           | 20.04 LTS (Focal Fossa)           | OS, necessary for parallel processing                 | Canonical Ltd. (2018). Ubuntu 20.04.6 LTS (Focal Fossa). https://releases.ubuntu.com/focal/ |
-| PostgreSQL       | 12.2                              | Database management                                   | The PostgreSQL Global Development Group (2023). PostgreSQL: The World's Most Advanced Open SOurce Relational Database. https://www.postgresql.org/
+| PostgreSQL       | 12.2                              | Database management                                   | The PostgreSQL Global Development Group (2023). PostgreSQL: The World's Most Advanced Open Source Relational Database. https://www.postgresql.org/
 | RDKit            | 3.8                               | Postgres database extension                           | RDKit: Open-source cheminformatics. https://www.rdkit.org |
 | R                | 3.6.3 "Holding the Windsock"      |                                                       | https://www.r-project.org/ |
 | bslib            | 0.2.4                             | R package                                             | Sievert C, Cheng J (2023). bslib: Custom 'Bootstrap' 'Sass' Themes for 'shiny' and 'rmarkdown'. https://rstudio.github.io/bslib/, https://github.com/rstudio/bslib. |
