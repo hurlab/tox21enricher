@@ -28,8 +28,6 @@ The following packages, libraries, and tools are required to build Tox21Enricher
 | PostgreSQL       | 12.2                              | Database management                                   | The PostgreSQL Global Development Group (2023). PostgreSQL: The World's Most Advanced Open Source Relational Database. https://www.postgresql.org/
 | RDKit            | 3.8                               | Postgres database extension                           | RDKit: Open-source cheminformatics. https://www.rdkit.org |
 | R                | 3.6.3 "Holding the Windsock"      |                                                       | https://www.r-project.org/ |
-| bslib            | 0.2.4                             | R package                                             | Sievert C, Cheng J (2023). bslib: Custom 'Bootstrap' 'Sass' Themes for 'shiny' and 'rmarkdown'. https://rstudio.github.io/bslib/, https://github.com/rstudio/bslib. |
-| catmaply         | 0.9.0                             | R package                                             | https://github.com/VerkehrsbetriebeZuerich/catmaply |
 | config           | 0.3.1                             | R package                                             | https://cran.r-project.org/package=config |
 | data.table       | 1.14.0                            | R package                                             | Dowle M, Srinivasan A (2023). data.table: Extension of 'data.frame'. https://r-datatable.com, https://Rdatatable.gitlab.io/data.table, https://github.com/Rdatatable/data.table. |
 | DBI              | 1.1.1                             | R package                                             | R Special Interest Group on Databases (R-SIG-DB), Wickham H, Müller K (2022). DBI: R Database Interface. https://dbi.r-dbi.org, https://github.com/r-dbi/DBI. |
@@ -52,7 +50,6 @@ The following packages, libraries, and tools are required to build Tox21Enricher
 | shiny            | 1.6.0                             | R package                                             | https://shiny.rstudio.com/ |
 | shinyBS          | 0.61                              | R package                                             | https://ebailey78.github.io/shinyBS/ |
 | shinycssloaders  | 1.0.0                             | R package                                             | https://github.com/daattali/shinycssloaders |
-| shinydashboard   | 0.7.1                             | R package                                             | https://github.com/rstudio/shinydashboard |
 | shinyjs          | 2.0.0                             | R package                                             | https://deanattali.com/shinyjs/ |
 | stringr          | 1.4.0                             | R package                                             | Wickham H (2022). stringr: Simple, Consistent Wrappers for Common String Operations. https://stringr.tidyverse.org, https://github.com/tidyverse/stringr. |
 | tidyverse        | 1.3.0                             | R package                                             | https://www.tidyverse.org/ |
