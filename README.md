@@ -62,7 +62,7 @@ Additionally, building the project images using Docker or running the project us
 | Dependency       | Version                           | Additional Notes                                      |
 | ---------------- | --------------------------------- | ----------------------------------------------------- |
 | Docker           | 23.0.1                            |                                                       |
-| Docker Compose   | 1.25.0                            |                                                       |
+| Docker Compose   | 1.25.0                            | Not strictly necessary, but recommended for local deployment |
 
 <br/>
 
