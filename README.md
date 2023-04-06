@@ -14,7 +14,7 @@ An empty **copy of Tox21Enricher's "queue" database** used during processing of 
 
 Tox21Enricher-Shiny is an updated version of and replaces the original Tox21 Enricher (Now called Tox21Enricher-Grails). The Grails version is hosted at [The UND SMHS hurlab server](http://hurlab.med.und.edu/tox21enricher-grails/) its original publication can be found at [10.1002/minf.201700129](https://www.doi.org/10.1002/minf.201700129).
 
-<h2>Process</h2>
+<h2>Usage</h2>
 Chemicals are specified directly via their corresponding CASRN or indirectly with a SMILE/InChI string upon which a substructure search is executed. Once chemicals containing the given chemical string(s) are identified, CASRNs are used and enrichment proceeds as if the system was given CASRN input originally. Enrichment is then performed on the CASRNs.
 
 After performing enrichment, the results are displayed (heatmap images per set, .gct, .xls, .txt files, cluster and chart full heatmaps) along with an option to view the cluster and chart full heatmaps visualized as networks. In the networks displayed, two nodes with a connecting edge indicate two annotations that have a statistically significant connection.
