@@ -12,7 +12,7 @@ An empty **copy of Tox21Enricher's "queue" database** used during processing of 
 
 **A Docker Compose project to deploy Tox21Enricher-Shiny** on your own machine can be found [here](http://hurlab.med.und.edu/tox21enricher-docker.zip).
 
-
+Tox21Enricher-Shiny is an updated version of and replaces the original Tox21 Enricher (Now called Tox21Enricher-Grails). The Grails version is hosted at [The UND SMHS hurlab server](http://hurlab.med.und.edu/tox21enricher-grails/) its original publication can be found at [10.1002/minf.201700129](https://www.doi.org/10.1002/minf.201700129).
 
 <h2>Process</h2>
 Chemicals are specified directly via their corresponding CASRN or indirectly with a SMILE/InChI string upon which a substructure search is executed. Once chemicals containing the given chemical string(s) are identified, CASRNs are used and enrichment proceeds as if the system was given CASRN input originally. Enrichment is then performed on the CASRNs.
