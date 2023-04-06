@@ -1,6 +1,4 @@
 pkgs <- c(
-    'bslib',
-    'catmaply',
     'config',
     'dplyr',
     'DT',
@@ -13,9 +11,7 @@ pkgs <- c(
     'shiny',
     'shinyBS',
     'shinycssloaders',
-    'shinydashboard',
     'shinyjs',
-    'shinythemes',
     'stringr',
     'uuid',
     'VennDiagram',
