@@ -17,11 +17,11 @@ After performing enrichment, the results are displayed (heatmap images per set, 
 <h2>Specifications and Dependencies</h2>
 The following packages, libraries, and tools are required to build Tox21Enricher-Shiny from source. Similar operating systems and versions of packages different from those specified may work, but were not tested and are not guaranteed to perform correctly:
 
-| Dependency       | Version                           | Additional Notes                                      |
-| ---------------- | --------------------------------- | ----------------------------------------------------- |
-| Ubuntu           | 20.04 LTS                         | OS, necessary for parallel processing                 |
+| Dependency       | Version                           | Additional Notes                                      | Citation                                      |
+| ---------------- | --------------------------------- | ----------------------------------------------------- | --------------------------------------------- |
+| Ubuntu           | 20.04 LTS                         | OS, necessary for parallel processing                 | 
 | PostgreSQL       | 12.2                              | Database management                                   |
-| RDKit            | 3.8                               | Postgres database extension                           |
+| RDKit            | 3.8                               | Postgres database extension                           | RDKit: Open-source cheminformatics. https://www.rdkit.org |
 | R                | 3.6.3 "Holding the Windsock"      |                                                       |
 | bslib            | 0.2.4                             | R package                                             |
 | catmaply         | 0.9.0                             | R package                                             |
