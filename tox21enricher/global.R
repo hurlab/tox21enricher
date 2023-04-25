@@ -1,5 +1,4 @@
 # Load shared libraries
-library(config)
 library(dplyr)
 library(DT)
 library(httr)

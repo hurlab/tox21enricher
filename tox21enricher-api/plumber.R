@@ -3,7 +3,6 @@
 #* @apiContact list(name="Email contact", url="mailto:parker.combs@und.edu")
 #* @apiVersion 1.0
 
-library(config)
 library(data.table)
 library(DBI)
 library(future)
@@ -438,9 +437,9 @@ performEnrichment <- function(enrichmentUUID="-1", annoSelectStr=fullAnnoClassSt
         poolClose(poolStatus)
         if(nrow(requestCancel) > 0){
             print(paste0("Canceling request: ", enrichmentUUID))
-            return(FALSE)
+            return("request canceled")
         }
-        return("No valid input sets.")
+        return("no valid input sets. Chemicals supplied or matched may not be in Tox21")
     }
     
     # Check which input sets are good
@@ -470,9 +469,9 @@ performEnrichment <- function(enrichmentUUID="-1", annoSelectStr=fullAnnoClassSt
         poolClose(poolStatus)
         if(nrow(requestCancel) > 0){
             print(paste0("Canceling request: ", enrichmentUUID))
-            return(FALSE)
+            return("request canceled")
         }
-        return("No lines available in any input file. Cannot perform enrichment analysis.")
+        return("no lines available in any input set: cannot perform enrichment analysis")
     }
     
     inputIDListHash <- lapply(ldf, function(i) as.character(i$V1))
@@ -504,7 +503,7 @@ performEnrichment <- function(enrichmentUUID="-1", annoSelectStr=fullAnnoClassSt
     poolClose(poolStatus)
     if(nrow(requestCancel) > 0){
         print(paste0("Canceling request: ", enrichmentUUID))
-        return(FALSE)
+        return("request canceled")
     }
     
     # Perform enrichment on each input set simultaneously - multi-core
@@ -541,7 +540,7 @@ performEnrichment <- function(enrichmentUUID="-1", annoSelectStr=fullAnnoClassSt
     poolClose(poolStatus)
     if(nrow(requestCancel) > 0){
         print(paste0("Canceling request: ", enrichmentUUID))
-        return(FALSE)
+        return("request canceled")
     }
     
     # Get the corresponding directory names
@@ -566,7 +565,7 @@ performEnrichment <- function(enrichmentUUID="-1", annoSelectStr=fullAnnoClassSt
         filesToZip <- unlist(lapply(zipDir, function(x) paste0(baseDirName, "/", x)))
         system2("cd", paste0(baseDirName, "/ ; zip -r9X ./tox21enricher_", enrichmentUUID, ".zip ./*"))
     } else { # Return with error if did not complete. Do not update in database
-        return(-1) 
+        return("problem creating directory for request") 
     }
     
     # Update status file(s)
@@ -589,10 +588,10 @@ performEnrichment <- function(enrichmentUUID="-1", annoSelectStr=fullAnnoClassSt
     poolClose(poolStatus)
     if(nrow(requestCancel) > 0){
         print(paste0("Canceling request: ", enrichmentUUID))
-        return(FALSE)
+        return("request canceled")
     }
     # return success
-    return(200)
+    return("success")
 }
 
 ## ENRICHMENT SUBROUTINES
@@ -747,7 +746,7 @@ get_column_index <- function(columnType) {
     } else if(grepl("BF", columnType, ignore.case=TRUE)) {
         return(13)
     } else { 
-        return("!ERROR! Wrong Signficance type. Use P, BH, or BF\n\n")
+        return("Error: wrong Signficance type. Use P, BH, or BF")
     }
 }
 
@@ -946,7 +945,11 @@ process_variable_DAVID_CLUSTER_directories <- function(dirName, outputDir, extTa
             if (x[y, "PValue"] == "" | is.null(x[y, "PValue"]) | is.null(x[y, "Fold.Enrichment"]) | grepl("^\\D", x[y, "PValue"]) | (mode == "ALL" & as.numeric(x[y, "PValue"]) >= sigCutoff) | as.numeric(x[y, "Fold.Enrichment"]) < 1) {
                 return(NULL)
             }
-            return(-1 * log10(as.double(x[y, "PValue"])))
+            pvalueLog <- -1 * log10(as.double(x[y, "PValue"]))
+            if(!is.finite(pvalueLog)){
+                pvalueLog <- 500 # set to 500 if pvalue is effectively 0 (arbitrary)
+            }
+            return(pvalueLog)
         }))
         if(is.null(pvalueMatrix_inner)) {
             return(NULL)
@@ -962,6 +965,9 @@ process_variable_DAVID_CLUSTER_directories <- function(dirName, outputDir, extTa
     })
     names(pvalueMatrix) <- names(mergedData)
     pvalueMatrix <- pvalueMatrix[!vapply(pvalueMatrix, is.null, FUN.VALUE=logical(1))]
+    
+    print("=== pvalueMatrix ===")
+    print(pvalueMatrix)
     
     # Create a summary file
     summaryFileName <- paste0(summaryFileNameBase, "__ValueMatrix.txt")
@@ -1177,7 +1183,11 @@ process_variable_DAVID_CHART_directories <- function(dirName, outputDir, extTag,
             if (x[y, "PValue"] == "" | is.null(x[y, "PValue"]) | is.null(x[y, "Fold.Enrichment"]) | grepl("^\\D", x[y, "PValue"]) | (mode == "ALL" & x[y, "PValue"] >= sigCutoff) | x[y, "Fold.Enrichment"] < 1) {
                 return(NULL)
             }
-            return(-1 * log10(as.double(x[y, "PValue"])))
+            pvalueLog <- -1 * log10(as.double(x[y, "PValue"]))
+            if(!is.finite(pvalueLog)){
+                pvalueLog <- 500 # set to 500 if pvalue is effectively 0 (arbitrary)
+            }
+            return(pvalueLog)
         }))
         if(is.null(pvalueMatrix_inner)) {
             return(NULL)
@@ -1399,7 +1409,7 @@ perform_CASRN_enrichment_analysis <- function(CASRNRef, outputBaseDir, outfileBa
         # Open and create a blank cluster file
         outfileCluster <- paste0(outputBaseDir, outfileBase, "__Cluster.txt")
         file.create(outfileCluster)
-        return(FALSE)
+        return("no annotations found for input")
     } else if(nrow(RINPUT_df) < 2){
         # Write blank files to chart, simple, and matrix
         writeLines(chartHeader, OUTFILE)
@@ -1410,7 +1420,7 @@ perform_CASRN_enrichment_analysis <- function(CASRNRef, outputBaseDir, outfileBa
         # Open and create a blank cluster file
         outfileCluster <- paste0(outputBaseDir, outfileBase, "__Cluster.txt")
         file.create(outfileCluster)
-        return(FALSE)
+        return("no annotations found for input")
     }
     rownames(RINPUT_df) <- seq_len(nrow(RINPUT_df))
     colnames(RINPUT_df) <- c("X1", "X2", "X3", "X4")
@@ -1452,32 +1462,29 @@ perform_CASRN_enrichment_analysis <- function(CASRNRef, outputBaseDir, outfileBa
         poolClose(poolStatus)
         if(nrow(requestCancel) > 0){
             print(paste0("Canceling request: ", enrichmentUUID))
-            return(FALSE)
+            return("request canceled")
         }
-        return(FALSE)
+        return("problem calculating annotation representation for given input")
     }
 
     # Remove empty elements in annoArray
     annoArray <- annoArray[lengths(annoArray) > 0L]
     annoArray <- lapply(seq_len(length(annoArray)), function(annoArrayIndex){
-        #if(ROutputData[[annoArrayIndex]][["p.value"]] < PVALUE_DISPLAY){ # only include significant annotations
-            return(data.frame(
-                category=annoArray[[annoArrayIndex]][[1]], # annotation category
-                term=annoArray[[annoArrayIndex]][[2]], # annotation term name
-                count=as.numeric(annoArray[[annoArrayIndex]][[3]]), # count
-                percent=as.numeric(annoArray[[annoArrayIndex]][[4]]), # %
-                pvalue=ROutputData[[annoArrayIndex]][["p.value"]], # update the p-value
-                casrn=annoArray[[annoArrayIndex]][[6]], # casrn list
-                listtotal=as.numeric(annoArray[[annoArrayIndex]][[7]]), # list total
-                pophits=as.numeric(annoArray[[annoArrayIndex]][[8]]), # pop hits
-                poptotal=as.numeric(annoArray[[annoArrayIndex]][[9]]), # pop total
-                foldenrichment=as.numeric(annoArray[[annoArrayIndex]][[10]]), # fold enrichment
-                bonferroni=ROutputData[[annoArrayIndex]][["bonferroni"]], # Bonferroni
-                benjamini=ROutputData[[annoArrayIndex]][["by"]], # Benjamini
-                fdr=ROutputData[[annoArrayIndex]][["fdr"]] # add FDR to the array
-            ))
-        #}
-        #return(NULL)
+        return(data.frame(
+            category=annoArray[[annoArrayIndex]][[1]], # annotation category
+            term=annoArray[[annoArrayIndex]][[2]], # annotation term name
+            count=as.numeric(annoArray[[annoArrayIndex]][[3]]), # count
+            percent=as.numeric(annoArray[[annoArrayIndex]][[4]]), # %
+            pvalue=ROutputData[[annoArrayIndex]][["p.value"]], # update the p-value
+            casrn=annoArray[[annoArrayIndex]][[6]], # casrn list
+            listtotal=as.numeric(annoArray[[annoArrayIndex]][[7]]), # list total
+            pophits=as.numeric(annoArray[[annoArrayIndex]][[8]]), # pop hits
+            poptotal=as.numeric(annoArray[[annoArrayIndex]][[9]]), # pop total
+            foldenrichment=as.numeric(annoArray[[annoArrayIndex]][[10]]), # fold enrichment
+            bonferroni=ROutputData[[annoArrayIndex]][["bonferroni"]], # Bonferroni
+            benjamini=ROutputData[[annoArrayIndex]][["by"]], # Benjamini
+            fdr=ROutputData[[annoArrayIndex]][["fdr"]] # add FDR to the array
+        ))
     })
     annoArray <- do.call(rbind.data.frame, annoArray)
     
@@ -1515,8 +1522,6 @@ perform_CASRN_enrichment_analysis <- function(CASRNRef, outputBaseDir, outfileBa
         }
     }), recursive=FALSE)
     
-    
-    
     # Sort by the p-values across multiple funCat # TODO THIS IS NOT RIGHT
     sortedFunCatTerms <- term2Pvalue[order(unlist(term2Pvalue), decreasing=FALSE)]
     sortedFunCatTermsCount <- length(sortedFunCatTerms)
@@ -1533,14 +1538,11 @@ perform_CASRN_enrichment_analysis <- function(CASRNRef, outputBaseDir, outfileBa
     
     # Write to simple chart file
     sortFunCatProcess <- lapply(names(sortedFunCatTerms_CHART), function(funCatTerm){ 
-        #if (term2Pvalue[[funCatTerm]] <= pvalueThresholdToDisplay){ 
-            tmpSplit <- term2Contents[[funCatTerm]]
-            if (tmpSplit[[10]] > 1){
-                return(list(tmpSplit[[1]], tmpSplit[[2]], tmpSplit[[3]], tmpSplit[[4]], tmpSplit[[5]], tmpSplit[[10]], tmpSplit[[12]]))
-            }
-            return(NULL)
-        #}
-        #return(NULL)
+        tmpSplit <- term2Contents[[funCatTerm]]
+        if (tmpSplit[[10]] > 1){
+            return(list(tmpSplit[[1]], tmpSplit[[2]], tmpSplit[[3]], tmpSplit[[4]], tmpSplit[[5]], tmpSplit[[10]], tmpSplit[[12]]))
+        }
+        return(NULL)
     })
     sortFunCatProcess <- do.call(rbind.data.frame, sortFunCatProcess)
     rownames(sortFunCatProcess) <- seq_len(nrow(sortFunCatProcess))
@@ -1585,6 +1587,7 @@ perform_CASRN_enrichment_analysis <- function(CASRNRef, outputBaseDir, outfileBa
     # Perform functional term clustering
     # Calculate enrichment score
     res <- kappa_cluster(outputBaseDir=outputBaseDir, outfileBase=outfileBase, sortedFunCatTerms=sortedFunCatTerms, sigTerm2CASRNMatrix=sigTerm2CASRNMatrix, sortedFunCatTermsCount=sortedFunCatTermsCount, inputCASRNsCount=inputCASRNsCount, similarityThreshold=similarityThreshold, initialGroupMembership=initialGroupMembership, multipleLinkageThreshold=multipleLinkageThreshold, EASEThreshold=EASEThreshold, term2Pvalue=term2Pvalue, term2Contents=term2Contents, enrichmentUUID=enrichmentUUID, inputCASRNs=inputCASRNs)
+    return(res)
 }
 
 kappa_cluster <- function(x, overlap=0.5, outputBaseDir=NULL, outfileBase=NULL, sortedFunCatTerms=NULL, sigTerm2CASRNMatrix=NULL, sortedFunCatTermsCount=NULL, inputCASRNsCount=NULL, similarityThreshold=NULL, initialGroupMembership=NULL, multipleLinkageThreshold=0.5, EASEThreshold=NULL, term2Pvalue=NULL, term2Contents=NULL, enrichmentUUID=NULL, inputCASRNs=NULL){
@@ -1602,7 +1605,7 @@ kappa_cluster <- function(x, overlap=0.5, outputBaseDir=NULL, outfileBase=NULL, 
     poolClose(poolStatus)
     if(nrow(requestCancel) > 0){
         print(paste0("Canceling request: ", enrichmentUUID))
-        return(FALSE)
+        return("request canceled")
     }
 
     # Step#1: Calculate kappa score
@@ -1648,7 +1651,7 @@ kappa_cluster <- function(x, overlap=0.5, outputBaseDir=NULL, outfileBase=NULL, 
     })
     termpair2kappaOverThreshold <- unlist(termpair2kappaOverThreshold[!vapply(termpair2kappaOverThreshold, is.null, FUN.VALUE=logical(1))], recursive=FALSE)
     if(length(termpair2kappaOverThreshold) < 1) {
-        return(NULL)
+        return("problem calculating kappa values for associated annotations")
     }
     termpair2kappaOverThreshold <- lapply(sortedFunCatTerms, function(term) unname(unlist(termpair2kappaOverThreshold[names(termpair2kappaOverThreshold) == term])))
     names(termpair2kappaOverThreshold) <- sortedFunCatTerms
@@ -1669,7 +1672,7 @@ kappa_cluster <- function(x, overlap=0.5, outputBaseDir=NULL, outfileBase=NULL, 
     poolClose(poolStatus)
     if(nrow(requestCancel) > 0){
         print(paste0("Canceling request: ", enrichmentUUID))
-        return(FALSE)
+        return("request canceled")
     }
     
     qualifiedSeeds <- mclapply(seq_len(sortedFunCatTermsCount), mc.cores=CORES, mc.silent=FALSE, function(i){
@@ -1720,13 +1723,13 @@ kappa_cluster <- function(x, overlap=0.5, outputBaseDir=NULL, outfileBase=NULL, 
     poolClose(poolStatus)
     if(nrow(requestCancel) > 0){
         print(paste0("Canceling request: ", enrichmentUUID))
-        return(FALSE)
+        return("request canceled")
     }
     # Merge terms to generate final groups
     res <- merge_term(ml, overlap, multipleLinkageThreshold)
     # Return null if we can't generate any clusters
     if (length(res) < 1){
-        return(NULL)
+        return("no clusters could be generated for the given input settings")
     }
     names(res) <- lapply(res, function(cluster) UUIDgenerate()) # assign random uuids to clusters for future reference
     
@@ -1744,7 +1747,7 @@ kappa_cluster <- function(x, overlap=0.5, outputBaseDir=NULL, outfileBase=NULL, 
     poolClose(poolStatus)
     if(nrow(requestCancel) > 0){
         print(paste0("Canceling request: ", enrichmentUUID))
-        return(FALSE)
+        return("request canceled")
     }
     
     # Calculate enrichment scores for result (final) clusters
@@ -1785,7 +1788,7 @@ kappa_cluster <- function(x, overlap=0.5, outputBaseDir=NULL, outfileBase=NULL, 
         writeLines(writeToClusterFile, CLUSTER)
     }
     close(CLUSTER)
-    return(1)
+    return("success")
 }
 
 merge_term <- function(ml, overlap, multipleLinkageThreshold){
@@ -1878,7 +1881,7 @@ getAnnotationsFunc <- function(enrichmentUUID="-1", annoSelectStr=fullAnnoClassS
         poolClose(poolStatus)
         if(nrow(requestCancel) > 0){
             print(paste0("Canceling request: ", enrichmentUUID))
-            return(FALSE)
+            return(return("request canceled"))
         }
         
         # Get the corresponding annotations for each input CASRN
@@ -1918,7 +1921,7 @@ getAnnotationsFunc <- function(enrichmentUUID="-1", annoSelectStr=fullAnnoClassS
         poolClose(poolStatus)
         if(nrow(requestCancel) > 0){
             print(paste0("Canceling request: ", enrichmentUUID))
-            return(FALSE)
+            return("request canceled")
         }
 
         # Create output files for each CASRN in the Set
@@ -2016,13 +2019,13 @@ getAnnotationsFunc <- function(enrichmentUUID="-1", annoSelectStr=fullAnnoClassS
     poolClose(poolStatus)
     if(nrow(requestCancel) > 0){
         print(paste0("Canceling request: ", enrichmentUUID))
-        return(FALSE)
+        return("request canceled")
     }
     
     annotationMatrix <- annotationMatrix[!vapply(annotationMatrix, is.null, FUN.VALUE=logical(1))]
     if(length(annotationMatrix) < 1){
         # Return error message
-        return("No lines available in any input file. Cannot fetch annotations.")
+        return("no lines available in any input file: cannot fetch annotations")
     }
     
     # zip result files
@@ -2031,7 +2034,7 @@ getAnnotationsFunc <- function(enrichmentUUID="-1", annoSelectStr=fullAnnoClassS
         filesToZip <- unlist(lapply(zipDir, function(x) paste0(outDir, "/", x)))
         system2("cd", paste0(outDir, "/ ; zip -r9X ./tox21enricher_", enrichmentUUID, ".zip ./*")) 
     } else { # Return with error if did not complete. Do not update in database
-        return(-1) 
+        return("problem creating result files for request") 
     }
     
     # Connect to db
@@ -2045,7 +2048,7 @@ getAnnotationsFunc <- function(enrichmentUUID="-1", annoSelectStr=fullAnnoClassS
     
     # Close pool
     poolClose(poolUpdate)
-    return(200)
+    return("success")
 }
 
 # Re-run enrichment request in queue
@@ -2079,7 +2082,7 @@ queueResubmit <- function(res, req, mode="", enrichmentUUID="-1", annoSelectStr=
         # Close pool
         poolClose(poolStatus)
         if(nrow(requestCancel) > 0){
-            return(FALSE)
+            return("request canceled")
         }
         # Perform enrichment analysis or fetch relevant annotations
         status_code <- 500
@@ -2090,7 +2093,7 @@ queueResubmit <- function(res, req, mode="", enrichmentUUID="-1", annoSelectStr=
                 status_code <- performEnrichment(enrichmentUUID=enrichmentUUID, annoSelectStr=annoSelectStr, nodeCutoff=nodeCutoff)
             } 
         }, error=function(cond){
-            status_code <- 500
+            status_code <- "unknown error"
         })
         
         # Connect to DB to set appropriate finishing flags
@@ -2103,7 +2106,7 @@ queueResubmit <- function(res, req, mode="", enrichmentUUID="-1", annoSelectStr=
             status_code <- -1
         }
         # Upon success
-        if (status_code == 200){
+        if (status_code == "success"){
             # Set flag for queue
             query <- sqlInterpolate(ANSI(), paste0("UPDATE queue SET finished=1 WHERE uuid='", enrichmentUUID, "';"), id="deleteEntries")
             outp <- dbExecute(poolFinished, query)
@@ -2251,11 +2254,11 @@ queue <- function(res, req, mode="", enrichmentUUID="-1", annoSelectStr=fullAnno
         # Close pool
         poolClose(poolStatus)
         if(nrow(requestCancel) > 0){
-            return(FALSE)
+            return("request canceled")
         }
         
         # Perform enrichment analysis or fetch relevant annotations
-        status_code <- 500
+        status_code <- "unknown error"
         tryCatch({
             if(mode == "annotation") {
                 status_code <- getAnnotationsFunc(enrichmentUUID=enrichmentUUID, annoSelectStr=annoSelectStr, nodeCutoff=nodeCutoff)
@@ -2263,7 +2266,7 @@ queue <- function(res, req, mode="", enrichmentUUID="-1", annoSelectStr=fullAnno
                 status_code <- performEnrichment(enrichmentUUID=enrichmentUUID, annoSelectStr=annoSelectStr, nodeCutoff=nodeCutoff)
             } 
         }, error=function(cond){
-            status_code <- 500
+            status_code <- "unknown error"
         })
         
         # Connect to DB to set appropriate finishing flags
@@ -2275,11 +2278,11 @@ queue <- function(res, req, mode="", enrichmentUUID="-1", annoSelectStr=fullAnno
         
         cancelValue <- outp[1, "cancel"]
         if(cancelValue == 1){
-            status_code <- -1
+            status_code <- "request canceled"
         }
         
         # Upon success
-        if (status_code == 200){
+        if (status_code == "success"){
             # Set flag for queue
             query <- sqlInterpolate(ANSI(), paste0("UPDATE queue SET finished=1 WHERE uuid='", enrichmentUUID, "';"), id="deleteEntries")
             outp <- dbExecute(poolFinished, query)
@@ -2291,7 +2294,7 @@ queue <- function(res, req, mode="", enrichmentUUID="-1", annoSelectStr=fullAnno
         } else { # Else, generate error file for reference
             print(paste0("Error performing enrichment on ", enrichmentUUID))
             # Set error message in queue table
-            query <- sqlInterpolate(ANSI(), paste0("UPDATE queue SET error='Error performing enrichment. Please try again.' WHERE uuid='", enrichmentUUID, "';"), id="addErrorMsg")
+            query <- sqlInterpolate(ANSI(), paste0("UPDATE queue SET error='Error performing enrichment: ", status_code, ". Please check your input settings and try again.' WHERE uuid='", enrichmentUUID, "';"), id="addErrorMsg")
             outp <- dbExecute(poolFinished, query)
             # Set flag for queue
             query <- sqlInterpolate(ANSI(), paste0("UPDATE queue SET finished=1 WHERE uuid='", enrichmentUUID, "';"), id="deleteEntries")
@@ -2323,7 +2326,7 @@ queue <- function(res, req, mode="", enrichmentUUID="-1", annoSelectStr=fullAnno
 #* @param timestampPosted Special variable related to input for enrichment.
 #* @param reenrichFlag Special variable for determining if request has been re-enriched.
 #* @post /createTransaction
-createTransaction <- function(res, req, originalMode="", mode="", uuid="-1", annoSelectStr=fullAnnoClassStr, cutoff=10, input, casrnBox, originalNames="none", reenrich="", color, timestampPosted, reenrichFlag=FALSE){
+createTransaction <- function(res, req, originalMode="", mode="", uuid="-1", annoSelectStr=fullAnnoClassStr, cutoff=10, input="", casrnBox="", originalNames="none", reenrich="", color="", timestampPosted="", reenrichFlag=FALSE){
     # Validate input
     if(originalMode != "similarity" & originalMode != "substructure" & originalMode != "casrn" & originalMode != "annotation"){
         res$status <- 400
@@ -2488,7 +2491,7 @@ getQueuePos <- function(res, req, transactionId="-1", mode="init"){
     query <- sqlInterpolate(ANSI(), paste0("SELECT * FROM queue WHERE error IS NOT NULL AND uuid='", transactionId, "';"), id="fetchQueuePosition")
     outp <- dbGetQuery(poolUpdate, query)
     if(nrow(outp) > 0) {
-        return("<div class=\"text-danger\">Failed.</div>")
+        return(paste0("<div class=\"text-danger\">Failed: ", outp$error, "</div>"))
     }
     # Check if request has completed
     query <- sqlInterpolate(ANSI(), paste0("SELECT * FROM queue WHERE finished=0 AND uuid='", transactionId, "';"), id="fetchQueuePosition")
@@ -3025,7 +3028,7 @@ getStructureImages <- function(res, req, input){
 #* @tag "Chemical Input"
 #* @param input Prepared input string generated by Tox21Enricher.
 #* @get /getStructureWarnings
-getStructureWarnings <- function(res, req, input){
+getStructureWarnings <- function(res, req, input=""){
     # Validate input
     inputSets <- unlist(str_split(input, "\\|"))
     for(i in inputSets){

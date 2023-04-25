@@ -364,7 +364,7 @@ shinyServer(function(input, output, session) {
                 <p>The T3DB database may be downloaded as a large XML file. To parse the data for use in Tox21Enricher, we wrote an iPython script that converts data from XML to TSV/CSV files. These files are then processed by a Perl script to further manipulate the data into the right format for Tox21Enricher.</p>
                 <hr>
             ")),
-            title="Annotation selection information",
+            title=HTML(paste0("Annotation selection information ", modalButton("Close"))),
             footer=tagList(modalButton("Close"))
         ))
     })
@@ -980,6 +980,7 @@ shinyServer(function(input, output, session) {
                 innerList <- lapply(seq(2, length(x)), function(y){ # start at 2 to skip set name
                     return(unlist(str_split(x[y], "&")))
                 })
+
                 # if similarity
                 if(length(innerList) == 7){
                     return(data.frame("casrn"=innerList[[1]], "m"=innerList[[2]], "similarity"=innerList[[3]], "cyanide"=innerList[[4]], "isocyanate"=innerList[[5]], "aldehyde"=innerList[[6]], "epoxide"=innerList[[7]], stringsAsFactors=FALSE))
@@ -988,6 +989,7 @@ shinyServer(function(input, output, session) {
                 else {
                     return(data.frame("casrn"=innerList[[1]], "m"=innerList[[2]], "cyanide"=innerList[[3]], "isocyanate"=innerList[[4]], "aldehyde"=innerList[[5]], "epoxide"=innerList[[6]], stringsAsFactors=FALSE))
                 }
+                
             })
             reenrichResultsNames <- lapply(reenrichResultsCols, function(x) x[1])
             reenrichResults <- reenrichResultsMats
@@ -2494,9 +2496,10 @@ shinyServer(function(input, output, session) {
                                 shinyjs::disable(id="refresh")
                                 tmpFile <- read.delim(paste0(tempdir(), "/output/", transactionId, "/", setFilesSplit[setFile]), sep="\t", header=FALSE, comment.char="", fill=TRUE, stringsAsFactors=FALSE)
                                 names(tmpFile) <- c("Class", "Annotation")
+                                
                                 showModal(
                                     modalDialog(
-                                        title=paste0("Annotation file for ", gsub(".txt", "", gsub("__", ": ", setFilesSplit[setFile]))),
+                                        title=HTML(paste0(paste0("Annotation file for ", gsub(".txt", "", gsub("__", ": ", setFilesSplit[setFile]))), actionButton(inputId="modalCloseAnnotationTop", label="Close preview"))),
                                         footer=actionButton(inputId="modalCloseAnnotation", label="Close preview"),
                                         size="l",
                                         fluidRow(
@@ -2528,10 +2531,15 @@ shinyServer(function(input, output, session) {
                     }
                 }
             })
-            observeEvent(input$modalCloseAnnotation, {
+            observeEvent(input$modalCloseAnnotationTop, {
                 # enable refreshbutton
                 shinyjs::enable(id="refresh")
                 removeModal()
+            })
+            observeEvent(input$modalCloseAnnotation, {
+              # enable refreshbutton
+              shinyjs::enable(id="refresh")
+              removeModal()
             })
             
             # Create links and handlers for result files
@@ -2566,7 +2574,7 @@ shinyServer(function(input, output, session) {
                             names(tmpFile) <- c("CASRN", "Chemical Name")
                             showModal(
                                 modalDialog(
-                                    title=paste0("Input file for ", i),
+                                    title=HTML(paste0(paste0("Input file for ", i), actionButton(inputId="modalCloseInputAnnotationTop", label="Close preview"))),
                                     footer=actionButton(inputId="modalCloseInputAnnotation", label="Close preview"),
                                     size="l",
                                     fluidRow(
@@ -2595,6 +2603,11 @@ shinyServer(function(input, output, session) {
                         }
                     }, ignoreInit=TRUE)
                 }
+                observeEvent(input$modalCloseInputAnnotationTop, {
+                    # enable refreshbutton
+                    shinyjs::enable(id="refresh")
+                    removeModal()
+                })
                 observeEvent(input$modalCloseInputAnnotation, {
                     # enable refreshbutton
                     shinyjs::enable(id="refresh")
@@ -2631,7 +2644,7 @@ shinyServer(function(input, output, session) {
                             names(tmpFile) <- c("CASRN")
                             showModal(
                                 modalDialog(
-                                    title=paste0("Error CASRNs for ", i),
+                                    title=HTML(paste0(paste0("Error CASRNs for ", i), actionButton(inputId="modalCloseErrorAnnotationTop", label="Close preview"))),
                                     footer=actionButton(inputId="modalCloseErrorAnnotation", label="Close preview"),
                                     size="l",
                                     fluidRow(
@@ -2661,6 +2674,11 @@ shinyServer(function(input, output, session) {
                         }
                     }, ignoreInit=TRUE)
                 }
+                observeEvent(input$modalCloseErrorAnnotationTop, {
+                    # enable refreshbutton
+                    shinyjs::enable(id="refresh")
+                    removeModal()
+                })
                 observeEvent(input$modalCloseErrorAnnotation, {
                     # enable refreshbutton
                     shinyjs::enable(id="refresh")
@@ -2699,7 +2717,7 @@ shinyServer(function(input, output, session) {
                             })
                             showModal(
                                 modalDialog(
-                                    title=paste0("Full matrix file for ", i),
+                                    title=HTML(paste0(paste0("Full matrix file for ", i), actionButton(inputId="modalCloseFullMatrixTop", label="Close preview"))),
                                     footer=actionButton(inputId="modalCloseFullMatrix", label="Close preview"),
                                     size="l",
                                     fluidRow(
@@ -2730,6 +2748,11 @@ shinyServer(function(input, output, session) {
                         }
                     }, ignoreInit=TRUE)
                 }
+                observeEvent(input$modalCloseFullMatrixTop, {
+                    # enable refreshbutton
+                    shinyjs::enable(id="refresh")
+                    removeModal()
+                })
                 observeEvent(input$modalCloseFullMatrix, {
                     # enable refreshbutton
                     shinyjs::enable(id="refresh")
@@ -2943,7 +2966,7 @@ shinyServer(function(input, output, session) {
                     ),
                     fluidRow(
                         column(12, id="clusterDiv",
-                            h3("Cluster Heatmap"),
+                            h3("Cluster Full Heatmap"),
                             uiOutput("clusterHeatmap")
                         )
                     ),
@@ -3095,7 +3118,7 @@ shinyServer(function(input, output, session) {
                                 names(tmpFile) <- c("CASRN", "Chemical Name")
                                 showModal(
                                     modalDialog(
-                                        title=paste0("Input file for ", i),
+                                        title=HTML(paste0(paste0("Input file for ", i), actionButton(inputId="modalCloseInputEnrichmentTop", label="Close preview"))),
                                         footer=actionButton(inputId="modalCloseInputEnrichment", label="Close preview"),
                                         size="l",
                                         fluidRow(
@@ -3124,6 +3147,11 @@ shinyServer(function(input, output, session) {
                             }
                         }, ignoreInit=TRUE)
                     }
+                    observeEvent(input$modalCloseInputEnrichmentTop, {
+                        # enable refreshbutton
+                        shinyjs::enable(id="refresh")
+                        removeModal()
+                    })
                     observeEvent(input$modalCloseInputEnrichment, {
                         # enable refreshbutton
                         shinyjs::enable(id="refresh")
@@ -3160,7 +3188,7 @@ shinyServer(function(input, output, session) {
                                 names(tmpFile) <- c("Category", "Term", "Count", "%", "PValue", "CASRNs", "List Total", "Pop Hits", "Pop Total", "Fold Enrichment", "Bonferroni", "Benjamini", "FDR")
                                 showModal(
                                     modalDialog(
-                                        title=paste0("Chart file for ", i),
+                                        title=HTML(paste0(paste0("Chart file for ", i), actionButton(inputId="modalCloseChartTop", label="Close preview"))),
                                         footer=actionButton(inputId="modalCloseChart", label="Close preview"),
                                         size="l",
                                         fluidRow(
@@ -3199,6 +3227,11 @@ shinyServer(function(input, output, session) {
                             }
                         }, ignoreInit=TRUE)
                     }
+                    observeEvent(input$modalCloseChartTop, {
+                        # enable refreshbutton
+                        shinyjs::enable(id="refresh")
+                        removeModal()
+                    })
                     observeEvent(input$modalCloseChart, {
                         # enable refreshbutton
                         shinyjs::enable(id="refresh")
@@ -3235,7 +3268,7 @@ shinyServer(function(input, output, session) {
                                 names(tmpFile) <- c("Category", "Term", "Count", "%", "PValue", "Fold Enrichment", "Benjamini")
                                 showModal(
                                     modalDialog(
-                                        title=paste0("Chart simple file for ", i),
+                                        title=HTML(paste0(paste0("Chart simple file for ", i), actionButton(inputId="modalCloseChartSimpleTop", label="Close preview"))),
                                         footer=actionButton(inputId="modalCloseChartSimple", label="Close preview"),
                                         size="l",
                                         fluidRow(
@@ -3274,6 +3307,11 @@ shinyServer(function(input, output, session) {
                             }
                         }, ignoreInit=TRUE)
                     }
+                    observeEvent(input$modalCloseChartSimpleTop, {
+                        # enable refreshbutton
+                        shinyjs::enable(id="refresh")
+                        removeModal()
+                    })
                     observeEvent(input$modalCloseChartSimple, {
                         # enable refreshbutton
                         shinyjs::enable(id="refresh")
@@ -3358,7 +3396,7 @@ shinyServer(function(input, output, session) {
                                 shinyjs::disable(id="refresh")
                                 showModal(
                                     modalDialog(
-                                        title=paste0("Cluster file for ", i),
+                                        title=HTML(paste0(paste0("Cluster file for ", i), actionButton(inputId="modalCloseClusterTop", label="Close preview"))),
                                         footer=actionButton(inputId="modalCloseCluster", label="Close preview"),
                                         size="l",
                                         fluidRow(
@@ -3415,6 +3453,11 @@ shinyServer(function(input, output, session) {
                             }
                         }, ignoreInit=TRUE)
                     }
+                    observeEvent(input$modalCloseClusterTop, {
+                        # enable refreshbutton
+                        shinyjs::enable(id="refresh")
+                        removeModal()
+                    })
                     observeEvent(input$modalCloseCluster, {
                         # enable refreshbutton
                         shinyjs::enable(id="refresh")
@@ -3453,7 +3496,7 @@ shinyServer(function(input, output, session) {
                                 })
                                 showModal(
                                     modalDialog(
-                                        title=paste0("Matrix file for ", i),
+                                        title=HTML(paste0(paste0("Matrix file for ", i), actionButton(inputId="modalCloseMatrixTop", label="Close preview"))),
                                         footer=actionButton(inputId="modalCloseMatrix", label="Close preview"),
                                         size="l",
                                         fluidRow(
@@ -3483,6 +3526,11 @@ shinyServer(function(input, output, session) {
                             }
                         }, ignoreInit=TRUE)
                     }
+                    observeEvent(input$modalCloseMatrixTop, {
+                        # enable refreshbutton
+                        shinyjs::enable(id="refresh")
+                        removeModal()
+                    })
                     observeEvent(input$modalCloseMatrix, {
                         # enable refreshbutton
                         shinyjs::enable(id="refresh")
@@ -3519,7 +3567,7 @@ shinyServer(function(input, output, session) {
                                 names(tmpFile) <- c("CASRN")
                                 showModal(
                                     modalDialog(
-                                        title=paste0("Error CASRNs for ", i),
+                                        title=HTML(paste0(paste0("Error CASRNs for ", i), actionButton(inputId="modalCloseErrorEnrichmentTop", label="Close preview"))),
                                         footer=actionButton(inputId="modalCloseErrorEnrichment", label= "Close preview"),
                                         size="l",
                                         fluidRow(
@@ -3549,6 +3597,11 @@ shinyServer(function(input, output, session) {
                             }
                         }, ignoreInit=TRUE)
                     }
+                    observeEvent(input$modalCloseErrorEnrichmentTop, {
+                        # enable refreshbutton
+                        shinyjs::enable(id="refresh")
+                        removeModal()
+                    })
                     observeEvent(input$modalCloseErrorEnrichment, {
                         # enable refreshbutton
                         shinyjs::enable(id="refresh")
@@ -3847,7 +3900,7 @@ shinyServer(function(input, output, session) {
                                 shinyjs::disable(id="refresh")
                                 showModal(
                                     modalDialog(
-                                        title=casrn,
+                                        title=HTML(paste0(paste0(casrn, " "), actionButton(inputId="modalCloseStructureTop", label="Close"))),
                                         footer=actionButton(inputId="modalCloseStructure", label="Close"),
                                         size="l",
                                         fluidRow(
@@ -3900,6 +3953,11 @@ shinyServer(function(input, output, session) {
                                     )
                                 )
                             }, ignoreInit=TRUE)
+                            observeEvent(input$modalCloseStructureTop, {
+                                # enable refreshbutton
+                                shinyjs::enable(id="refresh")
+                                removeModal()
+                            })
                             observeEvent(input$modalCloseStructure, {
                                 # enable refreshbutton
                                 shinyjs::enable(id="refresh")
@@ -4231,6 +4289,7 @@ shinyServer(function(input, output, session) {
                     row.names(dfToReturn) <- x["_row"]
                     return(dfToReturn)
                 }, FUN.VALUE=double(colLength))
+                
                 gctFileChart <- data.frame(gctFileChart)
                 # This is here to catch anything that's only 1 input set
                 if(ncol(gctFileChart) > 1) {
@@ -5375,7 +5434,7 @@ shinyServer(function(input, output, session) {
                     shinyjs::disable(id="refresh")
                     showModal(
                         modalDialog(
-                            title=paste0("Chemicals for ", termFrom),
+                            title=HTML(paste0(paste0("Chemicals for ", termFrom), div(rclipButton("clipboardChartFromTop", HTML(paste0(icon("clipboard"), " Copy chemical list to clipboard (comma-separated)")), paste0(casrnsFrom, collapse=","), modal=TRUE), actionButton(inputId="vennFromButtonCloseChartTop", label="Close")))),
                             footer=div(rclipButton("clipboardChartFrom", HTML(paste0(icon("clipboard"), " Copy chemical list to clipboard (comma-separated)")), paste0(casrnsFrom, collapse=","), modal=TRUE), actionButton(inputId="vennFromButtonCloseChart", label="Close")),
                             size="l",
                             fluidRow(
@@ -5386,6 +5445,11 @@ shinyServer(function(input, output, session) {
                         )
                     )
                 }, ignoreNULL=TRUE, ignoreInit=TRUE)
+                observeEvent(input$vennFromButtonCloseChartTop, {
+                    # enable refreshbutton
+                    shinyjs::enable(id="refresh")
+                    removeModal()
+                })
                 observeEvent(input$vennFromButtonCloseChart, {
                     # enable refreshbutton
                     shinyjs::enable(id="refresh")
@@ -5396,7 +5460,7 @@ shinyServer(function(input, output, session) {
                     shinyjs::disable(id="refresh")
                     showModal(
                         modalDialog(
-                            title=paste0("Chemicals for ", termTo),
+                            title=HTML(paste0(paste0("Chemicals for ", termTo), div(rclipButton("clipboardChartToTop", HTML(paste0(icon("clipboard"), " Copy chemical list to clipboard (comma-separated)")), paste0(casrnsTo, collapse=","), modal=TRUE), actionButton(inputId="vennToButtonCloseChartTop", label="Close")))),
                             footer=div(rclipButton("clipboardChartTo", HTML(paste0(icon("clipboard"), " Copy chemical list to clipboard (comma-separated)")), paste0(casrnsTo, collapse=","), modal=TRUE), actionButton(inputId="vennToButtonCloseChart", label="Close")),
                             size="l",
                             fluidRow(
@@ -5407,6 +5471,11 @@ shinyServer(function(input, output, session) {
                         )
                     )
                 }, ignoreNULL=TRUE, ignoreInit=TRUE)
+                observeEvent(input$vennToButtonCloseChartTop, {
+                    # enable refreshbutton
+                    shinyjs::enable(id="refresh")
+                    removeModal()
+                })
                 observeEvent(input$vennToButtonCloseChart, {
                     # enable refreshbutton
                     shinyjs::enable(id="refresh")
@@ -5417,7 +5486,7 @@ shinyServer(function(input, output, session) {
                     shinyjs::disable(id="refresh")
                     showModal(
                         modalDialog(
-                            title=paste0("Shared chemicals"),
+                            title=HTML(paste0(paste0("Shared chemicals"), div(rclipButton("clipboardChartSharedTop", HTML(paste0(icon("clipboard"), " Copy chemical list to clipboard (comma-separated)")), paste0(casrnsShared, collapse=","), modal=TRUE), actionButton(inputId="vennSharedButtonCloseChartTop", label="Close")))),
                             footer=div(rclipButton("clipboardChartShared", HTML(paste0(icon("clipboard"), " Copy chemical list to clipboard (comma-separated)")), paste0(casrnsShared, collapse=","), modal=TRUE), actionButton(inputId="vennSharedButtonCloseChart", label="Close")),
                             size="l",
                             fluidRow(
@@ -5428,6 +5497,11 @@ shinyServer(function(input, output, session) {
                         )
                     )
                 }, ignoreNULL=TRUE, ignoreInit=TRUE)
+                observeEvent(input$vennSharedButtonCloseChartTop, {
+                    # enable refreshbutton
+                    shinyjs::enable(id="refresh")
+                    removeModal()
+                })
                 observeEvent(input$vennSharedButtonCloseChart, {
                     # enable refreshbutton
                     shinyjs::enable(id="refresh")
@@ -5482,7 +5556,7 @@ shinyServer(function(input, output, session) {
                     shinyjs::disable(id="refresh")
                     showModal(
                         modalDialog(
-                            title=paste0("Chemicals for ", termFrom),
+                            title=HTML(paste0(paste0("Chemicals for ", termFrom), div(rclipButton("clipboardClusterFromTop", HTML(paste0(icon("clipboard"), " Copy chemical list to clipboard (comma-separated)")), paste0(casrnsFrom, collapse=","), modal=TRUE), actionButton(inputId="vennFromButtonCloseClusterTop", label="Close")))),
                             footer=div(rclipButton("clipboardClusterFrom", HTML(paste0(icon("clipboard"), " Copy chemical list to clipboard (comma-separated)")), paste0(casrnsFrom, collapse=","), modal=TRUE), actionButton(inputId="vennFromButtonCloseCluster", label="Close")),
                             size="l",
                             fluidRow(
@@ -5493,6 +5567,11 @@ shinyServer(function(input, output, session) {
                         )
                     )
                 }, ignoreNULL=TRUE, ignoreInit=TRUE)
+                observeEvent(input$vennFromButtonCloseClusterTop, {
+                    # enable refreshbutton
+                    shinyjs::enable(id="refresh")
+                    removeModal()
+                })
                 observeEvent(input$vennFromButtonCloseCluster, {
                     # enable refreshbutton
                     shinyjs::enable(id="refresh")
@@ -5503,7 +5582,7 @@ shinyServer(function(input, output, session) {
                     shinyjs::disable(id="refresh")
                     showModal(
                         modalDialog(
-                            title=paste0("Chemicals for ", termTo),
+                            title=HTML(paste0(paste0("Chemicals for ", termTo), div(rclipButton("clipboardClusterToTop", HTML(paste0(icon("clipboard"), " Copy chemical list to clipboard (comma-separated)")), paste0(casrnsTo, collapse=","), modal=TRUE), actionButton(inputId="vennToButtonCloseClusterTop", label="Close")))),
                             footer=div(rclipButton("clipboardClusterTo", HTML(paste0(icon("clipboard"), " Copy chemical list to clipboard (comma-separated)")), paste0(casrnsTo, collapse=","), modal=TRUE), actionButton(inputId="vennToButtonCloseCluster", label="Close")),
                             size="l",
                             fluidRow(
@@ -5514,6 +5593,11 @@ shinyServer(function(input, output, session) {
                         )
                     )
                 }, ignoreNULL=TRUE, ignoreInit=TRUE)
+                observeEvent(input$vennToButtonCloseClusterTop, {
+                    # enable refreshbutton
+                    shinyjs::enable(id="refresh")
+                    removeModal()
+                })
                 observeEvent(input$vennToButtonCloseCluster, {
                     # enable refreshbutton
                     shinyjs::enable(id="refresh")
@@ -5524,7 +5608,7 @@ shinyServer(function(input, output, session) {
                     shinyjs::disable(id="refresh")
                     showModal(
                         modalDialog(
-                            title=paste0("Shared chemicals"),
+                            title=HTML(paste0(paste0("Shared chemicals"), div(rclipButton("clipboardClusterSharedTop", HTML(paste0(icon("clipboard"), " Copy chemical list to clipboard (comma-separated)")), paste0(casrnsShared, collapse=","), modal=TRUE), actionButton(inputId="vennSharedButtonCloseClusterTop", label="Close")))),
                             footer=div(rclipButton("clipboardClusterShared", HTML(paste0(icon("clipboard"), " Copy chemical list to clipboard (comma-separated)")), paste0(casrnsShared, collapse=","), modal=TRUE), actionButton(inputId="vennSharedButtonCloseCluster", label="Close")),
                             size="l",
                             fluidRow(
@@ -5535,6 +5619,11 @@ shinyServer(function(input, output, session) {
                         )
                     )
                 }, ignoreNULL=TRUE, ignoreInit=TRUE)
+                observeEvent(input$vennSharedButtonCloseClusterTop, {
+                    # enable refreshbutton
+                    shinyjs::enable(id="refresh")
+                    removeModal()
+                })
                 observeEvent(input$vennSharedButtonCloseCluster, {
                     # enable refreshbutton
                     shinyjs::enable(id="refresh")
@@ -5778,16 +5867,44 @@ shinyServer(function(input, output, session) {
     }
     
     # Confirmation messages for Venn diagram copy buttons
+    observeEvent(input$clipboardChartFromTop, {
+        showNotification(paste0("UUID copied!"), type="message")
+    }, ignoreNULL=TRUE, ignoreInit=TRUE)
     observeEvent(input$clipboardChartFrom, {
         showNotification(paste0("UUID copied!"), type="message")
     }, ignoreNULL=TRUE, ignoreInit=TRUE)
+    observeEvent(input$clipboardChartToTop, {
+        showNotification(paste0("UUID copied!"), type="message")
+    }, ignoreNULL=TRUE, ignoreInit=TRUE)
     observeEvent(input$clipboardChartTo, {
+        showNotification(paste0("UUID copied!"), type="message")
+    }, ignoreNULL=TRUE, ignoreInit=TRUE)
+    observeEvent(input$clipboardChartSharedTop, {
         showNotification(paste0("UUID copied!"), type="message")
     }, ignoreNULL=TRUE, ignoreInit=TRUE)
     observeEvent(input$clipboardChartShared, {
         showNotification(paste0("UUID copied!"), type="message")
     }, ignoreNULL=TRUE, ignoreInit=TRUE)
 
+    observeEvent(input$clipboardClusterFromTop, {
+        showNotification(paste0("UUID copied!"), type="message")
+    }, ignoreNULL=TRUE, ignoreInit=TRUE)
+    observeEvent(input$clipboardClusterFrom, {
+        showNotification(paste0("UUID copied!"), type="message")
+    }, ignoreNULL=TRUE, ignoreInit=TRUE)
+    observeEvent(input$clipboardClusterToTop, {
+        showNotification(paste0("UUID copied!"), type="message")
+    }, ignoreNULL=TRUE, ignoreInit=TRUE)
+    observeEvent(input$clipboardClusterTo, {
+        showNotification(paste0("UUID copied!"), type="message")
+    }, ignoreNULL=TRUE, ignoreInit=TRUE)
+    observeEvent(input$clipboardClusterSharedTop, {
+        showNotification(paste0("UUID copied!"), type="message")
+    }, ignoreNULL=TRUE, ignoreInit=TRUE)
+    observeEvent(input$clipboardClusterShared, {
+        showNotification(paste0("UUID copied!"), type="message")
+    }, ignoreNULL=TRUE, ignoreInit=TRUE)
+    
     # Perform re-enrichment on selected result chemicals
     observeEvent(input$reenrichButton, {
         # change to waiting page
