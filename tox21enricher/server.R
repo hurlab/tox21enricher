@@ -345,9 +345,7 @@ shinyServer(function(input, output, session) {
                 <br>
                 <b>Description</b>:
                 <br>
-                <p>This is a static MySQL database that can be downloaded and sourced on an existing MySQL instance. Not all the guideline studies tested all the endpoints (at least, we are under that assumption). Therefore, the <i>Study by Endpoint</i> connection had to have a row en try in the BMD table to get in this list.</p>
-                <p>In our case, we first converted the ToxRefDB database into PostgreSQL. We then tagged all tables with the prefix <i>toxrefdb_</i> for the following query to work:</p>
-                <i>SELECT DISTINCT tc.casrn, concat(ts.study_type, '_', ts.species, '_', ts.study_type_guideline, '_', te.endpoint_category, '_', te.endpoint_type, '_', te.endpoint_target) FROM toxrefdb_study ts, toxrefdb_chemical tc, toxrefdb_endpoint te, toxrefdb_bmd_models tb WHERE tc.chemical_id=ts.chemical_id AND tb.study_id=ts.study_id AND tb.endpoint_id=te.endpoint_id;</i>
+                <p>This is a static MySQL database that can be downloaded and sourced on an existing MySQL instance. Not all the guideline studies tested all the endpoints (at least, we are under that assumption). Therefore, the <i>Study by Endpoint</i> connection had to have a row entry in the BMD table to get in this list.</p>
                 <hr>
                 
                 <h3>T3DB</h3>
@@ -368,6 +366,29 @@ shinyServer(function(input, output, session) {
             footer=tagList(modalButton("Close"))
         ))
     })
+    
+    # Display annotation category selection criteria information
+    observeEvent(input$linkEnrichmentDetails, {
+        showModal(modalDialog(
+            HTML(paste0("
+                <p>Tox21Enricher uses a modified Fisher's exact test to identify over-represented annotations within a supplied chemical list. Significantly enriched annotations may undergo chemical content-based clustering to reduce redundancy: briefly, kappa scores are calculated to measure the degree of annotation overlap between pairs of annotations in terms of chemicals. Seeds, each containing annotations with high kappa scores that indicate a high level of overlap, are subjected to heuristic fuzzy multiple-linkage partitioning. This process iteratively merges seeds based on their chemical content overlap, measured by kappa score. Annotation overrepresentation is sometimes given using the equation: -1 * log10(p). If an annotation is especially significantly overrepresented (i.e., p is effectively 0), this score is set to the maximum value of 500, which we have chosen arbitrarily, and should not exceed this value.</p>
+                <hr>
+                <h3>References</h3>
+                <p>
+                <b>PMID: 14519205</b> - Hosack, D. A., Dennis Jr., G., Sherman, B. T., Lane, H. C., and Lempicki, R. A. (2003). Identifying biological themes within lists of genes with EASE. Genome Biol. 2003;4(10):R70. doi: 10.1186/gb-2003-4-10-r70.
+                <br>
+                <br>
+                <b>PMID: 17784955</b> - Huang, D. W., Sherman, B. T., Tan, Q., Collins, J. R., Alvord, W. G., Roayaei, J., Stephens, R., Baseler, M. W., Lane, H. C., and Lempicki, R. A. (2007). The DAVID Gene Functional Classification Tool: a novel biological module-centric algorithm to functionally analyze large gene lists. Genome Biol. 2007;8(9):R183. doi: 10.1186/gb-2007-8-9-r183.
+                <br>
+                <br>
+                <b>PMID: 35325185</b> - Sherman, B. T., Hao, M., Qiu, J., Jiao, X., Baseler, M. W., Lane, H. C., Imamichi, T., and Chang, W. (2022). DAVID: a web server for functional enrichment analysis and functional annotation of gene lists (2021 update). Nucleic Acids Res. 2022 Jul 5;50(W1):W216-W221. doi: 10.1093/nar/gkac194.
+                </p>
+            ")),
+            title=HTML(paste0("Enrichment analysis methodology ", modalButton("Close"))),
+            footer=tagList(modalButton("Close"))
+        ))
+    })
+    
 
     # Display enrichment type on title
     titleStatus <- reactiveValues(option=character())
@@ -2111,7 +2132,7 @@ shinyServer(function(input, output, session) {
             # Send query to create transaction entry in database
             resp <- NULL
             tryTransaction <- tryCatch({
-                resp <- POST(url=paste0(API_PROTOCOL, API_ADDR, "/createTransaction"), query=list(originalMode=originalEnrichModeList$originalEnrichMode, mode=enrichmentType$enrichType, uuid=transactionId, annoSelectStr=annoSelectStr, cutoff=cutoff, input=enrichmentSetsSanitizedLocal, casrnBox=casrnBox, originalNames=paste0(originalNamesList$originalNames, collapse="|"), reenrich=paste0(reenrichResultsSanitized, collapse="|"), color=colorsToPrint, timestampPosted=beginTime, reenrichFlag=reenrichFlagReactive$reenrichFlagReactive))
+                resp <- POST(url=paste0(API_PROTOCOL, API_ADDR, "/createTransaction"), query=list(originalMode=originalEnrichModeList$originalEnrichMode, mode=enrichmentType$enrichType, uuid=transactionId, annoSelectStr=annoSelectStr, cutoff=cutoff, input=enrichmentSetsSanitizedLocal, casrnBox=casrnBox, originalNames=paste0(originalNamesList$originalNames, collapse="|"), reenrich=paste0(reenrichResultsSanitized, collapse="|"), color=colorsToPrint, timestampPosted=beginTime, reenrichFlag=reenrichFlagReactive$reenrichFlagReactive, pvalueType=input$pvalueTypeSelector))
                 TRUE
             }, error=function(cond){
                 return(FALSE)
@@ -2472,18 +2493,31 @@ shinyServer(function(input, output, session) {
                     if(is.null(setFilesObservers$observers[[paste0("casrn", setFilesSplit[setFile], "Observer__", setFile)]])){
                         setFilesObservers$observers[[paste0("casrn", setFilesSplit[setFile], "Observer__", setFile)]] <- observeEvent(input[[paste0(setFilesSplit[setFile], "__link")]], {
                             # Create directory for request
-                            dir.create(paste0(tempdir(), "/output/"))
-                            dir.create(paste0(tempdir(), "/output/", transactionId, "/"))
+                            tryCatch({
+                                dir.create(paste0(tempdir(), "/output/"))
+                            }, error=function(cond){
+                                showNotification("Error: cannot create local directory to download result files.", type="error")
+                                FALSE
+                            })
+                            tryCatch({
+                                dir.create(paste0(tempdir(), "/output/", transactionId, "/"))
+                            }, error=function(cond){
+                                showNotification("Error: cannot create local directory to download result files.", type="error")
+                                FALSE
+                            })
+                          
                             tryAnnotationDL <- TRUE
                             if(!file.exists(paste0(tempdir(), "/output/", transactionId, "/", setFilesSplit[setFile]))){
                                 tryAnnotationDL <- tryCatch({
                                     download.file(paste0(API_PROTOCOL, API_ADDR, "/serveFileText?transactionId=", transactionId, "&filename=", setFilesSplit[setFile], "&subDir=Output"), destfile=paste0(tempdir(), "/output/", transactionId, "/", setFilesSplit[setFile]))
                                 }, error=function(cond){
-                                    return(NULL)
+                                    NULL
                                 })
                             }
                             if(is.null(tryAnnotationDL)) {
                                 showNotification("Error: The application cannot connect to the Tox21Enricher server. Please try again later.", type="error")
+                            } else if (tryAnnotationDL == 1 & !file.exists(paste0(tempdir(), "/output/", transactionId, "/", setFilesSplit[setFile]))){
+                                showNotification("Error: The application cannot create the local directory to copy the file from the Tox21Enricher server.", type="error")
                             } else {
                                 # Check file size
                                 fSize <- file.info(paste0(tempdir(), "/output/", transactionId, "/", setFilesSplit[setFile]))$size
@@ -2494,8 +2528,17 @@ shinyServer(function(input, output, session) {
                                 # Open preview in modal
                                 # disable refreshbutton
                                 shinyjs::disable(id="refresh")
-                                tmpFile <- read.delim(paste0(tempdir(), "/output/", transactionId, "/", setFilesSplit[setFile]), sep="\t", header=FALSE, comment.char="", fill=TRUE, stringsAsFactors=FALSE)
-                                names(tmpFile) <- c("Class", "Annotation")
+                                tmpFile <- tryCatch({
+                                    tmpFile <- read.delim(paste0(tempdir(), "/output/", transactionId, "/", setFilesSplit[setFile]), sep="\t", header=FALSE, comment.char="", fill=TRUE, stringsAsFactors=FALSE)
+                                    names(tmpFile) <- c("Class", "Annotation")
+                                    tmpFile
+                                }, error=function(cond){
+                                    NULL
+                                })
+                                if(is.null(tmpFile)){
+                                    showNotification("Error: the system could not find the file specified.", type="error")
+                                    return(NULL)
+                                }
                                 
                                 showModal(
                                     modalDialog(
@@ -2548,18 +2591,33 @@ shinyServer(function(input, output, session) {
                 if(is.null(setFilesObservers$observers[[paste0("inputObserver__", i)]])){
                     setFilesObservers$observers[[paste0("inputObserver__", i)]] <- observeEvent(input[[paste0(i, ".txt__link")]], {
                         # Create directory for request
-                        dir.create(paste0(tempdir(), "/input/"))
-                        dir.create(paste0(tempdir(), "/input/", transactionId, "/"))
+  
+                        tryCatch({
+                            dir.create(paste0(tempdir(), "/input/"))
+                        }, error=function(cond){
+                            showNotification("Error: cannot create local directory to download result files.", type="error")
+                            FALSE
+                        })
+
+                        tryCatch({
+                            dir.create(paste0(tempdir(), "/input/", transactionId, "/"))
+                        }, error=function(cond){
+                            showNotification("Error: cannot create local directory to download result files.", type="error")
+                            FALSE
+                        })
+                        
                         tryInputDL <- TRUE
                         if(!file.exists(paste0(tempdir(), "/input/", transactionId, "/", i, ".txt"))){
                             tryInputDL <- tryCatch({
                                 download.file(paste0(API_PROTOCOL, API_ADDR, "/serveFileText?transactionId=", transactionId, "&filename=", i, ".txt&subDir=Input"), destfile=paste0(tempdir(), "/input/", transactionId, "/", i, ".txt"))
                             }, error=function(cond){
-                                return(NULL)
+                                NULL
                             })
                         }
                         if(is.null(tryInputDL)) {
                             showNotification("Error: The application cannot connect to the Tox21Enricher server. Please try again later.", type="error")
+                        } else if (tryInputDL == 1 & !file.exists(paste0(tempdir(), "/input/", transactionId, "/", i, ".txt"))){
+                            showNotification("Error: The application cannot create the local directory to copy the file from the Tox21Enricher server.", type="error")
                         } else {
                             # Check file size
                             fSize <- file.info(paste0(tempdir(), "/input/", transactionId, "/", i, ".txt"))$size
@@ -2570,8 +2628,18 @@ shinyServer(function(input, output, session) {
                             # Open preview in modal
                             # disable refreshbutton
                             shinyjs::disable(id="refresh")
-                            tmpFile <- read.delim(paste0(tempdir(), "/input/", transactionId, "/", i, ".txt"), sep="\t", header=FALSE, comment.char="", fill=TRUE, stringsAsFactors=FALSE)
-                            names(tmpFile) <- c("CASRN", "Chemical Name")
+                            tmpFile <- tryCatch({
+                                tmpFile <- read.delim(paste0(tempdir(), "/input/", transactionId, "/", i, ".txt"), sep="\t", header=FALSE, comment.char="", fill=TRUE, stringsAsFactors=FALSE)
+                                names(tmpFile) <- c("CASRN", "Chemical Name")
+                                tmpFile
+                            }, error=function(cond){
+                                NULL
+                            })
+                            if(is.null(tmpFile)){
+                                showNotification("Error: the system could not find the file specified.", type="error")
+                                return(NULL)
+                            }
+                            
                             showModal(
                                 modalDialog(
                                     title=HTML(paste0(paste0("Input file for ", i), actionButton(inputId="modalCloseInputAnnotationTop", label="Close preview"))),
@@ -2618,18 +2686,32 @@ shinyServer(function(input, output, session) {
                 if(is.null(setFilesObservers$observers[[paste0("errorfileObserver__", i)]])){
                     setFilesObservers$observers[[paste0("errorfileObserver__", i)]] <- observeEvent(input[[paste0(i, "__ErrorCASRNs.txt__link")]], {
                         # Create directory for request
-                        dir.create(paste0(tempdir(), "/output/"))
-                        dir.create(paste0(tempdir(), "/output/", transactionId, "/"))
+                        tryCatch({
+                            dir.create(paste0(tempdir(), "/output/"))
+                        }, error=function(cond){
+                            showNotification("Error: cannot create local directory to download result files.", type="error")
+                            FALSE
+                        })
+                      
+                        tryCatch({
+                            dir.create(paste0(tempdir(), "/output/", transactionId, "/"))
+                        }, error=function(cond){
+                            showNotification("Error: cannot create local directory to download result files.", type="error")
+                            FALSE
+                        })
+                      
                         tryErrorDL <- TRUE
                         if(!file.exists(paste0(tempdir(), "/output/", transactionId, "/", i, "__ErrorCASRNs.txt"))){
                             tryErrorDL <- tryCatch({
                                 download.file(paste0(API_PROTOCOL, API_ADDR, "/serveFileText?transactionId=", transactionId, "&filename=", i, "__ErrorCASRNs.txt&subDir=Output"), destfile=paste0(tempdir(), "/output/", transactionId, "/", i, "__ErrorCASRNs.txt"))
                             }, error=function(cond){
-                                return(NULL)
+                                NULL
                             })
                         }
                         if(is.null(tryErrorDL)) {
                             showNotification("Error: The application cannot connect to the Tox21Enricher server. Please try again later.", type="error")
+                        } else if (tryErrorDL == 1 & !file.exists(paste0(tempdir(), "/output/", transactionId, "/", i, "__ErrorCASRNs.txt"))){
+                            showNotification("Error: The application cannot create the local directory to copy the file from the Tox21Enricher server.", type="error")
                         } else {
                             # Check file size
                             fSize <- file.info(paste0(tempdir(), "/output/", transactionId, "/", i, "__ErrorCASRNs.txt"))$size
@@ -2640,8 +2722,19 @@ shinyServer(function(input, output, session) {
                             # Open preview in modal
                             # disable refreshbutton
                             shinyjs::disable(id="refresh")
-                            tmpFile <- read.delim(paste0(tempdir(), "/output/", transactionId, "/", i, "__ErrorCASRNs.txt"), sep="\t", header=FALSE, comment.char="", fill=TRUE, stringsAsFactors=FALSE)
-                            names(tmpFile) <- c("CASRN")
+                            
+                            tmpFile <- tryCatch({
+                                tmpFile <- read.delim(paste0(tempdir(), "/output/", transactionId, "/", i, "__ErrorCASRNs.txt"), sep="\t", header=FALSE, comment.char="", fill=TRUE, stringsAsFactors=FALSE)
+                                names(tmpFile) <- c("CASRN")
+                                tmpFile
+                            }, error=function(cond){
+                                NULL
+                            })
+                            if(is.null(tmpFile)){
+                                showNotification("Error: the system could not find the file specified.", type="error")
+                                return(NULL)
+                            }
+                            
                             showModal(
                                 modalDialog(
                                     title=HTML(paste0(paste0("Error CASRNs for ", i), actionButton(inputId="modalCloseErrorAnnotationTop", label="Close preview"))),
@@ -2689,18 +2782,32 @@ shinyServer(function(input, output, session) {
                 if(is.null(setFilesObservers$observers[[paste0("fullMatrixObserver__", i)]])){
                     setFilesObservers$observers[[paste0("fullMatrixObserver__", i)]] <- observeEvent(input[[paste0(i, "__FullMatrix.txt__link")]], {
                         # Create directory for request
-                        dir.create(paste0(tempdir(), "/output/"))
-                        dir.create(paste0(tempdir(), "/output/", transactionId, "/"))
+                        tryCatch({
+                            dir.create(paste0(tempdir(), "/output/"))
+                        }, error=function(cond){
+                            showNotification("Error: cannot create local directory to download result files.", type="error")
+                            FALSE
+                        })
+                      
+                        tryCatch({
+                            dir.create(paste0(tempdir(), "/output/", transactionId, "/"))
+                        }, error=function(cond){
+                            showNotification("Error: cannot create local directory to download result files.", type="error")
+                            FALSE
+                        })
+                        
                         tryFullMatrixDL <- TRUE
                         if(!file.exists(paste0(tempdir(), "/output/", transactionId, "/", i, "__FullMatrix.txt"))){
                             tryFullMatrixDL <- tryCatch({
                                 download.file(paste0(API_PROTOCOL, API_ADDR, "/serveFileText?transactionId=", transactionId, "&filename=", i, "__FullMatrix.txt&subDir=Output"), destfile=paste0(tempdir(), "/output/", transactionId, "/", i, "__FullMatrix.txt"))
                             }, error=function(cond){
-                                return(NULL)
+                                NULL
                             })
                         }
                         if(is.null(tryFullMatrixDL)) {
                             showNotification("Error: The application cannot connect to the Tox21Enricher server. Please try again later.", type="error")
+                        } else if (tryFullMatrixDL == 1 & !file.exists(paste0(tempdir(), "/output/", transactionId, "/", i, "__FullMatrix.txt"))){
+                            showNotification("Error: The application cannot create the local directory to copy the file from the Tox21Enricher server.", type="error")
                         } else {
                             # Check file size
                             fSize <- file.info(paste0(tempdir(), "/output/", transactionId, "/", i, "__FullMatrix.txt"))$size
@@ -2711,10 +2818,21 @@ shinyServer(function(input, output, session) {
                             # Open preview in modal
                             # disable refreshbutton
                             shinyjs::disable(id="refresh")
-                            tmpFile <- read.delim(paste0(tempdir(), "/output/", transactionId, "/", i, "__FullMatrix.txt"), sep="\t", header=TRUE, comment.char="", fill=TRUE, stringsAsFactors=FALSE)
-                            names(tmpFile) <- lapply(names(tmpFile), function(x){
-                              return(gsub("\\.", " ", x))
+                            
+                            tmpFile <- tryCatch({
+                                tmpFile <- read.delim(paste0(tempdir(), "/output/", transactionId, "/", i, "__FullMatrix.txt"), sep="\t", header=TRUE, comment.char="", fill=TRUE, stringsAsFactors=FALSE)
+                                names(tmpFile) <- lapply(names(tmpFile), function(x){
+                                    return(gsub("\\.", " ", x))
+                                })
+                                tmpFile
+                            }, error=function(cond){
+                                NULL
                             })
+                            if(is.null(tmpFile)){
+                                showNotification("Error: the system could not find the file specified.", type="error")
+                                return(NULL)
+                            }
+                            
                             showModal(
                                 modalDialog(
                                     title=HTML(paste0(paste0("Full matrix file for ", i), actionButton(inputId="modalCloseFullMatrixTop", label="Close preview"))),
@@ -2764,18 +2882,33 @@ shinyServer(function(input, output, session) {
                     fullMatrixHeatmap <- NULL
                     fullMatrixHeatmapCasrns <- NULL
                     fullMatrixHeatmapAnnotations <- NULL
-                    dir.create(paste0(tempdir(), "/output/")) # Create temporary directory for request
-                    dir.create(paste0(tempdir(), "/output/", transactionId, "/"))
+                    
+                    tryCatch({
+                        dir.create(paste0(tempdir(), "/output/")) # Create temporary directory for request
+                    }, error=function(cond){
+                        showNotification("Error: cannot create local directory to download result files.", type="error")
+                        FALSE
+                    })
+                    
+                    tryCatch({
+                        dir.create(paste0(tempdir(), "/output/", transactionId, "/"))
+                    }, error=function(cond){
+                        showNotification("Error: cannot create local directory to download result files.", type="error")
+                        FALSE
+                    })
+                    
                     tryFullMatrixDL <- TRUE
                     if(!file.exists(paste0(tempdir(), "/output/", transactionId, "/", i, "__FullMatrix.txt"))){
                         tryFullMatrixDL <- tryCatch({
                             download.file(paste0(API_PROTOCOL, API_ADDR, "/serveFileText?transactionId=", transactionId, "&filename=", i, "__FullMatrix.txt&subDir=Output"), destfile=paste0(tempdir(), "/output/", transactionId, "/", i, "__FullMatrix.txt"))
                         }, error=function(cond){
-                            return(NULL)
+                            NULL
                         })
                     }
                     if(is.null(tryFullMatrixDL)) {
                         showNotification("Error: The application cannot connect to the Tox21Enricher server. Please try again later.", type="error")
+                    } else if (tryFullMatrixDL == 1 & !file.exists(paste0(tempdir(), "/output/", transactionId, "/", i, "__FullMatrix.txt"))){
+                        showNotification("Error: The application cannot create the local directory to copy the file from the Tox21Enricher server.", type="error")
                     } else {
                         # Check file size
                         fSize <- file.info(paste0(tempdir(), "/output/", transactionId, "/", i, "__FullMatrix.txt"))$size
@@ -2783,12 +2916,22 @@ shinyServer(function(input, output, session) {
                             showNotification(paste0("Warning: this file is too large to be previewed. Please view it after downloading the result files."), duration=5, type="warning")
                             return(FALSE)
                         }
-                        fullMatrixHeatmap <- read.delim(paste0(tempdir(), "/output/", transactionId, "/", i, "__FullMatrix.txt"), sep="\t", header=TRUE, comment.char="", fill=TRUE, stringsAsFactors=FALSE)
-                        names(fullMatrixHeatmap) <- lapply(names(fullMatrixHeatmap), function(x) gsub("\\.", " ", x))
-                        fullMatrixHeatmapCasrns <- fullMatrixHeatmap[, 1]
-                        fullMatrixHeatmap$CASRN <- NULL
-                        fullMatrixHeatmapAnnotations <- names(fullMatrixHeatmap)
-                        fullMatrixHeatmap <- t(data.matrix(fullMatrixHeatmap))
+                        
+                        fullMatrixHeatmap <- tryCatch({
+                            fullMatrixHeatmap <- read.delim(paste0(tempdir(), "/output/", transactionId, "/", i, "__FullMatrix.txt"), sep="\t", header=TRUE, comment.char="", fill=TRUE, stringsAsFactors=FALSE)
+                            names(fullMatrixHeatmap) <- lapply(names(fullMatrixHeatmap), function(x) gsub("\\.", " ", x))
+                            fullMatrixHeatmapCasrns <- fullMatrixHeatmap[, 1]
+                            fullMatrixHeatmap$CASRN <- NULL
+                            fullMatrixHeatmapAnnotations <- names(fullMatrixHeatmap)
+                            fullMatrixHeatmap <- t(data.matrix(fullMatrixHeatmap))
+                            fullMatrixHeatmap
+                        }, error=function(cond){
+                            NULL
+                        })
+                        if(is.null(fullMatrixHeatmap)){
+                            showNotification("Error: the system could not find the file specified.", type="error")
+                            return(NULL)
+                        }
                     }
                     
                     lHeatmapColor[[paste0("color__", i)]] <- "white"
@@ -2865,18 +3008,32 @@ shinyServer(function(input, output, session) {
                 },
                 content=function(file){
                     # Create directory for request
-                    dir.create(paste0(tempdir(), "/output/"))
-                    dir.create(paste0(tempdir(), "/output/", transactionId, "/"))
+                    tryCatch({
+                        dir.create(paste0(tempdir(), "/output/"))
+                    }, error=function(cond){
+                        showNotification("Error: cannot create local directory to download result files.", type="error")
+                        FALSE
+                    })
+                  
+                    tryCatch({
+                        dir.create(paste0(tempdir(), "/output/", transactionId, "/"))
+                    }, error=function(cond){
+                        showNotification("Error: cannot create local directory to download result files.", type="error")
+                        FALSE
+                    })
+                    
                     tryZipDL <- TRUE
                     if(!file.exists(paste0(tempdir(), "/output/", transactionId, "/tox21enricher_", transactionId, ".zip"))){
                         tryZipDL <- tryCatch({
                             download.file(paste0(API_PROTOCOL, API_ADDR, "/serveFileText?transactionId=", transactionId, "&filename=tox21enricher_", transactionId, ".zip&subDir=Output"), destfile=paste0(tempdir(), "/output/", transactionId, "/tox21enricher_", transactionId, ".zip"))
                         }, error=function(cond){
-                            return(NULL)
+                            NULL
                         })
                     }
                     if(is.null(tryZipDL)) {
                         showNotification("Error: The application cannot connect to the Tox21Enricher server. Please try again later.", type="error")
+                    } else if (tryZipDL == 1 & !file.exists(paste0(tempdir(), "/output/", transactionId, "/tox21enricher_", transactionId, ".zip"))){
+                        showNotification("Error: The application cannot create the local directory to copy the file from the Tox21Enricher server.", type="error")
                     } else {
                         file.copy(paste0(tempdir(), "/output/", transactionId, "/tox21enricher_", transactionId, ".zip"), file)
                     }
@@ -2891,18 +3048,31 @@ shinyServer(function(input, output, session) {
                 },
                 content=function(file){
                     # Create directory for request
-                    dir.create(paste0(tempdir(), "/output/"))
-                    dir.create(paste0(tempdir(), "/output/", transactionId, "/"))
+                    tryCatch({
+                        dir.create(paste0(tempdir(), "/output/"))
+                    }, error=function(cond){
+                        showNotification("Error: cannot create local directory to download result files.", type="error")
+                        FALSE
+                    })
+                    
+                    tryCatch({
+                        dir.create(paste0(tempdir(), "/output/", transactionId, "/"))
+                    }, error=function(cond){
+                        showNotification("Error: cannot create local directory to download result files.", type="error")
+                        FALSE
+                    })
                     tryZipDL <- TRUE
                     if(!file.exists(paste0(tempdir(), "/output/", transactionId, "/tox21enricher_", transactionId, ".zip"))){
                         tryZipDL <- tryCatch({
                             download.file(paste0(API_PROTOCOL, API_ADDR, "/serveFileText?transactionId=", transactionId, "&filename=tox21enricher_", transactionId, ".zip&subDir=Output"), destfile=paste0(tempdir(), "/output/", transactionId, "/tox21enricher_", transactionId, ".zip"))
                         }, error=function(cond){
-                            return(NULL)
+                            NULL
                         })
                     }
                     if(is.null(tryZipDL)) {
                         showNotification("Error: The application cannot connect to the Tox21Enricher server. Please try again later.", type="error")
+                    } else if (tryZipDL == 1 & !file.exists(paste0(tempdir(), "/output/", transactionId, "/tox21enricher_", transactionId, ".zip"))){
+                        showNotification("Error: The application cannot create the local directory to copy the file from the Tox21Enricher server.", type="error")
                     } else {
                         file.copy(paste0(tempdir(), "/output/", transactionId, "/tox21enricher_", transactionId, ".zip"), file)
                     }
@@ -2972,7 +3142,7 @@ shinyServer(function(input, output, session) {
                     ),
                     fluidRow(
                         column(12,
-                            h3("Significant P-value per Annotation Category"),
+                            h3("Enriched Annotations Bar Chart (p < 0.05)"),
                             column(2,
                                 radioButtons(inputId="radioBargraph", label="Order P-values with respect to input set", choiceNames=radioNames, choiceValues=names(enrichmentSets), selected=names(enrichmentSets)[1]),
                                 actionButton(inputId="updateBargraphButton", label="Update plot")
@@ -3002,6 +3172,7 @@ shinyServer(function(input, output, session) {
                     return(NULL)
                 }
                 gctFile <- NULL
+
                 if(length(content(resp)) > 0){
                     # TODO: Clean this up!
                     colLength <- length(content(resp)[[1]]) - 1 # number of columns -1 to remove column name
@@ -3054,10 +3225,14 @@ shinyServer(function(input, output, session) {
                     }))
                     rownames(gctFile) <- gctFileRowNames
                 }
+
                 if(!is.null(gctFile)){
                     gctFileMatrix <- data.matrix(gctFile)
                     gctCASRNNames <- rownames(gctFile)
                     gctAnnoNames <- colnames(gctFile)
+                
+                # DEBUG
+                }
                     # Get list of paths to result files for each set
                     # Fetch setFiles from server via API
                     resp <- NULL
@@ -3075,6 +3250,8 @@ shinyServer(function(input, output, session) {
                         return(NULL)
                     }
                     getAllResultFiles <- unlist(content(resp))
+                    
+                if(length(getAllResultFiles) > 0){
                   
                     # Get original input chemical if similarity or substructure
                     originalInputToDisplay <- ""
@@ -3091,19 +3268,35 @@ shinyServer(function(input, output, session) {
                     # Input
                     if(is.null(setFilesObservers$observers[[paste0("inputObserver__", i)]])){
                         setFilesObservers$observers[[paste0("inputObserver__", i)]] <- observeEvent(input[[paste0(i, "__", i, ".txt__link")]], {
+                          
                             # Create directory for request
-                            dir.create(paste0(tempdir(), "/input/"))
-                            dir.create(paste0(tempdir(), "/input/", transactionId, "/"))
+                            tryCatch({
+                                dir.create(paste0(tempdir(), "/input/"))
+                            }, error=function(cond){
+                                showNotification("Error: cannot create local directory to download result files.", type="error")
+                                FALSE
+                            })
+
+                            tryCatch({
+                                dir.create(paste0(tempdir(), "/input/", transactionId, "/"))
+                            }, error=function(cond){
+                                showNotification("Error: cannot create local directory to download result files.", type="error")
+                                FALSE
+                            })
+                      
                             tryInputDL <- TRUE
                             if(!file.exists(paste0(tempdir(), "/input/", transactionId, "/", i, ".txt"))){
                                 tryInputDL <- tryCatch({
                                     download.file(paste0(API_PROTOCOL, API_ADDR, "/serveFileText?transactionId=", transactionId, "&filename=", i, ".txt&subDir=Input"), destfile=paste0(tempdir(), "/input/", transactionId, "/", i, ".txt"))
                                 }, error=function(cond){
-                                    return(NULL)
+                                    NULL
                                 })
                             }
+                            
                             if(is.null(tryInputDL)){
                                 showNotification("Error: The application cannot connect to the Tox21Enricher server. Please try again later.", type="error")
+                            } else if (tryInputDL == 1 & !file.exists(paste0(tempdir(), "/input/", transactionId, "/", i, ".txt"))){
+                                showNotification("Error: The application cannot create the local directory to copy the file from the Tox21Enricher server.", type="error")
                             } else {
                                 # Check file size
                                 fSize <- file.info(paste0(tempdir(), "/input/", transactionId, "/", i, ".txt"))$size
@@ -3114,8 +3307,19 @@ shinyServer(function(input, output, session) {
                                 # Open preview in modal
                                 # disable refreshbutton
                                 shinyjs::disable(id="refresh")
-                                tmpFile <- read.delim(paste0(tempdir(), "/input/", transactionId, "/", i, ".txt"), sep="\t", header=FALSE, comment.char="", fill=TRUE, stringsAsFactors=FALSE)
-                                names(tmpFile) <- c("CASRN", "Chemical Name")
+                                
+                                tmpFile <- tryCatch({
+                                    tmpFile <- read.delim(paste0(tempdir(), "/input/", transactionId, "/", i, ".txt"), sep="\t", header=FALSE, comment.char="", fill=TRUE, stringsAsFactors=FALSE)
+                                    names(tmpFile) <- c("CASRN", "Chemical Name")
+                                    tmpFile
+                                }, error=function(cond){
+                                    NULL
+                                })
+                                if(is.null(tmpFile)){
+                                    showNotification("Error: the system could not find the file specified.", type="error")
+                                    return(NULL)
+                                }
+                                
                                 showModal(
                                     modalDialog(
                                         title=HTML(paste0(paste0("Input file for ", i), actionButton(inputId="modalCloseInputEnrichmentTop", label="Close preview"))),
@@ -3162,18 +3366,31 @@ shinyServer(function(input, output, session) {
                     if(is.null(setFilesObservers$observers[[paste0("chartTxtObserver__", i)]])){
                         setFilesObservers$observers[[paste0("chartTxtObserver__", i)]] <- observeEvent(input[[paste0(i, "__Chart.txt__link")]], {
                             # Create directory for request
-                            dir.create(paste0(tempdir(), "/output/"))
-                            dir.create(paste0(tempdir(), "/output/", transactionId, "/"))
+                            tryCatch({
+                                dir.create(paste0(tempdir(), "/output/"))
+                            }, error=function(cond){
+                                showNotification("Error: cannot create local directory to download result files.", type="error")
+                                FALSE
+                            })
+                            
+                            tryCatch({
+                                dir.create(paste0(tempdir(), "/output/", transactionId, "/"))
+                            }, error=function(cond){
+                                showNotification("Error: cannot create local directory to download result files.", type="error")
+                                FALSE
+                            })
                             tryChartDL <- TRUE
                             if(!file.exists(paste0(tempdir(), "/output/", transactionId, "/", i, "__Chart.txt"))){
                                 tryChartDL <- tryCatch({
                                     download.file(paste0(API_PROTOCOL, API_ADDR, "/serveFileText?transactionId=", transactionId, "&filename=", i, "__Chart.txt&subDir=Output"), destfile=paste0(tempdir(), "/output/", transactionId, "/", i, "__Chart.txt"))
                                 }, error=function(cond){
-                                    return(NULL)
+                                    NULL
                                 })
                             }
                             if(is.null(tryChartDL)){
                                 showNotification("Error: The application cannot connect to the Tox21Enricher server. Please try again later.", type="error")
+                            } else if (tryChartDL == 1 & !file.exists(paste0(tempdir(), "/output/", transactionId, "/", i, "__Chart.txt"))){
+                                showNotification("Error: The application cannot create the local directory to copy the file from the Tox21Enricher server.", type="error")
                             } else {
                                 # Check file size
                                 fSize <- file.info(paste0(tempdir(), "/output/", transactionId, "/", i, "__Chart.txt"))$size
@@ -3184,8 +3401,19 @@ shinyServer(function(input, output, session) {
                                 # Open preview in modal
                                 # disable refreshbutton
                                 shinyjs::disable(id="refresh")
-                                tmpFile <- read.delim(paste0(tempdir(), "/output/", transactionId, "/", i, "__Chart.txt"), sep="\t", header=TRUE, comment.char="", fill=TRUE, stringsAsFactors=FALSE)
-                                names(tmpFile) <- c("Category", "Term", "Count", "%", "PValue", "CASRNs", "List Total", "Pop Hits", "Pop Total", "Fold Enrichment", "Bonferroni", "Benjamini", "FDR")
+                                
+                                tmpFile <- tryCatch({
+                                    tmpFile <- read.delim(paste0(tempdir(), "/output/", transactionId, "/", i, "__Chart.txt"), sep="\t", header=TRUE, comment.char="", fill=TRUE, stringsAsFactors=FALSE)
+                                    names(tmpFile) <- c("Category", "Term", "Count", "%", "PValue", "CASRNs", "List Total", "Pop Hits", "Pop Total", "Fold Enrichment", "Bonferroni", "Benjamini", "FDR")
+                                    tmpFile
+                                }, error=function(cond){
+                                    NULL
+                                })
+                                if(is.null(tmpFile)){
+                                    showNotification("Error: the system could not find the file specified.", type="error")
+                                    return(NULL)
+                                }
+                                
                                 showModal(
                                     modalDialog(
                                         title=HTML(paste0(paste0("Chart file for ", i), actionButton(inputId="modalCloseChartTop", label="Close preview"))),
@@ -3242,18 +3470,31 @@ shinyServer(function(input, output, session) {
                     if(is.null(setFilesObservers$observers[[paste0("chartSimpleTxtObserver__", i)]])){
                         setFilesObservers$observers[[paste0("chartSimpleTxtObserver__", i)]] <- observeEvent(input[[paste0(i, "__ChartSimple.txt__link")]], {
                             # Create directory for request
-                            dir.create(paste0(tempdir(), "/output/"))
-                            dir.create(paste0(tempdir(), "/output/", transactionId, "/"))
+                            tryCatch({
+                                dir.create(paste0(tempdir(), "/output/"))
+                            }, error=function(cond){
+                                showNotification("Error: cannot create local directory to download result files.", type="error")
+                                FALSE
+                            })
+                            
+                            tryCatch({
+                                dir.create(paste0(tempdir(), "/output/", transactionId, "/"))
+                            }, error=function(cond){
+                                showNotification("Error: cannot create local directory to download result files.", type="error")
+                                FALSE
+                            })
                             tryChartSimpleDL <- TRUE
                             if(!file.exists(paste0(tempdir(), "/output/", transactionId, "/", i, "__ChartSimple.txt"))){
                                 tryChartSimpleDL <- tryCatch({
                                     download.file(paste0(API_PROTOCOL, API_ADDR, "/serveFileText?transactionId=", transactionId, "&filename=", i, "__ChartSimple.txt&subDir=Output"), destfile=paste0(tempdir(), "/output/", transactionId, "/", i, "__ChartSimple.txt"))
                                 }, error=function(cond){
-                                    return(NULL)
+                                    NULL
                                 })
                             }
                             if(is.null(tryChartSimpleDL)){
                                 showNotification("Error: The application cannot connect to the Tox21Enricher server. Please try again later.", type="error")
+                            } else if (tryChartSimpleDL == 1 & !file.exists(paste0(tempdir(), "/output/", transactionId, "/", i, "__ChartSimple.txt"))){
+                                showNotification("Error: The application cannot create the local directory to copy the file from the Tox21Enricher server.", type="error")
                             } else {
                                 # Check file size
                                 fSize <- file.info(paste0(tempdir(), "/output/", transactionId, "/", i, "__ChartSimple.txt"))$size
@@ -3264,8 +3505,19 @@ shinyServer(function(input, output, session) {
                                 # Open preview in modal
                                 # disable refreshbutton
                                 shinyjs::disable(id="refresh")
-                                tmpFile <- read.delim(paste0(tempdir(), "/output/", transactionId, "/", i, "__ChartSimple.txt"), sep="\t", header=TRUE, comment.char="", fill=TRUE, stringsAsFactors=FALSE)
-                                names(tmpFile) <- c("Category", "Term", "Count", "%", "PValue", "Fold Enrichment", "Benjamini")
+                                
+                                tmpFile <- tryCatch({
+                                    tmpFile <- read.delim(paste0(tempdir(), "/output/", transactionId, "/", i, "__ChartSimple.txt"), sep="\t", header=TRUE, comment.char="", fill=TRUE, stringsAsFactors=FALSE)
+                                    names(tmpFile) <- c("Category", "Term", "Count", "%", "PValue", "Fold Enrichment", "Benjamini")
+                                    tmpFile
+                                }, error=function(cond){
+                                    NULL
+                                })
+                                if(is.null(tmpFile)){
+                                    showNotification("Error: the system could not find the file specified.", type="error")
+                                    return(NULL)
+                                }
+                                
                                 showModal(
                                     modalDialog(
                                         title=HTML(paste0(paste0("Chart simple file for ", i), actionButton(inputId="modalCloseChartSimpleTop", label="Close preview"))),
@@ -3322,18 +3574,31 @@ shinyServer(function(input, output, session) {
                     if(is.null(setFilesObservers$observers[[paste0("clusterTxtObserver__", i)]])){
                         setFilesObservers$observers[[paste0("clusterTxtObserver__", i)]] <- observeEvent(input[[paste0(i, "__Cluster.txt__link")]], {
                             # Create directory for request
-                            dir.create(paste0(tempdir(), "/output/"))
-                            dir.create(paste0(tempdir(), "/output/", transactionId, "/"))
+                            tryCatch({
+                                dir.create(paste0(tempdir(), "/output/"))
+                            }, error=function(cond){
+                                showNotification("Error: cannot create local directory to download result files.", type="error")
+                                FALSE
+                            })
+                            
+                            tryCatch({
+                                dir.create(paste0(tempdir(), "/output/", transactionId, "/"))
+                            }, error=function(cond){
+                                showNotification("Error: cannot create local directory to download result files.", type="error")
+                                FALSE
+                            })
                             tryClusterDL <- TRUE
                             if(!file.exists(paste0(tempdir(), "/output/", transactionId, "/", i, "__Cluster.txt"))){
                                 tryClusterDL <- tryCatch({
                                     download.file(paste0(API_PROTOCOL, API_ADDR, "/serveFileText?transactionId=", transactionId, "&filename=", i, "__Cluster.txt&subDir=Output"), destfile=paste0(tempdir(), "/output/", transactionId, "/", i, "__Cluster.txt"))
                                 }, error=function(cond){
-                                    return(NULL)
+                                    NULL
                                 })
                             }
                             if(is.null(tryClusterDL)){
                                 showNotification("Error: The application cannot connect to the Tox21Enricher server. Please try again later.", type="error")
+                            } else if (tryClusterDL == 1 & !file.exists(paste0(tempdir(), "/output/", transactionId, "/", i, "__Cluster.txt"))){
+                                showNotification("Error: The application cannot create the local directory to copy the file from the Tox21Enricher server.", type="error")
                             } else {
                                 # Check file size
                                 fSize <- file.info(paste0(tempdir(), "/output/", transactionId, "/", i, "__Cluster.txt"))$size
@@ -3468,18 +3733,31 @@ shinyServer(function(input, output, session) {
                     if(is.null(setFilesObservers$observers[[paste0("matrixObserver__", i)]])){
                         setFilesObservers$observers[[paste0("matrixObserver__", i)]] <- observeEvent(input[[paste0(i, "__Matrix.txt__link")]], {
                             # Create directory for request
-                            dir.create(paste0(tempdir(), "/output/"))
-                            dir.create(paste0(tempdir(), "/output/", transactionId, "/"))
+                            tryCatch({
+                               dir.create(paste0(tempdir(), "/output/"))
+                            }, error=function(cond){
+                                showNotification("Error: cannot create local directory to download result files.", type="error")
+                                FALSE
+                            })
+                            
+                            tryCatch({
+                               dir.create(paste0(tempdir(), "/output/", transactionId, "/"))
+                            }, error=function(cond){
+                                showNotification("Error: cannot create local directory to download result files.", type="error")
+                                FALSE
+                            })
                             tryMatrixDL <- TRUE
                             if(!file.exists(paste0(tempdir(), "/output/", transactionId, "/", i, "__Matrix.txt"))){
                                 tryMatrixDL <- tryCatch({
                                     download.file(paste0(API_PROTOCOL, API_ADDR, "/serveFileText?transactionId=", transactionId, "&filename=", i, "__Matrix.txt&subDir=Output"), destfile=paste0(tempdir(), "/output/", transactionId, "/", i, "__Matrix.txt"))
                                 }, error=function(cond){
-                                    return(NULL)
+                                    NULL
                                 })
                             }
                             if(is.null(tryMatrixDL)){
                                 showNotification("Error: The application cannot connect to the Tox21Enricher server. Please try again later.", type="error")
+                            } else if (tryMatrixDL == 1 & !file.exists(paste0(tempdir(), "/output/", transactionId, "/", i, "__Matrix.txt"))){
+                                showNotification("Error: The application cannot create the local directory to copy the file from the Tox21Enricher server.", type="error")
                             } else {
                                 # Check file size
                                 fSize <- file.info(paste0(tempdir(), "/output/", transactionId, "/", i, "__Matrix.txt"))$size
@@ -3490,10 +3768,21 @@ shinyServer(function(input, output, session) {
                                 # Open preview in modal
                                 # disable refreshbutton
                                 shinyjs::disable(id="refresh")
-                                tmpFile <- read.csv(paste0(tempdir(), "/output/", transactionId, "/", i, "__Matrix.txt"), sep="\t", header=TRUE, comment.char="", fill=TRUE, stringsAsFactors=FALSE)
-                                names(tmpFile) <- lapply(names(tmpFile), function(x){
-                                    return(gsub("\\.", " ", x))
+                                
+                                tmpFile <- tryCatch({
+                                    tmpFile <- read.csv(paste0(tempdir(), "/output/", transactionId, "/", i, "__Matrix.txt"), sep="\t", header=TRUE, comment.char="", fill=TRUE, stringsAsFactors=FALSE)
+                                    names(tmpFile) <- lapply(names(tmpFile), function(x){
+                                        return(gsub("\\.", " ", x))
+                                    })
+                                    tmpFile
+                                }, error=function(cond){
+                                    NULL
                                 })
+                                if(is.null(tmpFile)){
+                                    showNotification("Error: the system could not find the file specified.", type="error")
+                                    return(NULL)
+                                }
+                                
                                 showModal(
                                     modalDialog(
                                         title=HTML(paste0(paste0("Matrix file for ", i), actionButton(inputId="modalCloseMatrixTop", label="Close preview"))),
@@ -3541,18 +3830,31 @@ shinyServer(function(input, output, session) {
                     if(is.null(setFilesObservers$observers[[paste0("errorfileObserver__", i)]])){
                         setFilesObservers$observers[[paste0("errorfileObserver__", i)]] <- observeEvent(input[[paste0(i, "__ErrorCASRNs.txt__link")]], {
                             # Create directory for request
-                            dir.create(paste0(tempdir(), "/output/"))
-                            dir.create(paste0(tempdir(), "/output/", transactionId, "/"))
+                            tryCatch({
+                                dir.create(paste0(tempdir(), "/output/"))
+                            }, error=function(cond){
+                                showNotification("Error: cannot create local directory to download result files.", type="error")
+                                FALSE
+                            })
+                            
+                            tryCatch({
+                                dir.create(paste0(tempdir(), "/output/", transactionId, "/"))
+                            }, error=function(cond){
+                                showNotification("Error: cannot create local directory to download result files.", type="error")
+                                FALSE
+                            })
                             tryErrorDL <- TRUE
                             if(!file.exists(paste0(tempdir(), "/output/", transactionId, "/", i, "__ErrorCASRNs.txt"))){
                                 tryErrorDL <- tryCatch({
                                     download.file(paste0(API_PROTOCOL, API_ADDR, "/serveFileText?transactionId=", transactionId, "&filename=", i, "__ErrorCASRNs.txt&subDir=Output"), destfile=paste0(tempdir(), "/output/", transactionId, "/", i, "__ErrorCASRNs.txt"))
                                 }, error=function(cond){
-                                    return(NULL)
+                                    NULL
                                 })
                             }
                             if(is.null(tryErrorDL)){
                                 showNotification("Error: The application cannot connect to the Tox21Enricher server. Please try again later.", type="error")
+                            } else if (tryErrorDL == 1 & !file.exists(paste0(tempdir(), "/output/", transactionId, "/", i, "__ErrorCASRNs.txt"))){
+                                showNotification("Error: The application cannot create the local directory to copy the file from the Tox21Enricher server.", type="error")
                             } else {
                                 # Check file size
                                 fSize <- file.info(paste0(tempdir(), "/output/", transactionId, "/", i, "__ErrorCASRNs.txt"))$size
@@ -3563,8 +3865,19 @@ shinyServer(function(input, output, session) {
                                 # Open preview in modal
                                 # disable refreshbutton
                                 shinyjs::disable(id="refresh")
-                                tmpFile <- read.delim(paste0(tempdir(), "/output/", transactionId, "/", i, "__ErrorCASRNs.txt"), sep="\t", header=FALSE, comment.char="", fill=TRUE, stringsAsFactors=FALSE)
-                                names(tmpFile) <- c("CASRN")
+                                
+                                tmpFile <- tryCatch({
+                                    tmpFile <- read.delim(paste0(tempdir(), "/output/", transactionId, "/", i, "__ErrorCASRNs.txt"), sep="\t", header=FALSE, comment.char="", fill=TRUE, stringsAsFactors=FALSE)
+                                    names(tmpFile) <- c("CASRN")
+                                    tmpFile
+                                }, error=function(cond){
+                                    NULL
+                                })
+                                if(is.null(tmpFile)){
+                                    showNotification("Error: the system could not find the file specified.", type="error")
+                                    return(NULL)
+                                }
+                                
                                 showModal(
                                     modalDialog(
                                         title=HTML(paste0(paste0("Error CASRNs for ", i), actionButton(inputId="modalCloseErrorEnrichmentTop", label="Close preview"))),
@@ -3674,61 +3987,7 @@ shinyServer(function(input, output, session) {
                         )
                     )
                     
-                    output[[paste0("perSetHeatmap__", i)]] <- renderUI(
-                        # Main heatmap per set
-                        fluidRow(
-                            column(1,
-                               radioButtons(inputId=paste0("lHeatmapColorControl__", i), label="Select 0 color for heatmap:", choices=c("white", "gray", "black", "red", "blue", "yellow", "green", "brown", "purple", "orange"), selected=lHeatmapColor[[paste0("color__", i)]]),
-                            ),
-                            column(1,
-                               radioButtons(inputId=paste0("hHeatmapColorControl__", i), label="Select 1 color for heatmap:", choices=c("white", "gray", "black", "red", "blue", "yellow", "green", "brown", "purple", "orange"), selected=hHeatmapColor[[paste0("color__", i)]])
-                            ),
-                            column(10,
-                                plot_ly(x=gctAnnoNames, y=gctCASRNNames, z=gctFileMatrix, colors=colorRamp(c(lHeatmapColor[[paste0("color__", i)]], hHeatmapColor[[paste0("color__", i)]])), type="heatmap", xgap=2, ygap=2 ) %>%
-                                layout(
-                                    autosize=TRUE,
-                                    showlegend=FALSE,
-                                    margin=list(r=200, b=200),
-                                    xaxis=list(title="<b>Annotations</b>", tickfont=list(size=9), tickangle=15, automargin=TRUE),
-                                    yaxis=list(title="<b>Input CASRNs</b>", type="category", automargin=TRUE),
-                                    plot_bgcolor="transparent",
-                                    paper_bgcolor="transparent",
-                                    font=list(color="#000000")
-                                ) %>% hide_colorbar()
-                            )
-                        )
-                    )
-                    
-                    # add observers for heatmap colors
-                    observeEvent(input[[paste0("lHeatmapColorControl__", i)]], {
-                        lHeatmapColor[[paste0("color__", i)]] <- input[[paste0("lHeatmapColorControl__", i)]]
-                        output[[paste0("perSetHeatmap__", i)]] <- renderUI(
-                                # Main heatmap per set
-                                fluidRow(
-                                    column(1,
-                                        radioButtons(inputId=paste0("lHeatmapColorControl__", i), label="Select 0 color for heatmap:", choices=c("white", "gray", "black", "red", "blue", "yellow", "green", "brown", "purple", "orange"), selected=lHeatmapColor[[paste0("color__", i)]]),
-                                    ),
-                                    column(1,
-                                        radioButtons(inputId=paste0("hHeatmapColorControl__", i), label="Select 1 color for heatmap:", choices=c("white", "gray", "black", "red", "blue", "yellow", "green", "brown", "purple", "orange"), selected=hHeatmapColor[[paste0("color__", i)]])
-                                    ),
-                                    column(10,
-                                        plot_ly(x=gctAnnoNames, y=gctCASRNNames, z=gctFileMatrix, colors=colorRamp(c(lHeatmapColor[[paste0("color__", i)]], hHeatmapColor[[paste0("color__", i)]])), type="heatmap", xgap=2, ygap=2 ) %>%
-                                        layout(
-                                            autosize=TRUE,
-                                            showlegend=FALSE,
-                                            margin=list(r=200, b=200),
-                                            xaxis=list(title="<b>Annotations</b>", tickfont=list(size=9), tickangle=15, automargin=TRUE),
-                                            yaxis=list(title="<b>Input CASRNs</b>", type="category", automargin=TRUE),
-                                            plot_bgcolor="transparent",
-                                            paper_bgcolor="transparent",
-                                            font=list(color="#000000")
-                                        ) %>% hide_colorbar()
-                                    )
-                                )
-                          )
-                    })
-                    observeEvent(input[[paste0("hHeatmapColorControl__", i)]], {
-                        hHeatmapColor[[paste0("color__", i)]] <- input[[paste0("hHeatmapColorControl__", i)]]
+                    if(!is.null(gctFile)){
                         output[[paste0("perSetHeatmap__", i)]] <- renderUI(
                             # Main heatmap per set
                             fluidRow(
@@ -3753,7 +4012,67 @@ shinyServer(function(input, output, session) {
                                 )
                             )
                         )
-                    })
+    
+                        # add observers for heatmap colors
+                        observeEvent(input[[paste0("lHeatmapColorControl__", i)]], {
+                            lHeatmapColor[[paste0("color__", i)]] <- input[[paste0("lHeatmapColorControl__", i)]]
+                            output[[paste0("perSetHeatmap__", i)]] <- renderUI(
+                                    # Main heatmap per set
+                                    fluidRow(
+                                        column(1,
+                                            radioButtons(inputId=paste0("lHeatmapColorControl__", i), label="Select 0 color for heatmap:", choices=c("white", "gray", "black", "red", "blue", "yellow", "green", "brown", "purple", "orange"), selected=lHeatmapColor[[paste0("color__", i)]]),
+                                        ),
+                                        column(1,
+                                            radioButtons(inputId=paste0("hHeatmapColorControl__", i), label="Select 1 color for heatmap:", choices=c("white", "gray", "black", "red", "blue", "yellow", "green", "brown", "purple", "orange"), selected=hHeatmapColor[[paste0("color__", i)]])
+                                        ),
+                                        column(10,
+                                            plot_ly(x=gctAnnoNames, y=gctCASRNNames, z=gctFileMatrix, colors=colorRamp(c(lHeatmapColor[[paste0("color__", i)]], hHeatmapColor[[paste0("color__", i)]])), type="heatmap", xgap=2, ygap=2 ) %>%
+                                            layout(
+                                                autosize=TRUE,
+                                                showlegend=FALSE,
+                                                margin=list(r=200, b=200),
+                                                xaxis=list(title="<b>Annotations</b>", tickfont=list(size=9), tickangle=15, automargin=TRUE),
+                                                yaxis=list(title="<b>Input CASRNs</b>", type="category", automargin=TRUE),
+                                                plot_bgcolor="transparent",
+                                                paper_bgcolor="transparent",
+                                                font=list(color="#000000")
+                                            ) %>% hide_colorbar()
+                                        )
+                                    )
+                              )
+                        })
+                        observeEvent(input[[paste0("hHeatmapColorControl__", i)]], {
+                            hHeatmapColor[[paste0("color__", i)]] <- input[[paste0("hHeatmapColorControl__", i)]]
+                            output[[paste0("perSetHeatmap__", i)]] <- renderUI(
+                                # Main heatmap per set
+                                fluidRow(
+                                    column(1,
+                                       radioButtons(inputId=paste0("lHeatmapColorControl__", i), label="Select 0 color for heatmap:", choices=c("white", "gray", "black", "red", "blue", "yellow", "green", "brown", "purple", "orange"), selected=lHeatmapColor[[paste0("color__", i)]]),
+                                    ),
+                                    column(1,
+                                       radioButtons(inputId=paste0("hHeatmapColorControl__", i), label="Select 1 color for heatmap:", choices=c("white", "gray", "black", "red", "blue", "yellow", "green", "brown", "purple", "orange"), selected=hHeatmapColor[[paste0("color__", i)]])
+                                    ),
+                                    column(10,
+                                        plot_ly(x=gctAnnoNames, y=gctCASRNNames, z=gctFileMatrix, colors=colorRamp(c(lHeatmapColor[[paste0("color__", i)]], hHeatmapColor[[paste0("color__", i)]])), type="heatmap", xgap=2, ygap=2 ) %>%
+                                        layout(
+                                            autosize=TRUE,
+                                            showlegend=FALSE,
+                                            margin=list(r=200, b=200),
+                                            xaxis=list(title="<b>Annotations</b>", tickfont=list(size=9), tickangle=15, automargin=TRUE),
+                                            yaxis=list(title="<b>Input CASRNs</b>", type="category", automargin=TRUE),
+                                            plot_bgcolor="transparent",
+                                            paper_bgcolor="transparent",
+                                            font=list(color="#000000")
+                                        ) %>% hide_colorbar()
+                                    )
+                                )
+                            )
+                        })
+                    } else {
+                      output[[paste0("perSetHeatmap__", i)]] <- renderUI(
+                          p("Insufficient annotations to generate heatmap.")
+                      )
+                    }
                 } else {
                     # Get original input chemical if similarity or substructure
                     originalInputToDisplay <- NULL
@@ -3835,7 +4154,6 @@ shinyServer(function(input, output, session) {
                         resizedSvg <- gsub("width='250px'", "width='50px'", unlist(structuresSvg[casrnName][[1]]))
                         resizedSvg <- gsub("height='200px'", "height='40px'", resizedSvg)
 
-                        # TODO THIS ASSIGNMENT IS CAUSING A CRASH
                         # Add fetched, resized SVG to list too
                         if(is.null(structuresSvg[casrnName][[1]]) == TRUE){
                             svgImagesList[paste0(casrnName, "__", i)] <<- "<svg><text>No image</text></svg>"
@@ -4273,6 +4591,7 @@ shinyServer(function(input, output, session) {
                 showNotification("Error: There was an error completing your request.", type="error")
                 return(NULL)
             }
+            
             if(length(content(resp)) > 0){
                 colLength <- length(content(resp)[[1]]) - 1 # number of columns -1 to remove column name
                 gctFileChart <- vapply(content(resp), function(x){
@@ -4291,10 +4610,12 @@ shinyServer(function(input, output, session) {
                 }, FUN.VALUE=double(colLength))
                 
                 gctFileChart <- data.frame(gctFileChart)
+                
                 # This is here to catch anything that's only 1 input set
-                if(ncol(gctFileChart) > 1) {
+                if(ncol(gctFileChart) > 1 | (ncol(gctFileChart) == 1 & nrow(gctFileChart) == length(names(reenrichResults)))) {
                     gctFileChart <- t(gctFileChart)
                 } 
+                
                 gctFileChartColNames <- unique(unlist(lapply(content(resp), function(x){
                     gctFileChartInner <- unlist(lapply(names(x), function(y) {
                         if(y != "_row"){
@@ -4356,9 +4677,11 @@ shinyServer(function(input, output, session) {
                     return(dfToReturn)
                 }, FUN.VALUE=double(colLength))
                 gctFileCluster<- data.frame(gctFileCluster)
-                if(ncol(gctFileCluster) > 1){
+                
+                if(ncol(gctFileCluster) > 1 | (ncol(gctFileCluster) == 1 & nrow(gctFileCluster) == length(names(reenrichResults)))) {
                     gctFileCluster <- t(gctFileCluster)
                 }
+                
                 gctFileClusterColNames <- unique(unlist(lapply(content(resp), function(x){
                     gctFileClusterInner <- unlist(lapply(names(x), function(y) {
                         if(y != "_row"){
@@ -4381,6 +4704,8 @@ shinyServer(function(input, output, session) {
                     gctFileClusterInner <- gctFileClusterInner[!vapply(gctFileClusterInner, is.null, FUN.VALUE=logical(1))]
                     return(gctFileClusterInner)
                 })))
+                
+                
                 colnames(gctFileCluster) <- gctFileClusterColNames
                 row.names(gctFileCluster) <- gctFileClusterRowNames
                 gctFileClusterMatrix <- data.matrix(gctFileCluster)
@@ -5790,6 +6115,7 @@ shinyServer(function(input, output, session) {
         output[["bargraph"]] <- renderUI(
             do.call(tabsetPanel, c(id="pvaluetab", lapply(bgChartAllCategories, function(catName){
                 tmpBgNames <- unique(unlist(unname(lapply(bgChartFull[[catName]], function(x) names(x)))))
+                
                 # Get inverted p-values (-log10)
                 tmpBgCleaned <- lapply(bgChartFull[[catName]], function(x){
                     tmpBgCleanedInner <- unlist(lapply(tmpBgNames, function(tmpName){
@@ -5802,6 +6128,7 @@ shinyServer(function(input, output, session) {
                     names(tmpBgCleanedInner) <- tmpBgNames
                     return(tmpBgCleanedInner)
                 })
+                
                 if(is.null(tmpBgCleaned[[orderSet]]) == FALSE) {
                     # This is necessary so that the bar graph will be ordered by value in descending order
                     tmpBgNames <- factor(tmpBgNames, levels=tmpBgNames[order(tmpBgCleaned[[orderSet]], decreasing=FALSE)]) #decreasing=FALSE because we invert the p-value
@@ -5822,7 +6149,7 @@ shinyServer(function(input, output, session) {
                 ) %>% layout(
                     title=catName,
                     margin=list(l=300, r=200, b=160), 
-                    xaxis=list(title="<b>-log<sub>10</sub> (P-value)</b>", tickfont=list(size=12), automargin=TRUE),
+                    xaxis=list(title="<b>-log<sub>10</sub>(p)</b>", tickfont=list(size=12), automargin=TRUE),
                     yaxis=list(title="<b>Annotation Terms</b>", tickfont=list(size=10), type="category", automargin=TRUE),
                     barmode="group",
                     autosize=FALSE,
@@ -5845,7 +6172,7 @@ shinyServer(function(input, output, session) {
                         ),
                         fluidRow(
                             DT::datatable({dataTableBgValues},
-                                caption=HTML(paste0("<b>-log<sub>10</sub> (P-value) for ", catName, "</b>")),
+                                caption=HTML(paste0("<b>-log<sub>10</sub>(p) for ", catName, "</b>")),
                                 escape=FALSE,
                                 rownames=FALSE,
                                 class="row-border stripe compact",

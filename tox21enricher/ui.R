@@ -114,6 +114,8 @@ shinyUI(function(){
                 extendShinyjs(text=js_session, functions=c('saveSession', 'getSession', 'clearSession', 'saveHostInfo', 'getHostInfo', 'clearHostInfo')),
                 p("Welcome to Tox21Enricher! Please see this ", tags$a(href="https://github.com/hurlab/tox21enricher/blob/main/docs/Tox21Enricher_Manual.pdf", "link"), "for instructions on using this application and the descriptions about the chemical / biological categories. Other resources from the Tox21 toolbox can be viewed", tags$a(href="https://ntp.niehs.nih.gov/whatwestudy/tox21/toolbox/index.html", "here."), "A sufficiently robust internet connection and JavaScript are required to use all of this application's features."),
                 p("An older version of Tox21Enricher using the", tags$a(href="https://grails.org/", "Grails framework"), "is hosted", tags$a(href="http://hurlab.med.und.edu/tox21enricher-grails", "here.")),
+                p(actionLink(inputId="linkEnrichmentDetails", label="Click here to view our annotation enrichment methodology.")),
+                
                 # Display API connection status
                 uiOutput("apiConnection"),
                 # Display enrichment total count
@@ -160,13 +162,10 @@ shinyUI(function(){
                                 ", actionLink(inputId="annotationSelectionInfoLink", label="Click here to view our sources and selection criteria for the annotations."), "<br><br>"
                             ))
                         ),
-                        column(4,
+                        column(12,
                             actionButton("select_all_annotations", "Deselect all"),
                             tipify(actionButton("selectAllLarge", "Deselect all large classes"), "Deselect/select all annotation classes with more than 1000 terms. Deselecting large classes may enhance performance.", placement="right")
-                        ),
-                        column(8,
-                            HTML("<p><b>Note</b>: Selecting no annotation categories will cause enrichment to just use the default categories.</p>")
-                        ),
+                        )
                     ),
                     fluidRow(
                         # Annotation class selection tabs
@@ -178,6 +177,14 @@ shinyUI(function(){
                         tipify(sliderInput(inputId="nodeCutoff", label="Select enrichment cutoff", value=10, min=1, max=50, step=1, width="100%"), "This will determine the maximum number of results per data set and may affect how many nodes are generated during network generation. (default=10). Higher values may cause the enrichment process to take longer (Not available when viewing annotations for Tox21 chemicals).", placement="bottom")
                     ),
                     hr(),
+                    
+                    fluidRow(
+                        # Pvalue method selection
+                        h3("Select P-Value Calculation Method"),
+                        tipify(radioButtons(inputId="pvalueTypeSelector", label="Select p-value calculation method", choiceNames=c("Nominal p-value", "Adjusted p-value (Benjamini-Hochberg correction)"), choiceValues=c("nominal", "adjusted")), "During enrichment, should Tox21Enricher use a nominal p-value with no adjustment or a Benjamini-Hochberg-corrected p-value?")
+                    ),
+                    hr(),
+                    
                     fluidRow(
                         # Enrichment type selection
                         selectInput("enrich_from", h3("Select Input Type"),
