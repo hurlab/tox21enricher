@@ -4705,7 +4705,6 @@ shinyServer(function(input, output, session) {
                     return(gctFileClusterInner)
                 })))
                 
-                
                 colnames(gctFileCluster) <- gctFileClusterColNames
                 row.names(gctFileCluster) <- gctFileClusterRowNames
                 gctFileClusterMatrix <- data.matrix(gctFileCluster)
@@ -4744,7 +4743,7 @@ shinyServer(function(input, output, session) {
                                         radioButtons(inputId=paste0("hHeatmapColorControl__Chart"), label="Select 1 color for heatmap:", choices=c("white", "gray", "black", "red", "blue", "yellow", "green", "brown", "purple", "orange"), selected=hHeatmapColorChart$color)
                                     ),
                                     column(10,
-                                        plot_ly(x=gctCASRNNamesChart, y=gctAnnoNamesChart, z=gctFileChartMatrix, colors=colorRamp(c("white", "red")), type="heatmap", xgap=2, ygap=2, colorbar=list(title=list(text='<b>-log<sub>10</sub> (BH P-value)</b>'))) %>% 
+                                        plot_ly(x=gctCASRNNamesChart, y=gctAnnoNamesChart, z=gctFileChartMatrix, colors=colorRamp(c("white", "red")), type="heatmap", xgap=2, ygap=2, colorbar=list(title=list(text='<b>-log<sub>10</sub>(p)</b>'))) %>% 
                                         layout(
                                             margin=list(l=300, r=200, b=160), 
                                             xaxis=list(title="<b>Annotations</b>", tickfont=list(size=9), tickangle=15), 
@@ -4815,7 +4814,7 @@ shinyServer(function(input, output, session) {
                                             radioButtons(inputId=paste0("hHeatmapColorControl__Cluster"), label="Select 1 color for heatmap:", choices=c("white", "gray", "black", "red", "blue", "yellow", "green", "brown", "purple", "orange"), selected=hHeatmapColorCluster$color)
                                         ),
                                         column(10,
-                                            plot_ly(x=gctCASRNNamesCluster, y=gctAnnoNamesCluster, z=gctFileClusterMatrix, colors=colorRamp(c(lHeatmapColorCluster$color, hHeatmapColorCluster$color)), type="heatmap", xgap=2, ygap=2, colorbar=list(title=list(text='<b>-log<sub>10</sub> (BH P-value)</b>'))) %>% 
+                                            plot_ly(x=gctCASRNNamesCluster, y=gctAnnoNamesCluster, z=gctFileClusterMatrix, colors=colorRamp(c(lHeatmapColorCluster$color, hHeatmapColorCluster$color)), type="heatmap", xgap=2, ygap=2, colorbar=list(title=list(text='<b>-log<sub>10</sub>(p)</b>'))) %>% 
                                             layout(
                                                 margin=list(l=300, r=200, b=160), 
                                                 xaxis=list(title="<b>Annotation Clusters</b>", tickfont=list(size=9), tickangle=15), 
@@ -4888,7 +4887,7 @@ shinyServer(function(input, output, session) {
                                             radioButtons(inputId=paste0("hHeatmapColorControl__Chart"), label="Select 1 color for heatmap:", choices=c("white", "gray", "black", "red", "blue", "yellow", "green", "brown", "purple", "orange"), selected=hHeatmapColorChart$color)
                                         ),
                                         column(10,
-                                            plot_ly(x=gctCASRNNamesChart, y=gctAnnoNamesChart, z=gctFileChartMatrix, colors=colorRamp(c(lHeatmapColorChart$color, hHeatmapColorChart$color)), type="heatmap", xgap=2, ygap=2, colorbar=list(title=list(text='<b>-log<sub>10</sub> (BH P-value)</b>'))) %>% 
+                                            plot_ly(x=gctCASRNNamesChart, y=gctAnnoNamesChart, z=gctFileChartMatrix, colors=colorRamp(c(lHeatmapColorChart$color, hHeatmapColorChart$color)), type="heatmap", xgap=2, ygap=2, colorbar=list(title=list(text='<b>-log<sub>10</sub>(p)</b>'))) %>% 
                                             layout(
                                                 margin=list(l=300, r=200, b=160), 
                                                 xaxis=list(title="<b>Annotations</b>", tickfont=list(size=9), tickangle=15), 
@@ -4966,7 +4965,7 @@ shinyServer(function(input, output, session) {
                                             radioButtons(inputId=paste0("hHeatmapColorControl__Cluster"), label="Select 1 color for heatmap:", choices=c("white", "gray", "black", "red", "blue", "yellow", "green", "brown", "purple", "orange"), selected=hHeatmapColorCluster$color)
                                         ),
                                         column(10,
-                                            plot_ly(x=gctCASRNNamesCluster, y=gctAnnoNamesCluster, z=gctFileClusterMatrix, colors=colorRamp(c(lHeatmapColorCluster$color, hHeatmapColorCluster$color)), type="heatmap", xgap=2, ygap=2, colorbar=list(title=list(text='<b>-log<sub>10</sub> (BH P-value)</b>'))) %>% 
+                                            plot_ly(x=gctCASRNNamesCluster, y=gctAnnoNamesCluster, z=gctFileClusterMatrix, colors=colorRamp(c(lHeatmapColorCluster$color, hHeatmapColorCluster$color)), type="heatmap", xgap=2, ygap=2, colorbar=list(title=list(text='<b>-log<sub>10</sub>(p)</b>'))) %>% 
                                             layout(
                                                 margin=list(l=300, r=200, b=160), 
                                                 xaxis=list(title="<b>Annotation Clusters</b>", tickfont=list(size=9), tickangle=15), 
@@ -5039,7 +5038,7 @@ shinyServer(function(input, output, session) {
                                             radioButtons(inputId=paste0("hHeatmapColorControl__Cluster"), label="Select 1 color for heatmap:", choices=c("white", "gray", "black", "red", "blue", "yellow", "green", "brown", "purple", "orange"), selected=hHeatmapColorCluster$color)
                                         ),
                                         column(10,
-                                            plot_ly(x=gctCASRNNamesCluster, y=gctAnnoNamesCluster, z=gctFileClusterMatrix, colors=colorRamp(c(lHeatmapColorCluster$color, hHeatmapColorCluster$color)), type="heatmap", xgap=2, ygap=2, colorbar=list(title=list(text='<b>-log<sub>10</sub> (BH P-value)</b>'))) %>% 
+                                            plot_ly(x=gctCASRNNamesCluster, y=gctAnnoNamesCluster, z=gctFileClusterMatrix, colors=colorRamp(c(lHeatmapColorCluster$color, hHeatmapColorCluster$color)), type="heatmap", xgap=2, ygap=2, colorbar=list(title=list(text='<b>-log<sub>10</sub>(p)</b>'))) %>% 
                                             layout(
                                                 margin=list(l=300, r=200, b=160), 
                                                 xaxis=list(title="<b>Annotation Clusters</b>", tickfont=list(size=9), tickangle=15), 
@@ -5110,7 +5109,7 @@ shinyServer(function(input, output, session) {
                                             radioButtons(inputId=paste0("hHeatmapColorControl__Chart"), label="Select 1 color for heatmap:", choices=c("white", "gray", "black", "red", "blue", "yellow", "green", "brown", "purple", "orange"), selected=hHeatmapColorChart$color)
                                         ),
                                         column(10,
-                                            plot_ly(x=gctCASRNNamesChart, y=gctAnnoNamesChart, z=gctFileChartMatrix, colors=colorRamp(c(lHeatmapColorChart$color, hHeatmapColorChart$color)), type="heatmap", xgap=2, ygap=2, colorbar=list(title=list(text='<b>-log<sub>10</sub> (BH P-value)</b>'))) %>% 
+                                            plot_ly(x=gctCASRNNamesChart, y=gctAnnoNamesChart, z=gctFileChartMatrix, colors=colorRamp(c(lHeatmapColorChart$color, hHeatmapColorChart$color)), type="heatmap", xgap=2, ygap=2, colorbar=list(title=list(text='<b>-log<sub>10</sub>(p)</b>'))) %>% 
                                             layout(
                                                 margin=list(l=300, r=200, b=160), 
                                                 xaxis=list(title="<b>Annotations</b>", tickfont=list(size=9), tickangle=15), 

@@ -1112,7 +1112,7 @@ process_variable_DAVID_CLUSTER_directories <- function(dirName, outputDir, extTa
     
     writeToSummary <- lapply(IDs, function(ID) {
         IDSplit <- unlist(str_split(ID, " \\| "))
-        writeToSummaryLabel <- paste0(IDSplit[1], "\t", ID)
+        writeToSummaryLabel <- paste0(IDSplit[1], "\t", ID, "\t", IDSplit[2])
         writeToSummary2 <- lapply(fileHeaderNames, function(header){
             if (!is.null(pvalueMatrix[[ID]])){
                 if(header %in% names(pvalueMatrix[[ID]])) {
@@ -1439,7 +1439,9 @@ process_variable_DAVID_CHART_directories <- function(dirName, outputDir, extTag,
     writeToSummaryHeader <- paste0("GROUP\tID\tTerms\t", paste0(fileHeaderNames, collapse="\t"), "\n")
     IDs <- unique(IDs)
     writeToSummary <- lapply(IDs, function(ID) {
-        writeToSummaryLabel <- paste0(ID2Class[ID], "\t", ID)
+        IDSplit <- unlist(str_split(ID, " \\| "))
+        writeToSummaryLabel <- paste0(IDSplit[1], "\t", ID, "\t", IDSplit[2])
+        # writeToSummaryLabel <- paste0(ID2Class[ID], "\t", ID)
         writeToSummary2 <- lapply(fileHeaderNames, function(header){
             if (!is.null(pvalueMatrix[[ID]])){
                 if(header %in% names(pvalueMatrix[[ID]])) {
@@ -1452,7 +1454,7 @@ process_variable_DAVID_CHART_directories <- function(dirName, outputDir, extTag,
         })
         writeToSummary2 <- paste0(writeToSummary2, collapse="\t")
         writeToSummary2 <- gsub("#", "", writeToSummary2)
-        return(paste0(writeToSummaryLabel, "\t\t", writeToSummary2))
+        return(paste0(writeToSummaryLabel, "\t", writeToSummary2))
     })
     writeToSummary <- paste0(writeToSummary, collapse="\n")
     fcheck <- tryCatch({
