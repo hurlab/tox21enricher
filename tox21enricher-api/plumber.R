@@ -3204,7 +3204,7 @@ searchBySubstructure <- function(res, req, input){
         substructureOutp$m <- unlist(lapply(substructureOutp$m, function(x) paste0(x))) # coerce mol column to string. If left as "pq_mol" data type, R wont' know how to send this in a json back to the client.
         TRUE
     }, error=function(cond){
-        return(FALSE)
+        FALSE
     })
     if(!trySubstructure){ # if error occurs when converting to mol
         return(list())
@@ -3251,7 +3251,7 @@ searchBySimilarity <- function(res, req, input="", threshold=0.50){
         similarityOutp$m <- unlist(lapply(similarityOutp$m, function(x) paste0(x))) # coerce mol column to string. If left as "pq_mol" data type, R won't know how to send this in a json back to the client.
         TRUE
     }, error=function(cond){
-        return(FALSE)
+        FALSE
     })
     if(!trySimilarity){ # if error occurs when converting to mol
         return(list())
@@ -3744,7 +3744,7 @@ readGct <- function(res, req, transactionId="-1", cutoff=10, mode, set="Set1"){
             }
             TRUE
         }, error=function(cond){
-            return(NULL)
+            FALSE
         })
         if(!tryReadChart){
             return(NULL)
@@ -3761,7 +3761,7 @@ readGct <- function(res, req, transactionId="-1", cutoff=10, mode, set="Set1"){
             }
             TRUE
         }, error=function(cond){
-            return(NULL)
+            FALSE
         })
         if(!tryReadCluster){
             return(NULL)
@@ -3774,7 +3774,7 @@ readGct <- function(res, req, transactionId="-1", cutoff=10, mode, set="Set1"){
             gctFile <- read.delim(paste0(outDir, "gct_per_set/", set, "__Chart.gct"), skip=2, header=TRUE, sep="\t", row.names=1, comment.char="", fill=FALSE, colClasses=c("Name"="NULL"), check.names=FALSE)
             TRUE
         }, error=function(cond){
-            return(NULL)
+            FALSE
         })
         if(!tryReadChart){
             return(NULL)
@@ -3822,7 +3822,7 @@ getBargraph <- function(res, req, transactionId="-1", enrichmentSets){
                 bgChartTmp <- read.delim(chartFile, header=TRUE, sep="\t", comment.char="", fill=FALSE)
                 TRUE
             }, error=function(cond){
-                return(list())
+                FALSE
             })
             if(!tryReadFile){
                 return(list())
@@ -3877,27 +3877,35 @@ getNetwork <- function(res, req, transactionId="-1", cutoff, mode, input, qval){
     chartForNetFile <- NULL
     # First, read files from /gct/ directory
     if(mode == "chart") {
-        if(!file.exists(paste0(baseDirName, "/gct/Chart_Top", cutoff, "_ALL__P_0.05_P__ValueMatrix.ForNet"))){
+        if(!file.exists(paste0(baseDirName, "/gct/Chart_Top", cutoff, "_ALL__P_0.05_P__ValueMatrix.ForNet")) & !file.exists(paste0(baseDirName, "/gct/Chart_Top", cutoff, "_ALL__BH_0.05_BH__ValueMatrix.ForNet"))){
             return(NULL)
         }
         tryReadChart <- tryCatch({
-            chartForNetFile <- read.delim(paste0(baseDirName, "/gct/Chart_Top", cutoff, "_ALL__P_0.05_P__ValueMatrix.ForNet"), sep="\t", comment.char="", quote="", stringsAsFactors=FALSE, header=TRUE, fill=TRUE)
+            if(file.exists(paste0(baseDirName, "/gct/Chart_Top", cutoff, "_ALL__P_0.05_P__ValueMatrix.ForNet"))){
+                chartForNetFile <- read.delim(paste0(baseDirName, "/gct/Chart_Top", cutoff, "_ALL__P_0.05_P__ValueMatrix.ForNet"), sep="\t", comment.char="", quote="", stringsAsFactors=FALSE, header=TRUE, fill=TRUE)
+            } else if(file.exists(paste0(baseDirName, "/gct/Chart_Top", cutoff, "_ALL__BH_0.05_BH__ValueMatrix.ForNet"))){
+                chartForNetFile <- read.delim(paste0(baseDirName, "/gct/Chart_Top", cutoff, "_ALL__BH_0.05_BH__ValueMatrix.ForNet"), sep="\t", comment.char="", quote="", stringsAsFactors=FALSE, header=TRUE, fill=TRUE)
+            }
             TRUE
         }, error=function(cond){
-            return(NULL)
+            FALSE
         })
         if(!tryReadChart){
             return(NULL)
         }
     } else { # Cluster
-        if(!file.exists(paste0(baseDirName, "/gct/Cluster_Top", cutoff, "_ALL__P_0.05_P__ValueMatrix.ForNet"))){
+        if(!file.exists(paste0(baseDirName, "/gct/Cluster_Top", cutoff, "_ALL__P_0.05_P__ValueMatrix.ForNet")) & !file.exists(paste0(baseDirName, "/gct/Cluster_Top", cutoff, "_ALL__BH_0.05_BH__ValueMatrix.ForNet"))){
             return(NULL)
         }
         tryReadChart <- tryCatch({
-            chartForNetFile <- read.delim(paste0(baseDirName, "/gct/Cluster_Top", cutoff, "_ALL__P_0.05_P__ValueMatrix.ForNet"), sep="\t", comment.char="", quote="", stringsAsFactors=FALSE, header=TRUE, fill=TRUE)
+            if(file.exists(paste0(baseDirName, "/gct/Cluster_Top", cutoff, "_ALL__P_0.05_P__ValueMatrix.ForNet"))){
+                chartForNetFile <- read.delim(paste0(baseDirName, "/gct/Cluster_Top", cutoff, "_ALL__P_0.05_P__ValueMatrix.ForNet"), sep="\t", comment.char="", quote="", stringsAsFactors=FALSE, header=TRUE, fill=TRUE)
+            } else if(file.exists(paste0(baseDirName, "/gct/Cluster_Top", cutoff, "_ALL__BH_0.05_BH__ValueMatrix.ForNet"))){
+                chartForNetFile <- read.delim(paste0(baseDirName, "/gct/Cluster_Top", cutoff, "_ALL__BH_0.05_BH__ValueMatrix.ForNet"), sep="\t", comment.char="", quote="", stringsAsFactors=FALSE, header=TRUE, fill=TRUE)
+            }
             TRUE
         }, error=function(cond){
-            return(NULL)
+            FALSE
         })
         if(!tryReadChart){
             return(NULL)
