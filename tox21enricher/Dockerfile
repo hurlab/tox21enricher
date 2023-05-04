@@ -37,7 +37,7 @@ RUN rm -rf /var/lib/apt/lists/*
     COPY ./ui.R $HOME/tox21enricher/ui.R
     # Copy /www/ directory from local filesystem to image
     COPY ./www/ $HOME/tox21enricher/www/
-
+    
 # Enable logging
 ENV SHINY_LOG_STDERR=1
 

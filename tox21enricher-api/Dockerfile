@@ -66,8 +66,6 @@ USER $ENV_USER_USERNAME
     COPY ./config.yml $HOME/tox21enricher/config.yml
     # Copy API .R file from local filesystem to image
     COPY ./plumber.R $HOME/tox21enricher/plumber.R
-    # Copy necessary cluster data file
-    COPY ./kappa.rds $HOME/tox21enricher/kappa.rds
 
 # Pass R Plumber API as argument
 CMD ["~/tox21enricher/plumber.R"]
