@@ -139,26 +139,44 @@ if(is.na(PVALUE_DISPLAY)){
 
 # Reusable function for generating database connection
 conn <- function(){
-    return(dbPool(
+    # return(dbPool(
+    #     drv=RPostgres::Postgres(),
+    #     dbname=tox21config$database,
+    #     host=tox21config$host,
+    #     user=tox21config$uid,
+    #     password=tox21config$pwd,
+    #     port=tox21config$port,
+    #     idleTimeout=3600000
+    # ))
+    return(DBI::dbConnect(
         drv=RPostgres::Postgres(),
         dbname=tox21config$database,
         host=tox21config$host,
         user=tox21config$uid,
         password=tox21config$pwd,
-        port=tox21config$port,
-        idleTimeout=3600000
+        port=tox21config$port
     ))
 }
 connQueue <- function(){
-    return(dbPool(
+    # return(dbPool(
+    #     drv=RPostgres::Postgres(),
+    #     dbname=tox21queue$database,
+    #     host=tox21queue$host,
+    #     user=tox21queue$uid,
+    #     password=tox21queue$pwd,
+    #     port=tox21queue$port,
+    #     idleTimeout=3600000
+    # ))
+    
+    return(DBI::dbConnect(
         drv=RPostgres::Postgres(),
         dbname=tox21queue$database,
         host=tox21queue$host,
         user=tox21queue$uid,
         password=tox21queue$pwd,
-        port=tox21queue$port,
-        idleTimeout=3600000
+        port=tox21queue$port
     ))
+    
 }
 
 # Function for queue cleanup - should be called whenever a new request is received
@@ -169,7 +187,8 @@ queueCleanup <- function(){
     pool <- connQueue()
     query <- sqlInterpolate(ANSI(), paste0("SELECT queue.uuid, queue.finished, transaction.timestamp_posted, transaction.timestamp_started, transaction.timestamp_finished FROM queue LEFT JOIN transaction ON queue.uuid=transaction.uuid WHERE finished=0;"), id="getIncomplete")
     outp <- dbGetQuery(pool, query)
-    poolClose(pool)
+    # poolClose(pool)
+    dbDisconnect(pool)
     if(nrow(outp) > 0){
         badTransactions <- unname(unlist(apply(outp, 1, function(x){
             if(is.na(x["timestamp_posted"]) | is.na(x["timestamp_started"])) {
@@ -186,13 +205,16 @@ queueCleanup <- function(){
         print("Clearing the following transactions...")
         print(badTransactions)
         pool <- connQueue()
-        lapply(badTransactions, function(x){
-            query <- sqlInterpolate(ANSI(), paste0("UPDATE queue SET finished=1, cancel=1, error='Cancelled by queue cleanup.' WHERE uuid='", x, "';"), id="updateBad")
-            outp <- dbExecute(pool, query)
-            query <- sqlInterpolate(ANSI(), paste0("UPDATE transaction SET cancel=1 WHERE uuid='", x, "';"), id="updateBad")
-            outp <- dbExecute(pool, query)
-        })
-        poolClose(pool)
+        if(length(badTransactions) > 0){
+            lapply(badTransactions, function(x){
+                query <- sqlInterpolate(ANSI(), paste0("UPDATE queue SET finished=1, cancel=1, error='Cancelled by queue cleanup.' WHERE uuid='", x, "';"), id="updateBad")
+                outp <- dbExecute(pool, query)
+                query <- sqlInterpolate(ANSI(), paste0("UPDATE transaction SET cancel=1 WHERE uuid='", x, "';"), id="updateBad")
+                outp <- dbExecute(pool, query)
+            })
+        }
+        # poolClose(pool)
+        dbDisconnect(pool)
     }
     
     ## Check if any request has been around for longer than the max time to be stored
@@ -200,7 +222,8 @@ queueCleanup <- function(){
     pool <- connQueue()
     query <- sqlInterpolate(ANSI(), paste0("SELECT queue.uuid, queue.finished, queue.cancel, transaction.timestamp_posted, transaction.timestamp_started, transaction.timestamp_finished FROM queue LEFT JOIN transaction ON queue.uuid=transaction.uuid WHERE transaction.delete=0;"), id="getAllToDelete")
     outp <- dbGetQuery(pool, query)
-    poolClose(pool)
+    # poolClose(pool)
+    dbDisconnect(pool)
     
     # Remove result files for old transactions from the filesystem (preserve in database)
     if(nrow(outp) > 0){
@@ -247,7 +270,8 @@ queueCleanup <- function(){
                 poolDelete <- connQueue()
                 query <- sqlInterpolate(ANSI(), paste0("UPDATE transaction SET delete=1 WHERE uuid='", x, "';"), id="setDeleteFlags")
                 outp <- dbExecute(poolDelete, query)
-                poolClose(poolDelete)
+                # poolClose(poolDelete)
+                dbDisconnect(poolDelete)
             })
         }
     }
@@ -309,14 +333,17 @@ query <- sqlInterpolate(ANSI(), paste0("SELECT uuid FROM queue WHERE lock=0 AND 
 outp <- dbGetQuery(poolClean, query)
 unlockedTransactions <- outp$uuid
 
-lapply(unlockedTransactions, function(x){
-    query <- sqlInterpolate(ANSI(), paste0("UPDATE status SET step=0 WHERE uuid='", x, "';"), id="resetStatus")
-    outp <- dbExecute(poolClean, query)
-    return(paste0("Reprocessing transaction: ", x))
-})
+if(length(unlockedTransactions) > 0){
+    lapply(unlockedTransactions, function(x){
+        query <- sqlInterpolate(ANSI(), paste0("UPDATE status SET step=0 WHERE uuid='", x, "';"), id="resetStatus")
+        outp <- dbExecute(poolClean, query)
+        return(paste0("Reprocessing transaction: ", x))
+    })
+}
 
 # Close pool
-poolClose(poolClean)
+# poolClose(poolClean)
+dbDisconnect(poolClean)
 
 # Define info for connecting to PostgreSQL Tox21Enricher database on server startup
 pool <- conn()
@@ -334,7 +361,9 @@ outpClasses <- dbGetQuery(pool, queryClasses)
 queryChemDetail <- sqlInterpolate(ANSI(), "SELECT dtxrid, testsubstance_chemname, casrn FROM chemical_detail;")
 outpChemDetail <- dbGetQuery(pool, queryChemDetail)
 # Close DB connection
-poolClose(pool)
+# poolClose(pool)
+dbDisconnect(pool)
+
 # Load base annotations
 CASRN2DSSTox <- apply(outpChemDetail, 1, function(i){
     if (i["casrn"] != "") {
@@ -372,7 +401,8 @@ getAnnotationListInternal <- function(res, req){
     query <- sqlInterpolate(ANSI(), paste0("SELECT annoclassname FROM annotation_class;"))
     outp <- dbGetQuery(pool, query)
     # Close pool
-    poolClose(pool)
+    # poolClose(pool)
+    dbDisconnect(pool)
     return(outp[, "annoclassname"])
 }
 fullAnnoClassStr <- paste0(paste0(getAnnotationListInternal(), collapse="=checked,"), "=checked,")
@@ -392,7 +422,9 @@ performEnrichment <- function(enrichmentUUID="-1", annoSelectStr=fullAnnoClassSt
     query <- sqlInterpolate(ANSI(), paste0("UPDATE transaction SET timestamp_started='", beginTime, "' WHERE uuid='", enrichmentUUID, "';"), id="updateTransactionStart")
     outp <- dbExecute(poolInput, query)
     # Close pool
-    poolClose(poolInput)
+    # poolClose(poolInput)
+    dbDisconnect(poolInput)
+    
     # Enrichment parameters
     annoSelectStrSplit <- unlist(str_split(annoSelectStr, "=checked,"))
     annoSelectStrSplit <- annoSelectStrSplit[nchar(annoSelectStrSplit) > 0]
@@ -434,7 +466,8 @@ performEnrichment <- function(enrichmentUUID="-1", annoSelectStr=fullAnnoClassSt
         query <- sqlInterpolate(ANSI(), paste0("SELECT * FROM queue WHERE uuid='", enrichmentUUID, "' AND cancel=1;"), id="fetchStatus")
         requestCancel <- dbGetQuery(poolStatus, query)
         # Close pool
-        poolClose(poolStatus)
+        # poolClose(poolStatus)
+        dbDisconnect(poolStatus)
         if(nrow(requestCancel) > 0){
             print(paste0("Canceling request: ", enrichmentUUID))
             return("request canceled")
@@ -466,7 +499,8 @@ performEnrichment <- function(enrichmentUUID="-1", annoSelectStr=fullAnnoClassSt
         query <- sqlInterpolate(ANSI(), paste0("SELECT * FROM queue WHERE uuid='", enrichmentUUID, "' AND cancel=1;"), id="fetchStatus")
         requestCancel <- dbGetQuery(poolStatus, query)
         # Close pool
-        poolClose(poolStatus)
+        # poolClose(poolStatus)
+        dbDisconnect(poolStatus)
         if(nrow(requestCancel) > 0){
             print(paste0("Canceling request: ", enrichmentUUID))
             return("request canceled")
@@ -492,15 +526,19 @@ performEnrichment <- function(enrichmentUUID="-1", annoSelectStr=fullAnnoClassSt
     outp <- dbGetQuery(poolStatus, query)
     statusFiles <- outp[, "setname"]
     # Set step flag for each set name
-    lapply(statusFiles, function(x){
-        query <- sqlInterpolate(ANSI(), paste0("UPDATE status SET step=2 WHERE uuid='", enrichmentUUID, "' AND setname='", x, "' AND step<>-1;"), id="fetchStatus")
-        outp <- dbExecute(poolStatus, query)
-    })
+    if(length(statusFiles) > 0){
+        lapply(statusFiles, function(x){
+            query <- sqlInterpolate(ANSI(), paste0("UPDATE status SET step=2 WHERE uuid='", enrichmentUUID, "' AND setname='", x, "' AND step<>-1;"), id="fetchStatus")
+            outp <- dbExecute(poolStatus, query)
+        })
+    }
     # Check if no errors
     query <- sqlInterpolate(ANSI(), paste0("SELECT * FROM queue WHERE uuid='", enrichmentUUID, "' AND cancel=1;"), id="fetchStatus")
     requestCancel <- dbGetQuery(poolStatus, query)
     # Close pool
-    poolClose(poolStatus)
+    # poolClose(poolStatus)
+    dbDisconnect(poolStatus)
+    
     if(nrow(requestCancel) > 0){
         print(paste0("Canceling request: ", enrichmentUUID))
         return("request canceled")
@@ -532,15 +570,18 @@ performEnrichment <- function(enrichmentUUID="-1", annoSelectStr=fullAnnoClassSt
     outp <- dbGetQuery(poolStatus, query)
     statusFiles <- outp[, "setname"]
     # Set step flag for each set name
-    lapply(statusFiles, function(x){
-        query <- sqlInterpolate(ANSI(), paste0("UPDATE status SET step=7 WHERE uuid='", enrichmentUUID, "' AND setname='", x, "' AND step<>-1;"), id="fetchStatus")
-        outp <- dbExecute(poolStatus, query)
-    })
+    if(length(statusFiles) > 0){
+        lapply(statusFiles, function(x){
+            query <- sqlInterpolate(ANSI(), paste0("UPDATE status SET step=7 WHERE uuid='", enrichmentUUID, "' AND setname='", x, "' AND step<>-1;"), id="fetchStatus")
+            outp <- dbExecute(poolStatus, query)
+        })
+    }
     # Check if no errors
     query <- sqlInterpolate(ANSI(), paste0("SELECT * FROM queue WHERE uuid='", enrichmentUUID, "' AND cancel=1;"), id="fetchStatus")
     requestCancel <- dbGetQuery(poolStatus, query)
     # Close pool
-    poolClose(poolStatus)
+    # poolClose(poolStatus)
+    dbDisconnect(poolStatus)
     if(nrow(requestCancel) > 0){
         print(paste0("Canceling request: ", enrichmentUUID))
         return("request canceled")
@@ -588,7 +629,8 @@ performEnrichment <- function(enrichmentUUID="-1", annoSelectStr=fullAnnoClassSt
     query <- sqlInterpolate(ANSI(), paste0("SELECT * FROM queue WHERE uuid='", enrichmentUUID, "' AND cancel=1;"), id="fetchStatus")
     requestCancel <- dbGetQuery(poolStatus, query)
     # Close pool
-    poolClose(poolStatus)
+    # poolClose(poolStatus)
+    dbDisconnect(poolStatus)
     if(nrow(requestCancel) > 0){
         print(paste0("Canceling request: ", enrichmentUUID))
         return("request canceled")
@@ -630,8 +672,10 @@ process_variable_DAVID_CHART_directories_individual_file <- function(inputDirNam
     poolInput <- connQueue() # Connect to db
     queryPvalue <- sqlInterpolate(ANSI(), paste0("SELECT pvalue FROM transaction WHERE uuid='", enrichmentUUID, "';"), id="getTransactionPvalue")
     outpPvalue <- dbGetQuery(poolInput, queryPvalue)
+    # poolClose(poolInput) # Close pool
+    dbDisconnect(poolInput)
+    
     PVALUE_TYPE <- outpPvalue[1, "pvalue"]
-    poolClose(poolInput) # Close pool
     
     # Get significance column (nominal pvalue or adjusted pvalue (BH-correction))
     sigColumnName <- "P"
@@ -866,8 +910,10 @@ create_david_chart_cluster <- function(baseDirName="", topTermLimit=10, mode="AL
     poolInput <- connQueue() # Connect to db
     queryPvalue <- sqlInterpolate(ANSI(), paste0("SELECT pvalue FROM transaction WHERE uuid='", enrichmentUUID, "';"), id="getTransactionPvalue")
     outpPvalue <- dbGetQuery(poolInput, queryPvalue)
+    # poolClose(poolInput) # Close pool
+    dbDisconnect(poolInput)
+    
     PVALUE_TYPE <- outpPvalue[1, "pvalue"]
-    poolClose(poolInput) # Close pool
     
     # Get significance column (nominal pvalue or adjusted pvalue (BH-correction))
     sigColumnName <- "P"
@@ -928,8 +974,10 @@ process_variable_DAVID_CLUSTER_directories <- function(dirName, outputDir, extTa
     poolInput <- connQueue() # Connect to db
     queryPvalue <- sqlInterpolate(ANSI(), paste0("SELECT pvalue FROM transaction WHERE uuid='", enrichmentUUID, "';"), id="getTransactionPvalue")
     outpPvalue <- dbGetQuery(poolInput, queryPvalue)
+    # poolClose(poolInput) # Close pool
+    dbDisconnect(poolInput)
+    
     PVALUE_TYPE <- outpPvalue[1, "pvalue"]
-    poolClose(poolInput) # Close pool
     
     # Get significance column (nominal pvalue or adjusted pvalue (BH-correction))
     sigColumnName <- "P"
@@ -1246,8 +1294,10 @@ process_variable_DAVID_CHART_directories <- function(dirName, outputDir, extTag,
     poolInput <- connQueue() # Connect to db
     queryPvalue <- sqlInterpolate(ANSI(), paste0("SELECT pvalue FROM transaction WHERE uuid='", enrichmentUUID, "';"), id="getTransactionPvalue")
     outpPvalue <- dbGetQuery(poolInput, queryPvalue)
+    # poolClose(poolInput) # Close pool
+    dbDisconnect(poolInput)
+    
     PVALUE_TYPE <- outpPvalue[1, "pvalue"]
-    poolClose(poolInput) # Close pool
     
     # Get significance column (nominal pvalue or adjusted pvalue (BH-correction))
     sigColumnName <- "P"
@@ -1593,8 +1643,10 @@ perform_CASRN_enrichment_analysis <- function(CASRNRef, outputBaseDir, outfileBa
     poolInput <- connQueue() # Connect to db
     queryPvalue <- sqlInterpolate(ANSI(), paste0("SELECT pvalue FROM transaction WHERE uuid='", enrichmentUUID, "';"), id="getTransactionPvalue")
     outpPvalue <- dbGetQuery(poolInput, queryPvalue)
+    # poolClose(poolInput) # Close pool
+    dbDisconnect(poolInput)
+    
     PVALUE_TYPE <- outpPvalue[1, "pvalue"]
-    poolClose(poolInput) # Close pool
     
     # Get significance column (nominal pvalue or adjusted pvalue (BH-correction))
     sigDFIndex <- "PValue"
@@ -1750,7 +1802,8 @@ perform_CASRN_enrichment_analysis <- function(CASRNRef, outputBaseDir, outfileBa
         query <- sqlInterpolate(ANSI(), paste0("SELECT * FROM queue WHERE uuid='", enrichmentUUID, "' AND cancel=1;"), id="fetchStatus")
         requestCancel <- dbGetQuery(poolStatus, query)
         # Close pool
-        poolClose(poolStatus)
+        # poolClose(poolStatus)
+        dbDisconnect(poolStatus)
         if(nrow(requestCancel) > 0){
             print(paste0("Canceling request: ", enrichmentUUID))
             return("request canceled")
@@ -1943,7 +1996,8 @@ kappa_cluster <- function(x, overlap=0.5, outputBaseDir=NULL, outfileBase=NULL, 
     query <- sqlInterpolate(ANSI(), paste0("SELECT * FROM queue WHERE uuid='", enrichmentUUID, "' AND cancel=1;"), id="fetchStatus")
     requestCancel <- dbGetQuery(poolStatus, query)
     # Close pool
-    poolClose(poolStatus)
+    # poolClose(poolStatus)
+    dbDisconnect(poolStatus)
     if(nrow(requestCancel) > 0){
         print(paste0("Canceling request: ", enrichmentUUID))
         return("request canceled")
@@ -1953,8 +2007,10 @@ kappa_cluster <- function(x, overlap=0.5, outputBaseDir=NULL, outfileBase=NULL, 
     poolInput <- connQueue() # Connect to db
     queryPvalue <- sqlInterpolate(ANSI(), paste0("SELECT pvalue FROM transaction WHERE uuid='", enrichmentUUID, "';"), id="getTransactionPvalue")
     outpPvalue <- dbGetQuery(poolInput, queryPvalue)
+    # poolClose(poolInput) # Close pool
+    dbDisconnect(poolInput)
+    
     PVALUE_TYPE <- outpPvalue[1, "pvalue"]
-    poolClose(poolInput) # Close pool
     
     # Get significance column (nominal pvalue or adjusted pvalue (BH-correction))
     sigDFIndex <- "PValue"
@@ -2025,7 +2081,8 @@ kappa_cluster <- function(x, overlap=0.5, outputBaseDir=NULL, outfileBase=NULL, 
     query <- sqlInterpolate(ANSI(), paste0("SELECT * FROM queue WHERE uuid='", enrichmentUUID, "' AND cancel=1;"), id="fetchStatus")
     requestCancel <- dbGetQuery(poolStatus, query)
     # Close pool
-    poolClose(poolStatus)
+    # poolClose(poolStatus)
+    dbDisconnect(poolStatus)
     if(nrow(requestCancel) > 0){
         print(paste0("Canceling request: ", enrichmentUUID))
         return("request canceled")
@@ -2076,7 +2133,8 @@ kappa_cluster <- function(x, overlap=0.5, outputBaseDir=NULL, outfileBase=NULL, 
     query <- sqlInterpolate(ANSI(), paste0("SELECT * FROM queue WHERE uuid='", enrichmentUUID, "' AND cancel=1;"), id="fetchStatus")
     requestCancel <- dbGetQuery(poolStatus, query)
     # Close pool
-    poolClose(poolStatus)
+    # poolClose(poolStatus)
+    dbDisconnect(poolStatus)
     if(nrow(requestCancel) > 0){
         print(paste0("Canceling request: ", enrichmentUUID))
         return("request canceled")
@@ -2100,7 +2158,8 @@ kappa_cluster <- function(x, overlap=0.5, outputBaseDir=NULL, outfileBase=NULL, 
     query <- sqlInterpolate(ANSI(), paste0("SELECT * FROM queue WHERE uuid='", enrichmentUUID, "' AND cancel=1;"), id="fetchStatus")
     requestCancel <- dbGetQuery(poolStatus, query)
     # Close pool
-    poolClose(poolStatus)
+    # poolClose(poolStatus)
+    dbDisconnect(poolStatus)
     if(nrow(requestCancel) > 0){
         print(paste0("Canceling request: ", enrichmentUUID))
         return("request canceled")
@@ -2198,7 +2257,8 @@ getAnnotationsFunc <- function(enrichmentUUID="-1", annoSelectStr=fullAnnoClassS
     query <- sqlInterpolate(ANSI(), paste0("UPDATE transaction SET timestamp_started='", beginTime, "' WHERE uuid='", enrichmentUUID, "';"), id="updateTransactionStart")
     outp <- dbExecute(poolInput, query)
     # Close pool
-    poolClose(poolInput)
+    # poolClose(poolInput)
+    dbDisconnect(poolInput)
     
     # Get list of selected annotations
     annoSelect <- unlist(str_split(annoSelectStr, "=checked,"), recursive=FALSE)
@@ -2235,7 +2295,8 @@ getAnnotationsFunc <- function(enrichmentUUID="-1", annoSelectStr=fullAnnoClassS
         query <- sqlInterpolate(ANSI(), paste0("SELECT * FROM queue WHERE uuid='", enrichmentUUID, "' AND cancel=1;"), id="fetchStatus")
         requestCancel <- dbGetQuery(poolStatus, query)
         # Close pool
-        poolClose(poolStatus)
+        # poolClose(poolStatus)
+        dbDisconnect(poolStatus)
         if(nrow(requestCancel) > 0){
             print(paste0("Canceling request: ", enrichmentUUID))
             return(return("request canceled"))
@@ -2253,7 +2314,8 @@ getAnnotationsFunc <- function(enrichmentUUID="-1", annoSelectStr=fullAnnoClassS
                 print(e)
                 return(NULL)
             })
-            poolClose(poolMatrix)
+            # poolClose(poolMatrix)
+            dbDisconnect(poolMatrix)
             fetchedCASRNs <- outpMatrix[, 1]
             
             # Split up list of annotation IDs
@@ -2275,7 +2337,8 @@ getAnnotationsFunc <- function(enrichmentUUID="-1", annoSelectStr=fullAnnoClassS
         query <- sqlInterpolate(ANSI(), paste0("SELECT * FROM queue WHERE uuid='", enrichmentUUID, "' AND cancel=1;"), id="fetchStatus")
         requestCancel <- dbGetQuery(poolStatus, query)
         # Close pool
-        poolClose(poolStatus)
+        # poolClose(poolStatus)
+        dbDisconnect(poolStatus)
         if(nrow(requestCancel) > 0){
             print(paste0("Canceling request: ", enrichmentUUID))
             return("request canceled")
@@ -2295,7 +2358,8 @@ getAnnotationsFunc <- function(enrichmentUUID="-1", annoSelectStr=fullAnnoClassS
                     poolMatrix <- conn()
                     queryTerm <- sqlInterpolate(ANSI(), paste0("SELECT term FROM annotation_matrix_terms WHERE id=", annotation, ";"))
                     outpTerm <- dbGetQuery(poolMatrix, queryTerm)
-                    poolClose(poolMatrix)
+                    # poolClose(poolMatrix)
+                    dbDisconnect(poolMatrix)
                     fetchedTerm <- outpTerm[[1, 1]]
                     
                     # Check if the fetched term is in the selected annotations
@@ -2340,7 +2404,8 @@ getAnnotationsFunc <- function(enrichmentUUID="-1", annoSelectStr=fullAnnoClassS
         query <- sqlInterpolate(ANSI(), paste0("SELECT * FROM queue WHERE uuid='", enrichmentUUID, "' AND cancel=1;"), id="fetchStatus")
         requestCancel <- dbGetQuery(poolStatus, query)
         # Close pool
-        poolClose(poolStatus)
+        # poolClose(poolStatus)
+        dbDisconnect(poolStatus)
         if(nrow(requestCancel) > 0){
             print(paste0("Canceling request: ", enrichmentUUID))
             return(FALSE)
@@ -2385,7 +2450,8 @@ getAnnotationsFunc <- function(enrichmentUUID="-1", annoSelectStr=fullAnnoClassS
     query <- sqlInterpolate(ANSI(), paste0("SELECT * FROM queue WHERE uuid='", enrichmentUUID, "' AND cancel=1;"), id="fetchStatus")
     requestCancel <- dbGetQuery(poolStatus, query)
     # Close pool
-    poolClose(poolStatus)
+    # poolClose(poolStatus)
+    dbDisconnect(poolStatus)
     if(nrow(requestCancel) > 0){
         print(paste0("Canceling request: ", enrichmentUUID))
         return("request canceled")
@@ -2416,7 +2482,8 @@ getAnnotationsFunc <- function(enrichmentUUID="-1", annoSelectStr=fullAnnoClassS
     outp <- dbExecute(poolUpdate, query)
     
     # Close pool
-    poolClose(poolUpdate)
+    # poolClose(poolUpdate)
+    dbDisconnect(poolUpdate)
     return("success")
 }
 
@@ -2440,16 +2507,19 @@ queueResubmit <- function(res, req, mode="", enrichmentUUID="-1", annoSelectStr=
         outp <- dbGetQuery(poolStatus, query)
         statusFiles <- outp
         # Read status entry(ies) and change flag to signify enrichment has started
-        lapply(seq_len(nrow(statusFiles)), function(i){
-            tmpSetName <- statusFiles[i, "setname"]
-            query <- sqlInterpolate(ANSI(), paste0("UPDATE status SET step=1 WHERE uuid='", enrichmentUUID, "' AND setname='", tmpSetName, "' AND step<>-1;"), id="fetchStatus")
-            outp <- dbExecute(poolStatus, query)
-        })
+        if(nrow(statusFiles) > 0){
+            lapply(seq_len(nrow(statusFiles)), function(i){
+                tmpSetName <- statusFiles[i, "setname"]
+                query <- sqlInterpolate(ANSI(), paste0("UPDATE status SET step=1 WHERE uuid='", enrichmentUUID, "' AND setname='", tmpSetName, "' AND step<>-1;"), id="fetchStatus")
+                outp <- dbExecute(poolStatus, query)
+            })
+        }
         # Check if no errors
         query <- sqlInterpolate(ANSI(), paste0("SELECT * FROM queue WHERE uuid='", enrichmentUUID, "' AND cancel=1;"), id="fetchStatus")
         requestCancel <- dbGetQuery(poolStatus, query)
         # Close pool
-        poolClose(poolStatus)
+        # poolClose(poolStatus)
+        dbDisconnect(poolStatus)
         if(nrow(requestCancel) > 0){
             return("request canceled")
         }
@@ -2497,7 +2567,8 @@ queueResubmit <- function(res, req, mode="", enrichmentUUID="-1", annoSelectStr=
         query <- sqlInterpolate(ANSI(), paste0("UPDATE queue SET lock=0 WHERE uuid='", enrichmentUUID, "';"), id="setLock")
         outp <- dbExecute(poolFinished, query)
         # Close pool
-        poolClose(poolFinished)
+        # poolClose(poolFinished)
+        dbDisconnect(poolFinished)
     }, seed=TRUE)
     return(TRUE)
 }
@@ -2507,7 +2578,8 @@ mclapply(unlockedTransactions, mc.cores=CORES, mc.silent=FALSE, function(x){
     poolRequests <- connQueue()
     query <- sqlInterpolate(ANSI(), paste0("SELECT original_mode, uuid, annotation_selection_string, cutoff, original_names FROM transaction WHERE uuid='", x, "' AND delete=0 AND cancel=0;"), id="resubmit")
     outp <- dbGetQuery(poolRequests, query)
-    poolClose(poolRequests)
+    # poolClose(poolRequests)
+    dbDisconnect(poolRequests)
     if(nrow(outp) > 0){
         x_mode <- outp[1, "original_mode"]
         x_uuid <- outp[1, "uuid"]
@@ -2587,12 +2659,15 @@ queue <- function(res, req, mode="", enrichmentUUID="-1", annoSelectStr=fullAnno
     outp <- dbExecute(poolQueue, query)
     # Update database with corresponding status entries
     setNamesSplit <- unlist(str_split(setNames, "\n"))
-    lapply(setNamesSplit, function(x){
-        query <- sqlInterpolate(ANSI(), paste0("INSERT INTO status(step, uuid, setname) VALUES(0, '", enrichmentUUID, "', '", x, "') ;"), id="createStatusEntry")
-        outp <- dbExecute(poolQueue, query) 
-    })
+    if(length(setNamesSplit) > 0){
+        lapply(setNamesSplit, function(x){
+            query <- sqlInterpolate(ANSI(), paste0("INSERT INTO status(step, uuid, setname) VALUES(0, '", enrichmentUUID, "', '", x, "') ;"), id="createStatusEntry")
+            outp <- dbExecute(poolQueue, query) 
+        })
+    }
     # Close pool
-    poolClose(poolQueue)
+    # poolClose(poolQueue)
+    dbDisconnect(poolQueue)
     
     # Clean up queue
     if(DELETE_TIME != -1){
@@ -2612,16 +2687,19 @@ queue <- function(res, req, mode="", enrichmentUUID="-1", annoSelectStr=fullAnno
         outp <- dbGetQuery(poolStatus, query)
         statusFiles <- outp
         # Read status entry(ies) and change flag to signify enrichment has started
-        lapply(seq_len(nrow(statusFiles)), function(i){
-            tmpSetName <- statusFiles[i, "setname"]
-            query <- sqlInterpolate(ANSI(), paste0("UPDATE status SET step=1 WHERE uuid='", enrichmentUUID, "' AND setname='", tmpSetName, "' AND step<>-1;"), id="fetchStatus")
-            outp <- dbExecute(poolStatus, query)
-        })
+        if(nrow(statusFiles) > 0){
+            lapply(seq_len(nrow(statusFiles)), function(i){
+                tmpSetName <- statusFiles[i, "setname"]
+                query <- sqlInterpolate(ANSI(), paste0("UPDATE status SET step=1 WHERE uuid='", enrichmentUUID, "' AND setname='", tmpSetName, "' AND step<>-1;"), id="fetchStatus")
+                outp <- dbExecute(poolStatus, query)
+            })
+        }
         # Check if no errors
         query <- sqlInterpolate(ANSI(), paste0("SELECT * FROM queue WHERE uuid='", enrichmentUUID, "' AND cancel=1;"), id="fetchStatus")
         requestCancel <- dbGetQuery(poolStatus, query)
         # Close pool
-        poolClose(poolStatus)
+        # poolClose(poolStatus)
+        dbDisconnect(poolStatus)
         if(nrow(requestCancel) > 0){
             return("request canceled")
         }
@@ -2675,7 +2753,8 @@ queue <- function(res, req, mode="", enrichmentUUID="-1", annoSelectStr=fullAnno
         outp <- dbExecute(poolFinished, query)
         
         # Close pool
-        poolClose(poolFinished)
+        # poolClose(poolFinished)
+        dbDisconnect(poolFinished)
     }, seed=TRUE)
     return(TRUE)
 }
@@ -2809,7 +2888,8 @@ createTransaction <- function(res, req, originalMode="", mode="", uuid="-1", ann
     query <- sqlInterpolate(ANSI(), paste0("INSERT INTO transaction(original_mode, mode, uuid, annotation_selection_string, cutoff, input, casrn_box, original_names, reenrich, reenrich_flag, colors, timestamp_posted, pvalue) VALUES('", originalMode, "', '", mode, "', '", uuid, "', '", annoSelectStr, "', '", cutoff, "', '", input, "', '", casrnBox, "', '", originalNames, "', '", reenrich, "', '", reenrichFlag, "', '", color, "', '", timestampPosted, "', '", pvalueType, "');"), id="createTransactionEntry")
     outp <- dbExecute(poolTransaction, query)
     # Close pool
-    poolClose(poolTransaction)
+    # poolClose(poolTransaction)
+    dbDisconnect(poolTransaction)
     return(TRUE)
 }
 
@@ -2829,7 +2909,8 @@ getTransactionDetails <- function(res, req, uuid="none"){
     query <- sqlInterpolate(ANSI(), paste0("SELECT * FROM transaction WHERE uuid='", uuid, "';"), id="loadTransaction")
     outp <- dbGetQuery(poolTransaction, query)
     # Close pool
-    poolClose(poolTransaction)
+    # poolClose(poolTransaction)
+    dbDisconnect(poolTransaction)
     return(outp)
 }
 
@@ -2872,7 +2953,9 @@ getQueuePos <- function(res, req, transactionId="-1", mode="init"){
     query <- sqlInterpolate(ANSI(), paste0("SELECT * FROM queue WHERE finished=0 AND error IS NULL AND cancel=0;"), id="fetchQueuePosition")
     outp <- dbGetQuery(poolUpdate, query)
     # Close pool
-    poolClose(poolUpdate)
+    # poolClose(poolUpdate)
+    dbDisconnect(poolUpdate)
+    
     if(nrow(outp) > 0){
         # Sort by index number
         outp <- outp[order(outp$index), ]
@@ -2961,7 +3044,8 @@ getPrevSessionData <- function(res, req, transactionId="-1"){
     query <- sqlInterpolate(ANSI(), paste0("SELECT * FROM transaction WHERE uuid='", transactionId, "';"), id="fetchTransactionData")
     outp <- dbGetQuery(poolSessionData, query)
     # Close pool
-    poolClose(poolSessionData)
+    # poolClose(poolSessionData)
+    dbDisconnect(poolSessionData)
     if(nrow(outp) > 0){
         return(list(
             "original_mode"=outp[1, "original_mode"],
@@ -2996,7 +3080,8 @@ isRequestFinished <- function(res, req, transactionId="-1"){
     query <- sqlInterpolate(ANSI(), paste0("SELECT * FROM queue WHERE uuid='", transactionId, "';"), id="fetchStatusStep")
     outp <- dbGetQuery(poolQueue, query)
     # Close pool
-    poolClose(poolQueue)
+    # poolClose(poolQueue)
+    dbDisconnect(poolQueue)
     finished <- outp[1, "finished"]
     if(is.na(finished)){
         return(-1)
@@ -3024,7 +3109,8 @@ hasError <- function(res, req, transactionId="-1"){
     query <- sqlInterpolate(ANSI(), paste0("SELECT * FROM queue WHERE uuid='", transactionId, "' AND error IS NOT NULL;"), id="fetchError")
     outp <- dbGetQuery(poolQueue, query)
     # Close pool
-    poolClose(poolQueue)
+    # poolClose(poolQueue)
+    dbDisconnect(poolQueue)
     if(nrow(outp) > 0){
         return(outp[1, "error"])
     }
@@ -3050,7 +3136,8 @@ cancelEnrichment <- function(res, req, transactionId="-1"){
     query <- sqlInterpolate(ANSI(), paste0("UPDATE transaction SET cancel=1 WHERE uuid='", transactionId, "';"), id="cancelEnrichment")
     outp <- dbExecute(poolCancel, query)
     # Close pool
-    poolClose(poolCancel)
+    # poolClose(poolCancel)
+    dbDisconnect(poolCancel)
     return(TRUE)
 }
 
@@ -3071,7 +3158,8 @@ isCancel <- function(res, req, transactionId="-1"){
     query <- sqlInterpolate(ANSI(), paste0("SELECT cancel FROM transaction WHERE uuid='", transactionId, "';"), id="isCancel")
     outp <- dbGetQuery(poolCancel, query)
     # Close pool
-    poolClose(poolCancel)
+    # poolClose(poolCancel)
+    dbDisconnect(poolCancel)
     cancelStatus <- 1
     if(nrow(outp) == 1){
         cancelStatus <- outp[1, "cancel"]
@@ -3111,7 +3199,8 @@ getAdditionalRequestInfo <- function(res, req, transactionId="-1"){
     expQuery <- sqlInterpolate(ANSI(), paste0("SELECT original_mode, mode, cutoff, casrn_box, timestamp_posted, timestamp_started, timestamp_finished FROM transaction WHERE uuid='", transactionId, "';"), id="getAnnotationClasses")
     expOutp <- dbGetQuery(poolExp, expQuery)
     # Close pool
-    poolClose(poolExp)
+    # poolClose(poolExp)
+    dbDisconnect(poolExp)
     # Calculate cookie expiry date and add to DF
     expDate <- as.POSIXct(expOutp[, "timestamp_posted"], format="%Y-%m-%d %H:%M:%S", tz="UTC") + (60 * 60 * CLEANUP_TIME)
     fullRequestInfo <- expOutp
@@ -3143,7 +3232,8 @@ getAnnotations <- function(res, req){
     annoClassOutp <- dbGetQuery(poolAnnotations, annoClassQuery)
     rownames(annoClassOutp) <- seq_len(nrow(annoClassOutp))
     # Close pool
-    poolClose(poolAnnotations)
+    # poolClose(poolAnnotations)
+    dbDisconnect(poolAnnotations)
     return(annoClassOutp)
 }
 
@@ -3155,6 +3245,10 @@ getTotalRequests <- function(res, req){
     poolTotal <- connQueue()
     totalQuery <- sqlInterpolate(ANSI(), "SELECT uuid, timestamp_started, timestamp_finished FROM transaction WHERE cancel=0;", id="getTotalEnrichment")
     totalOutp <- dbGetQuery(poolTotal, totalQuery)
+    # Close pool
+    # poolClose(poolTotal)
+    dbDisconnect(poolTotal)
+    
     # Extract current year
     currentDate <- unlist(str_split(Sys.time(), " "))[1]
     # yyyy-mm-dd format
@@ -3173,8 +3267,6 @@ getTotalRequests <- function(res, req){
     }))
     finishedRequests <- finishedRequests[!vapply(finishedRequests, is.null, FUN.VALUE=logical(1))]
     monthTotal <- length(finishedRequests)
-    # Close pool
-    poolClose(poolTotal)
     return(monthTotal)
 }
 
@@ -3210,7 +3302,8 @@ searchBySubstructure <- function(res, req, input){
         return(list())
     }
     # Close pool
-    poolClose(poolSubstructure)
+    # poolClose(poolSubstructure)
+    dbDisconnect(poolSubstructure)
     return(substructureOutp)
 }
 
@@ -3257,7 +3350,8 @@ searchBySimilarity <- function(res, req, input="", threshold=0.50){
         return(list())
     }
     # Close pool
-    poolClose(poolSimilarity)
+    # poolClose(poolSimilarity)
+    dbDisconnect(poolSimilarity)
     return(similarityOutp)
 }
 
@@ -3276,7 +3370,8 @@ getCasrnData <- function(res, req, input){
     casrnQuery <- sqlInterpolate(ANSI(), paste0("SELECT iupac_name, smiles, dtxsid, dtxrid, mol_formula, mol_weight, inchis, inchikey, cid, testsubstance_chemname FROM chemical_detail WHERE CASRN LIKE '", input, "';"), id="casrnResults")
     casrnOutp <- dbGetQuery(poolCasrn, casrnQuery)
     # Close pool
-    poolClose(poolCasrn)
+    # poolClose(poolCasrn)
+    dbDisconnect(poolCasrn)
     return(casrnOutp)
 }
 
@@ -3327,7 +3422,8 @@ getReactiveGroups <- function(res, req, input="-1"){
     # Put reactive groups into string to pass back to client
     reactiveGroups <- paste0(has_nitrile, ",", has_isocyanate, ",", has_aldehyde, ",", has_epoxide)
     # Close pool
-    poolClose(poolReactive)
+    # poolClose(poolReactive)
+    dbDisconnect(poolReactive)
     return(reactiveGroups)
 }
 
@@ -3347,7 +3443,8 @@ inchiToSmiles <- function(res, req, inchi){
     inchiQuery <- sqlInterpolate(ANSI(), paste0("SELECT smiles FROM chemical_detail WHERE inchis='", inchi, "';"), id="convertInchi")
     inchiOutp <- dbGetQuery(poolInchi, inchiQuery)
     # Close pool
-    poolClose(poolInchi)
+    # poolClose(poolInchi)
+    dbDisconnect(poolInchi)
     return(inchiOutp[[1]])
 }
 
@@ -3358,7 +3455,8 @@ convertInchi <- function(res, req, inchi){
     inchiQuery <- sqlInterpolate(ANSI(), paste0("SELECT smiles FROM chemical_detail WHERE inchis='", inchi, "';"), id="convertInchi")
     inchiOutp <- dbGetQuery(poolInchi, inchiQuery)
     # Close pool
-    poolClose(poolInchi)
+    # poolClose(poolInchi)
+    dbDisconnect(poolInchi)
     return(inchiOutp[[1]])
 }
 
@@ -3389,7 +3487,8 @@ getStructureImages <- function(res, req, input){
         return(tmpSplit2[1])
     })
     # Close pool
-    poolClose(poolSvg)
+    # poolClose(poolSvg)
+    dbDisconnect(poolSvg)
     return(structures)
 }
 
@@ -3412,7 +3511,8 @@ getStructureWarnings <- function(res, req, input=""){
     warnQuery <- sqlInterpolate(ANSI(), paste0("SELECT casrn, cyanide, isocyanate, aldehyde, epoxide FROM mols_2 WHERE ", paste0("casrn='", inputSets, "'", collapse=" OR "), ";"), id="getWarnings")
     warnOutp <- dbGetQuery(poolWarn, warnQuery)
     # Close pool
-    poolClose(poolWarn)
+    # poolClose(poolWarn)
+    dbDisconnect(poolWarn)
     return(warnOutp)
 }
 
@@ -3598,7 +3698,8 @@ createInput <- function(res, req, transactionId="-1", enrichmentSets, setNames, 
         })
     })
     # Close pool
-    poolClose(poolInput)
+    # poolClose(poolInput)
+    dbDisconnect(poolInput)
 }
 
 #* Returns list of sets that are valid/existing for a given transaction (internal use only).
@@ -3637,7 +3738,8 @@ exists <- function(res, req, transactionId="-1"){
     query <- sqlInterpolate(ANSI(), paste0("SELECT * FROM transaction WHERE uuid='", transactionId, "';"), id="loadTransaction")
     outp <- dbGetQuery(poolExists, query)
     # Close pool
-    poolClose(poolExists)
+    # poolClose(poolExists)
+    dbDisconnect(poolExists)
     if(nrow(outp) < 1){
         return(-1) # case: no record in database
     }
@@ -3957,7 +4059,8 @@ getNetwork <- function(res, req, transactionId="-1", cutoff, mode, input, qval){
     ), id="addToDb")
     outpNetwork <- dbGetQuery(poolNetwork, queryNetwork)
     # Close pool
-    poolClose(poolNetwork)
+    # poolClose(poolNetwork)
+    dbDisconnect(poolNetwork)
     return(outpNetwork)
 }
 
@@ -4014,7 +4117,8 @@ getNodeChemicals <- function(res, req, termFrom, termTo, classFrom, classTo){
     nodeOutp <- dbGetQuery(poolNode, nodeQuery)
     casrnsTo <- nodeOutp
     # Close pool
-    poolClose(poolNode)
+    #poolClose(poolNode)
+    dbDisconnect(poolNode)
     return(list(casrnsFrom=casrnsFrom[, "casrn"], casrnsTo=casrnsTo[, "casrn"]))
 }
 
@@ -4035,7 +4139,8 @@ getNodeDetails <- function(res, req, class){
     nodeOutp <- dbGetQuery(poolNode, nodeQuery)
     baseurl <- nodeOutp
     # Close pool
-    poolClose(poolNode)
+    # poolClose(poolNode)
+    dbDisconnect(poolNode)
     return(baseurl)
 }
 
@@ -4050,7 +4155,8 @@ getNodeColors <- function(res, req){
     nodeOutp <- dbGetQuery(poolNode, nodeQuery)
     nodeColors <- nodeOutp
     # Close pool
-    poolClose(poolNode)
+    # poolClose(poolNode)
+    dbDisconnect(poolNode)
     return(nodeColors)
 }
 
@@ -4266,7 +4372,8 @@ submit <- function(res, req, mode="", input="", annotations="", cutoff=10, tanim
     # If there are errors
     if(length(errorCasrns) > 0){
         # Close DB connection
-        poolClose(pool)
+        # poolClose(pool)
+        dbDisconnect(pool)
         return(paste0("Error: Incorrect CASRN or set name formatting on input line(s): ", paste0(errorCasrns, collapse=", "), ". Please check your input and try again.")) 
     }
     # 3) check if missing first set name, if you are using set names
@@ -4283,7 +4390,8 @@ submit <- function(res, req, mode="", input="", annotations="", cutoff=10, tanim
     }
     if(!grepl("^#[A-Za-z0-9]+", casrnValidatedInput[1], ignore.case=TRUE) & usingSetNames) {
         # Close DB connection
-        poolClose(pool)
+        # poolClose(pool)
+        dbDisconnect(pool)
         return(paste0("Error: It appears you are using set names but have not provided a name for the first input set. Please check your input and try again."))
     }
     
@@ -4298,7 +4406,8 @@ submit <- function(res, req, mode="", input="", annotations="", cutoff=10, tanim
     setNamesDuplicate <- as.data.frame(table(setNamesList)) %>% filter(Freq > 1)
     if(nrow(setNamesDuplicate) > 0) { # if we have duplicate names, display error message
         # Close DB connection
-        poolClose(pool)
+        # poolClose(pool)
+        dbDisconnect(pool)
         return(paste0("Error: Duplicate set names are not allowed: ", paste0(setNamesDuplicate$setNamesList, collapse=", ")))
     }
     
@@ -4333,7 +4442,8 @@ submit <- function(res, req, mode="", input="", annotations="", cutoff=10, tanim
     createInput(transactionId=transactionId, enrichmentSets=casrnValidatedInput, setNames=setNames, mode=mode, nodeCutoff=cutoff, annoSelectStr=annotations)
     queue(mode=mode, enrichmentUUID=transactionId, annoSelectStr=annotations, nodeCutoff=cutoff, setNames=setNames)
     # Close DB connection
-    poolClose(pool)
+    # poolClose(pool)
+    dbDisconnect(pool)
     return(transactionId)
 }
 
