@@ -3230,26 +3230,24 @@ shinyServer(function(input, output, session) {
                     gctFileMatrix <- data.matrix(gctFile)
                     gctCASRNNames <- rownames(gctFile)
                     gctAnnoNames <- colnames(gctFile)
-                
-                # DEBUG
                 }
-                    # Get list of paths to result files for each set
-                    # Fetch setFiles from server via API
-                    resp <- NULL
-                    tryResults <- tryCatch({
-                        resp <- GET(url=paste0(API_PROTOCOL, API_ADDR, "/getResults"), query=list(transactionId=transactionId, setName=i))
-                        TRUE
-                    }, error=function(cond){
-                        return(FALSE)
-                    })
-                    if(!tryResults){
-                        showNotification("Error: The application cannot connect to the Tox21Enricher server. Please try again later.", type="error")
-                        return(FALSE)
-                    }
-                    if(resp$status_code != 200){
-                        return(NULL)
-                    }
-                    getAllResultFiles <- unlist(content(resp))
+                # Get list of paths to result files for each set
+                # Fetch setFiles from server via API
+                resp <- NULL
+                tryResults <- tryCatch({
+                    resp <- GET(url=paste0(API_PROTOCOL, API_ADDR, "/getResults"), query=list(transactionId=transactionId, setName=i))
+                    TRUE
+                }, error=function(cond){
+                    return(FALSE)
+                })
+                if(!tryResults){
+                    showNotification("Error: The application cannot connect to the Tox21Enricher server. Please try again later.", type="error")
+                    return(FALSE)
+                }
+                if(resp$status_code != 200){
+                    return(NULL)
+                }
+                getAllResultFiles <- unlist(content(resp))
                     
                 if(length(getAllResultFiles) > 0){
                   
@@ -3404,7 +3402,7 @@ shinyServer(function(input, output, session) {
                                 
                                 tmpFile <- tryCatch({
                                     tmpFile <- read.delim(paste0(tempdir(), "/output/", transactionId, "/", i, "__Chart.txt"), sep="\t", header=TRUE, comment.char="", fill=TRUE, stringsAsFactors=FALSE)
-                                    names(tmpFile) <- c("Category", "Term", "Count", "%", "PValue", "CASRNs", "List Total", "Pop Hits", "Pop Total", "Fold Enrichment", "Bonferroni", "Benjamini", "FDR")
+                                    names(tmpFile) <- c("Category", "Term", "Count", "%", "PValue", "CASRNs", "List Total", "Pop Hits", "Pop Total", "Fold Enrichment", "Bonferroni", "Benjamini_Yekutieli", "Benjamini_Hochberg")
                                     tmpFile
                                 }, error=function(cond){
                                     NULL
@@ -3450,7 +3448,7 @@ shinyServer(function(input, output, session) {
                                             )
                                         ),
                                         extensions="Buttons"
-                                    ) %>% formatRound(columns=c('PValue', 'Bonferroni', 'Benjamini', 'FDR'), digits=4) %>% formatRound(columns=c('%', 'Fold Enrichment'), digits=2)
+                                    ) %>% formatRound(columns=c('PValue', 'Bonferroni', 'Benjamini_Yekutieli', 'Benjamini_Hochberg'), digits=4) %>% formatRound(columns=c('%', 'Fold Enrichment'), digits=2)
                                 )
                             }
                         }, ignoreInit=TRUE)
@@ -3474,6 +3472,7 @@ shinyServer(function(input, output, session) {
                                 dir.create(paste0(tempdir(), "/output/"))
                             }, error=function(cond){
                                 showNotification("Error: cannot create local directory to download result files.", type="error")
+                                shinyjs::enable(id="refresh")
                                 FALSE
                             })
                             
@@ -3481,6 +3480,7 @@ shinyServer(function(input, output, session) {
                                 dir.create(paste0(tempdir(), "/output/", transactionId, "/"))
                             }, error=function(cond){
                                 showNotification("Error: cannot create local directory to download result files.", type="error")
+                                shinyjs::enable(id="refresh")
                                 FALSE
                             })
                             tryChartSimpleDL <- TRUE
@@ -3508,7 +3508,15 @@ shinyServer(function(input, output, session) {
                                 
                                 tmpFile <- tryCatch({
                                     tmpFile <- read.delim(paste0(tempdir(), "/output/", transactionId, "/", i, "__ChartSimple.txt"), sep="\t", header=TRUE, comment.char="", fill=TRUE, stringsAsFactors=FALSE)
-                                    names(tmpFile) <- c("Category", "Term", "Count", "%", "PValue", "Fold Enrichment", "Benjamini")
+                                    if("Bonferroni" %in% colnames(tmpFile)){
+                                        names(tmpFile) <- c("Category", "Term", "Count", "%", "PValue", "Fold Enrichment", "Bonferroni")
+                                    } else if("Benjamini_Yekutieli" %in% colnames(tmpFile)){
+                                        names(tmpFile) <- c("Category", "Term", "Count", "%", "PValue", "Fold Enrichment", "Benjamini_Yekutieli")
+                                    } else if("Benjamini_Hochberg" %in% colnames(tmpFile)){
+                                        names(tmpFile) <- c("Category", "Term", "Count", "%", "PValue", "Fold Enrichment", "Benjamini_Hochberg")
+                                    } else {
+                                        names(tmpFile) <- c("Category", "Term", "Count", "%", "PValue", "Fold Enrichment")
+                                    }
                                     tmpFile
                                 }, error=function(cond){
                                     NULL
@@ -3530,31 +3538,41 @@ shinyServer(function(input, output, session) {
                                         )
                                     )
                                 )
-                                output[["chartSimplePreview"]] <- renderDataTable(
-                                    DT::datatable({tmpFile},
-                                        escape=FALSE,
-                                        rownames=FALSE,
-                                        class="row-border stripe compact",
-                                        style="bootstrap",
-                                        select="none",
-                                        options=list( 
-                                            paging=FALSE,
-                                            scrollX=TRUE,
-                                            dom="Bfrtip",
-                                            pageLength=10,
-                                            buttons=list("copy", "csv", "excel", "pdf", "print"),
-                                            rowCallback=JS(
-                                                "function(row, data) {
-                                                    for (i=1; i < data.length; i++) {
-                                                        if (data[i] < 1){
-                                                            $('td:eq('+i+')', row).html(data[i].toExponential(1));
-                                                        }
+                                
+                                chartSimpleTable <- DT::datatable({tmpFile},
+                                    escape=FALSE,
+                                    rownames=FALSE,
+                                    class="row-border stripe compact",
+                                    style="bootstrap",
+                                    select="none",
+                                    options=list( 
+                                        paging=FALSE,
+                                        scrollX=TRUE,
+                                        dom="Bfrtip",
+                                        pageLength=10,
+                                        buttons=list("copy", "csv", "excel", "pdf", "print"),
+                                        rowCallback=JS(
+                                            "function(row, data) {
+                                                for (i=1; i < data.length; i++) {
+                                                    if (data[i] < 1){
+                                                        $('td:eq('+i+')', row).html(data[i].toExponential(1));
                                                     }
-                                                }"
-                                            )
-                                        ),
-                                        extensions="Buttons"
-                                    ) %>% formatRound(columns=c('PValue', 'Benjamini'), digits=4) %>% formatRound(columns=c('%', 'Fold Enrichment'), digits=2)
+                                                }
+                                            }"
+                                        )
+                                    ),
+                                    extensions="Buttons"
+                                ) %>% formatRound(columns=c('PValue'), digits=4) %>% formatRound(columns=c('%', 'Fold Enrichment'), digits=2)
+                                
+                                if("Bonferroni" %in% colnames(tmpFile)){
+                                    chartSimpleTable %>% formatRound(columns=c('Bonferroni'), digits=4)
+                                } else if("Benjamini_Yekutieli" %in% colnames(tmpFile)){
+                                    chartSimpleTable %>% formatRound(columns=c('Benjamini_Yekutieli'), digits=4)
+                                } else if("Benjamini_Hochberg" %in% colnames(tmpFile)){
+                                    chartSimpleTable %>% formatRound(columns=c('Benjamini_Hochberg'), digits=4)
+                                } 
+                                output[["chartSimplePreview"]] <- renderDataTable(
+                                    chartSimpleTable
                                 )
                             }
                         }, ignoreInit=TRUE)
@@ -3578,6 +3596,7 @@ shinyServer(function(input, output, session) {
                                 dir.create(paste0(tempdir(), "/output/"))
                             }, error=function(cond){
                                 showNotification("Error: cannot create local directory to download result files.", type="error")
+                                shinyjs::enable(id="refresh")
                                 FALSE
                             })
                             
@@ -3585,6 +3604,7 @@ shinyServer(function(input, output, session) {
                                 dir.create(paste0(tempdir(), "/output/", transactionId, "/"))
                             }, error=function(cond){
                                 showNotification("Error: cannot create local directory to download result files.", type="error")
+                                shinyjs::enable(id="refresh")
                                 FALSE
                             })
                             tryClusterDL <- TRUE
@@ -3653,7 +3673,7 @@ shinyServer(function(input, output, session) {
                                 names(filteredTmpFileDFs) <- names(clusterList)
                                 filteredTmpFileDFs <- lapply(filteredTmpFileDFs, function(x){
                                     tmpDF <- do.call(rbind.data.frame, x)
-                                    colnames(tmpDF) <- c("Category", "Term", "Count", "%", "PValue", "CASRNs", "List Total", "Pop Hits", "Pop Total", "Fold Enrichment", "Bonferroni", "Benjamini", "FDR")
+                                    colnames(tmpDF) <- c("Category", "Term", "Count", "%", "PValue", "CASRNs", "List Total", "Pop Hits", "Pop Total", "Fold Enrichment", "Bonferroni", "Benjamini_Yekutieli", "Benjamini_Hochberg")
                                     rownames(tmpDF) <- seq_len(nrow(tmpDF))
                                     return(tmpDF)
                                 })
@@ -3712,7 +3732,7 @@ shinyServer(function(input, output, session) {
                                                 )
                                             ),
                                             extensions="Buttons"
-                                        ) %>% formatRound(columns=c('PValue', 'Bonferroni', 'Benjamini', 'FDR'), digits=4) %>% formatRound(columns=c('%', 'Fold Enrichment'), digits=2)
+                                        ) %>% formatRound(columns=c('PValue', 'Bonferroni', 'Benjamini_Yekutieli', 'Benjamini_Hochberg'), digits=4) %>% formatRound(columns=c('%', 'Fold Enrichment'), digits=2)
                                     )
                                 })
                             }
@@ -3737,6 +3757,7 @@ shinyServer(function(input, output, session) {
                                dir.create(paste0(tempdir(), "/output/"))
                             }, error=function(cond){
                                 showNotification("Error: cannot create local directory to download result files.", type="error")
+                                shinyjs::enable(id="refresh")
                                 FALSE
                             })
                             
@@ -3744,6 +3765,7 @@ shinyServer(function(input, output, session) {
                                dir.create(paste0(tempdir(), "/output/", transactionId, "/"))
                             }, error=function(cond){
                                 showNotification("Error: cannot create local directory to download result files.", type="error")
+                                shinyjs::enable(id="refresh")
                                 FALSE
                             })
                             tryMatrixDL <- TRUE
@@ -3834,6 +3856,7 @@ shinyServer(function(input, output, session) {
                                 dir.create(paste0(tempdir(), "/output/"))
                             }, error=function(cond){
                                 showNotification("Error: cannot create local directory to download result files.", type="error")
+                                shinyjs::enable(id="refresh")
                                 FALSE
                             })
                             
@@ -3841,6 +3864,7 @@ shinyServer(function(input, output, session) {
                                 dir.create(paste0(tempdir(), "/output/", transactionId, "/"))
                             }, error=function(cond){
                                 showNotification("Error: cannot create local directory to download result files.", type="error")
+                                shinyjs::enable(id="refresh")
                                 FALSE
                             })
                             tryErrorDL <- TRUE

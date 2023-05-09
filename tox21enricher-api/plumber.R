@@ -659,6 +659,7 @@ process_variable_DAVID_CHART_directories_individual_file <- function(inputDirNam
             infileDF
         }, error=function(cond){
             print("Error reading .gct file.")
+            print(cond)
             data.frame()
         })
         if(nrow(infileDF) < 1){
@@ -686,12 +687,9 @@ process_variable_DAVID_CHART_directories_individual_file <- function(inputDirNam
     } else if(PVALUE_TYPE == "adjusted") {
         sigColumnName <- "BH"
         valueColumnName <- "BH"
-    } else {
-        sigColumnName <- "FDR"
-        valueColumnName <- "FDR"
-    }
-    sigColumnIndex <- get_column_index(sigColumnName) # 5=p-value, 12=BH p-value, 13=FDR
-    valueColumnIndex <- get_column_index(valueColumnName) # 5=p-value, 12=BH p-value, 13=FDR
+    } 
+    sigColumnIndex <- get_column_index(sigColumnName) # 5=p-value, 12=BY p-value, 13=Benjamini_Hochberg
+    valueColumnIndex <- get_column_index(valueColumnName) # 5=p-value, 12=BY p-value, 13=Benjamini_Hochberg
     
     # Step1. Get the list of significant terms
     mclapply(infiles, mc.cores=CORES, mc.silent=FALSE, function(infile){
@@ -703,6 +701,7 @@ process_variable_DAVID_CHART_directories_individual_file <- function(inputDirNam
             DATA
         }, error=function(cond){
             print("Error reading .gct file.")
+            print(cond)
             data.frame()
         })
         if(nrow(DATA) < 1){
@@ -715,6 +714,7 @@ process_variable_DAVID_CHART_directories_individual_file <- function(inputDirNam
                 close(OUTFILE)
             }, error=function(cond){
                 print("Error creating output file.")
+                print(cond)
             })
         } else {
             term2pvalue <- lapply(seq_len(nrow(DATA)), function(line){
@@ -730,8 +730,8 @@ process_variable_DAVID_CHART_directories_individual_file <- function(inputDirNam
                 tmpSplit[9] <- as.character(DATA[line, "Pop.Total"])
                 tmpSplit[10] <- as.character(DATA[line, "Fold.Enrichment"])
                 tmpSplit[11] <- as.character(DATA[line, "Bonferroni"])
-                tmpSplit[12] <- as.character(DATA[line, "Benjamini"])
-                tmpSplit[13] <- as.character(DATA[line, "FDR"])
+                tmpSplit[12] <- as.character(DATA[line, "Benjamini_Yekutieli"])
+                tmpSplit[13] <- as.character(DATA[line, "Benjamini_Hochberg"])
                 if ( grepl("^\\D", tmpSplit[[sigColumnIndex]]) | as.numeric(tmpSplit[[sigColumnIndex]]) >= sigCutOff | as.numeric(tmpSplit[[10]]) < 1) {
                     # skip, do nothing
                     return(NULL)
@@ -754,6 +754,7 @@ process_variable_DAVID_CHART_directories_individual_file <- function(inputDirNam
                     close(OUTFILE)
                 }, error=function(cond){
                     print("Error creating output file.")
+                    print(cond)
                 })
                 return(NULL)
             }
@@ -773,8 +774,8 @@ process_variable_DAVID_CHART_directories_individual_file <- function(inputDirNam
                     as.character(DATA[line, "Pop.Total"]),
                     as.character(DATA[line, "Fold.Enrichment"]),
                     as.character(DATA[line, "Bonferroni"]),
-                    as.character(DATA[line, "Benjamini"]),
-                    as.character(DATA[line, "FDR"])
+                    as.character(DATA[line, "Benjamini_Yekutieli"]),
+                    as.character(DATA[line, "Benjamini_Hochberg"])
                 )
                 if ( grepl("^\\D", tmpSplit[[sigColumnIndex]]) | as.numeric(tmpSplit[[sigColumnIndex]]) >= sigCutOff | as.numeric(tmpSplit[[10]]) < 1) {
                     # skip, do nothing
@@ -832,6 +833,7 @@ process_variable_DAVID_CHART_directories_individual_file <- function(inputDirNam
                 close(OUTFILE)
             }, error=function(cond){
                 print("Error creating .gct file.")
+                print(cond)
             })
         }
     })
@@ -840,12 +842,14 @@ process_variable_DAVID_CHART_directories_individual_file <- function(inputDirNam
 get_column_index <- function(columnType) {
     if (grepl("P", columnType, ignore.case=TRUE)) { 
         return(5)
-    } else if(grepl("BH", columnType, ignore.case=TRUE)) { 
+    } else if(grepl("Bonferroni", columnType, ignore.case=TRUE)) { 
+        return(11)
+    } else if(grepl("BY", columnType, ignore.case=TRUE)) { 
         return(12)
-    } else if(grepl("BF", columnType, ignore.case=TRUE)) {
+    } else if(grepl("BH", columnType, ignore.case=TRUE)) {
         return(13)
     } else { 
-        return("Error: wrong Signficance type. Use P, BH, or BF")
+        return("Error: wrong Signficance type. Use P, Bonferroni, BY, BH")
     }
 }
 
@@ -874,6 +878,7 @@ convert_gct_to_cluster_input_file <- function(gctFile, clusterInputFile, outputD
         close(CLUSTER)
     }, error=function(cond){
         print("Error: could not generate .gct cluster file.")
+        print(cond)
     })
 }
 
@@ -894,6 +899,7 @@ check_gct_contains_more_than_two_lines <- function(infile){
         lineCount
     }, error=function(cond){
         print("Error reading .gct file.")
+        print(cond)
         0
     })
     if(lineCount >= 2){
@@ -924,12 +930,9 @@ create_david_chart_cluster <- function(baseDirName="", topTermLimit=10, mode="AL
     } else if(PVALUE_TYPE == "adjusted") {
         sigColumnName <- "BH"
         valueColumnName <- "BH"
-    } else {
-        sigColumnName <- "FDR"
-        valueColumnName <- "FDR"
     }
-    sigColumnIndex <- get_column_index(sigColumnName) # 5=p-value, 12=BH p-value, 13=FDR
-    valueColumnIndex <- get_column_index(valueColumnName) # 5=p-value, 12=BH p-value, 13=FDR
+    sigColumnIndex <- get_column_index(sigColumnName) # 5=p-value, 12=BY p-value, 13=Benjamini_Hochberg
+    valueColumnIndex <- get_column_index(valueColumnName) # 5=p-value, 12=BY p-value, 13=Benjamini_Hochberg
     
     # Get the corresponding directory names
     baseNameSplit <- unlist(str_split(baseDirName, "/"))
@@ -990,14 +993,11 @@ process_variable_DAVID_CLUSTER_directories <- function(dirName, outputDir, extTa
     } else if(PVALUE_TYPE == "adjusted") {
         sigColumnName <- "BH"
         valueColumnName <- "BH"
-        sigDFIndex <- "Benjamini"
-    } else {
-        sigColumnName <- "FDR"
-        valueColumnName <- "FDR"
-        sigDFIndex <- "FDR"
+        sigDFIndex <- "Benjamini_Hochberg"
     }
-    sigColumnIndex <- get_column_index(sigColumnName) # 5=p-value, 12=BH p-value, 13=FDR
-    valueColumnIndex <- get_column_index(valueColumnName) # 5=p-value, 12=BH p-value, 13=FDR
+    
+    sigColumnIndex <- get_column_index(sigColumnName) # 5=p-value, 12=BY p-value, 13=Benjamini_Hochberg
+    valueColumnIndex <- get_column_index(valueColumnName) # 5=p-value, 12=BY p-value, 13=Benjamini_Hochberg
     
     summaryFileNameBase <- additionalFileName
     summaryFileNameExt <- extTag
@@ -1023,10 +1023,11 @@ process_variable_DAVID_CLUSTER_directories <- function(dirName, outputDir, extTa
         originalSourceFile <- paste0(dirInputName, "/", shortFileBaseName, ".txt")
         lines <- data.frame()
         lines <- tryCatch({
-            lines <- read.delim(infile, sep="\t", comment.char="", quote="", stringsAsFactors=FALSE, header=FALSE, fill=TRUE, col.names=c("Category", "Term", "Count", "%", "PValue", "CASRNs", "List Total", "Pop Hits", "Pop Total", "Fold Enrichment", "Bonferroni", "Benjamini", "FDR"))
+            lines <- read.delim(infile, sep="\t", comment.char="", quote="", stringsAsFactors=FALSE, header=FALSE, fill=TRUE, col.names=c("Category", "Term", "Count", "%", "PValue", "CASRNs", "List Total", "Pop Hits", "Pop Total", "Fold Enrichment", "Bonferroni", "Benjamini_Yekutieli", "Benjamini_Hochberg"))
             lines
         }, error=function(cond){
             print("Error reading cluster file.")
+            print(cond)
             data.frame()
         })
         if(nrow(lines) < 1){
@@ -1145,6 +1146,7 @@ process_variable_DAVID_CLUSTER_directories <- function(dirName, outputDir, extTa
         SUMMARY
     }, error=function(cond){
         print("Error creating summary file.")
+        print(cond)
         NULL
     })
     if(is.null(SUMMARY)){
@@ -1184,6 +1186,7 @@ process_variable_DAVID_CLUSTER_directories <- function(dirName, outputDir, extTa
         TRUE
     }, error=function(cond){
         print("Error creating summary file.")
+        print(cond)
         FALSE
     })
     if(fcheck == FALSE){
@@ -1198,6 +1201,7 @@ process_variable_DAVID_CLUSTER_directories <- function(dirName, outputDir, extTa
         NETWORK
     }, error=function(cond){
         print("Error creating summary file.")
+        print(cond)
         NULL
     })
     if(is.null(NETWORK)){
@@ -1226,6 +1230,7 @@ process_variable_DAVID_CLUSTER_directories <- function(dirName, outputDir, extTa
         TRUE
     }, error=function(cond){
         print("Error creating summmary file.")
+        print(cond)
         FALSE
     })
     if(fcheck == FALSE){
@@ -1271,6 +1276,7 @@ process_variable_DAVID_CLUSTER_directories <- function(dirName, outputDir, extTa
         TRUE
     }, error=function(cond){
         print("Error creating .gct ValueMatrix file.")
+        print(cond)
         FALSE
     })
     if(fcheck == FALSE){
@@ -1310,14 +1316,11 @@ process_variable_DAVID_CHART_directories <- function(dirName, outputDir, extTag,
     } else if(PVALUE_TYPE == "adjusted") {
         sigColumnName <- "BH"
         valueColumnName <- "BH"
-        sigDFIndex <- "Benjamini"
-    } else {
-        sigColumnName <- "FDR"
-        valueColumnName <- "FDR"
-        sigDFIndex <- "FDR"
+        sigDFIndex <- "Benjamini_Hochberg"
     }
-    sigColumnIndex <- get_column_index(sigColumnName) # 5=p-value, 12=BH p-value, 13=FDR
-    valueColumnIndex <- get_column_index(valueColumnName) # 5=p-value, 12=BH p-value, 13=FDR
+    
+    sigColumnIndex <- get_column_index(sigColumnName) # 5=p-value, 12=BY p-value, 13=Benjamini_Hochberg
+    valueColumnIndex <- get_column_index(valueColumnName) # 5=p-value, 12=BY p-value, 13=Benjamini_Hochberg
     
     summaryFileNameBase <- additionalFileName
     summaryFileNameExt <- extTag
@@ -1334,6 +1337,7 @@ process_variable_DAVID_CHART_directories <- function(dirName, outputDir, extTag,
             infileDF
         }, error=function(cond){
             print("Error reading chart file.")
+            print(cond)
             data.frame()
         })
         if(nrow(infileDF) < 1){
@@ -1359,6 +1363,7 @@ process_variable_DAVID_CHART_directories <- function(dirName, outputDir, extTag,
             DATA
         }, error=function(cond){
             print("No lines in input file.")
+            print(cond)
             data.frame()
         })
         lines <- DATA
@@ -1432,6 +1437,7 @@ process_variable_DAVID_CHART_directories <- function(dirName, outputDir, extTag,
         DATA <- data.frame()
         DATA <- tryCatch(read.delim(infile, sep="\t", comment.char="", quote="", stringsAsFactors=FALSE, header=TRUE, fill=TRUE), error=function(cond) {
             print("No lines in input file.")
+            print(cond)
             data.frame()
         })
         if (nrow(DATA) > 0){
@@ -1479,6 +1485,7 @@ process_variable_DAVID_CHART_directories <- function(dirName, outputDir, extTag,
         SUMMARY
     }, error=function(cond){
         print("Error creating summary file.")
+        print(cond)
         NULL
     })
     if(is.null(SUMMARY)){
@@ -1513,6 +1520,7 @@ process_variable_DAVID_CHART_directories <- function(dirName, outputDir, extTag,
         TRUE
     }, error=function(cond){
         print("Error creating summary file.")
+        print(cond)
         FALSE
     })
     if(fcheck == FALSE){
@@ -1527,6 +1535,7 @@ process_variable_DAVID_CHART_directories <- function(dirName, outputDir, extTag,
         NETWORK
     }, error=function(cond){
         print("Error creating summary file.")
+        print(cond)
         NULL
     })
     if(is.null(NETWORK)){
@@ -1554,6 +1563,7 @@ process_variable_DAVID_CHART_directories <- function(dirName, outputDir, extTag,
         TRUE
     }, error=function(cond){
         print("Error creating summary file")
+        print(cond)
         FALSE
     })
     if(fcheck == FALSE){
@@ -1598,6 +1608,7 @@ process_variable_DAVID_CHART_directories <- function(dirName, outputDir, extTag,
         TRUE
     }, error=function(cond){
         print("Error creating .gct ValueMatrix file.")
+        print(cond)
         FALSE
     })
     if(fcheck == FALSE){
@@ -1651,10 +1662,13 @@ perform_CASRN_enrichment_analysis <- function(CASRNRef, outputBaseDir, outfileBa
     # Get significance column (nominal pvalue or adjusted pvalue (BH-correction))
     sigDFIndex <- "PValue"
     if(PVALUE_TYPE == "nominal"){
+        sigColumnName <- "P"
         sigDFIndex <- "PValue"
     } else if(PVALUE_TYPE == "adjusted") {
-        sigDFIndex <- "Benjamini"
+        sigColumnName <- "BH"
+        sigDFIndex <- "Benjamini_Hochberg"
     }
+    sigColumnIndex <- get_column_index(sigColumnName)
 
     # Define output file names
     outfileChart <- paste0(outputBaseDir, outfileBase, "__Chart.txt")
@@ -1670,9 +1684,13 @@ perform_CASRN_enrichment_analysis <- function(CASRNRef, outputBaseDir, outfileBa
     dir.create(paste0(outputBaseDir))
     
     # Initialize headers for Chart files
-    chartHeader <- "Category\tTerm\tCount\t%\tPValue\tCASRNs\tList Total\tPop Hits\tPop Total\tFold Enrichment\tBonferroni\tBenjamini\tFDR\n"
-    simpleHeader <- "Category\tTerm\tCount\t%\tPValue\tFold Enrichment\tBenjamini\n"
-    
+    chartHeader <- "Category\tTerm\tCount\t%\tPValue\tCASRNs\tList Total\tPop Hits\tPop Total\tFold Enrichment\tBonferroni\tBenjamini_Yekutieli\tBenjamini_Hochberg\n"
+    simpleHeader <- ""
+    if(PVALUE_TYPE == "nominal"){
+        simpleHeader <- paste0("Category\tTerm\tCount\t%\tPValue\tFold Enrichment\n")
+    } else if(PVALUE_TYPE == "adjusted") {
+        simpleHeader <- paste0("Category\tTerm\tCount\t%\tPValue\tFold Enrichment\t", sigDFIndex, "\n")
+    }
     # Calculate EASE score
     inputCASRNs <- CASRNRef
     inputCASRNsCount <- length(inputCASRNs)
@@ -1726,7 +1744,7 @@ perform_CASRN_enrichment_analysis <- function(CASRNRef, outputBaseDir, outfileBa
     
     datArray <- lapply(funCat2SelectedProcessed_datArray, function(x) x$datarray)
     annoArray <- lapply(funCat2SelectedProcessed_datArray, function(x) x$annoarray)
-    
+
     # Save the data file -> create "RINPUT" but as a data frame here
     RINPUT_df <- do.call(rbind, datArray)
     # Handle if bad RINPUT file
@@ -1743,6 +1761,7 @@ perform_CASRN_enrichment_analysis <- function(CASRNRef, outputBaseDir, outfileBa
             file.create(outfileCluster)
         }, error=function(cond){
             print("Error creating error files.")
+            print(cond)
         })
         return("no annotations found for input")
     } else if(nrow(RINPUT_df) < 2){
@@ -1758,13 +1777,17 @@ perform_CASRN_enrichment_analysis <- function(CASRNRef, outputBaseDir, outfileBa
             file.create(outfileCluster)
         }, error=function(cond){
             print("Error creating error files.")
+            print(cond)
         })
         return("no annotations found for input")
     }
     rownames(RINPUT_df) <- seq_len(nrow(RINPUT_df))
     colnames(RINPUT_df) <- c("X1", "X2", "X3", "X4")
     
-    # Calculate results of the fisher test - P-value, Bonferroni, BY, and FDR
+    # Calculate results of the fisher test - P-value, Bonferroni, BY, and Benjamini_Hochberg
+    # Bonferroni = bonferroni
+    # Benjamini_Yekutieli = BY
+    # Benjamini_Hochberg = fdr
     p.value <- apply(RINPUT_df, 1, function(x) fisher.test(matrix(unlist(x), nrow=2))$p.value)
     ROUTPUT <- data.frame(p.value=p.value, bonferroni=p.adjust(p.value, method="bonferroni"), by=p.adjust(p.value, method="BY"), fdr=p.adjust(p.value, method="fdr"))
     # Load the output 
@@ -1792,6 +1815,7 @@ perform_CASRN_enrichment_analysis <- function(CASRNRef, outputBaseDir, outfileBa
             file.create(outfileCluster)
         }, error=function(cond){
             print("Error creating error files.")
+            print(cond)
         })
         # Initialize db connection pool
         poolStatus <- connQueue()
@@ -1819,15 +1843,15 @@ perform_CASRN_enrichment_analysis <- function(CASRNRef, outputBaseDir, outfileBa
             term=annoArray[[annoArrayIndex]][[2]], # annotation term name
             count=as.numeric(annoArray[[annoArrayIndex]][[3]]), # count
             percent=as.numeric(annoArray[[annoArrayIndex]][[4]]), # %
-            pvalue=ROutputData[[annoArrayIndex]][["p.value"]], # update the p-value
+            PValue=ROutputData[[annoArrayIndex]][["p.value"]], # update the p-value
             casrn=annoArray[[annoArrayIndex]][[6]], # casrn list
             listtotal=as.numeric(annoArray[[annoArrayIndex]][[7]]), # list total
             pophits=as.numeric(annoArray[[annoArrayIndex]][[8]]), # pop hits
             poptotal=as.numeric(annoArray[[annoArrayIndex]][[9]]), # pop total
             foldenrichment=as.numeric(annoArray[[annoArrayIndex]][[10]]), # fold enrichment
-            bonferroni=ROutputData[[annoArrayIndex]][["bonferroni"]], # Bonferroni
-            benjamini=ROutputData[[annoArrayIndex]][["by"]], # Benjamini
-            fdr=ROutputData[[annoArrayIndex]][["fdr"]] # add FDR to the array
+            Bonferroni=ROutputData[[annoArrayIndex]][["bonferroni"]], # Bonferroni
+            Benjamini_Yekutieli=ROutputData[[annoArrayIndex]][["by"]], # Benjamini_Yekutieli
+            Benjamini_Hochberg=ROutputData[[annoArrayIndex]][["fdr"]] # Benjamini_Hochberg
         ))
     })
     annoArray <- do.call(rbind.data.frame, annoArray)
@@ -1839,16 +1863,17 @@ perform_CASRN_enrichment_analysis <- function(CASRNRef, outputBaseDir, outfileBa
                 x[["term"]],
                 x[["count"]],
                 x[["percent"]],
-                x[["pvalue"]],
+                x[["PValue"]],
                 x[["casrn"]],
                 x[["listtotal"]],
                 x[["pophits"]],
                 x[["poptotal"]],
                 x[["foldenrichment"]],
-                x[["bonferroni"]],
-                x[["benjamini"]],
-                x[["fdr"]]
+                x[["Bonferroni"]],
+                x[["Benjamini_Yekutieli"]],
+                x[["Benjamini_Hochberg"]]
             ))
+            
             names(tmp) <- paste0(x[["category"]], "|", x[["term"]])
             return(tmp)
         } else {
@@ -1858,7 +1883,7 @@ perform_CASRN_enrichment_analysis <- function(CASRNRef, outputBaseDir, outfileBa
     
     term2Pvalue <- unlist(apply(annoArray, 1, function(x) {
         if(length(x) > 0){
-            tmp <- list(c(as.numeric(x[[tolower(sigDFIndex)]])))
+            tmp <- list(c(as.numeric(x[[sigDFIndex]])))
             names(tmp) <- paste0(x[["category"]], "|", x[["term"]])
             return(tmp)
         } else {
@@ -1869,11 +1894,7 @@ perform_CASRN_enrichment_analysis <- function(CASRNRef, outputBaseDir, outfileBa
     # Sort by the p-values across multiple funCat
     sortedFunCatTerms <- term2Pvalue[order(unlist(term2Pvalue), decreasing=FALSE)]
     sortedFunCatTermsCount <- length(sortedFunCatTerms)
-    
-    # DEBUG -- check this
-    # Filter sortedFunCatTerms by pvalue to display before printing to Chart file
-    # sortedFunCatTerms_CHART <- sortedFunCatTerms[sortedFunCatTerms <= pvalueThresholdToDisplay]
-    sortedFunCatTerms_CHART <-sortedFunCatTerms
+    sortedFunCatTerms_CHART <-sortedFunCatTerms # save to temp variable
     
     tryCatch({
         # Write to chart File
@@ -1883,6 +1904,7 @@ perform_CASRN_enrichment_analysis <- function(CASRNRef, outputBaseDir, outfileBa
         close(OUTFILE)
     }, error=function(cond){
         print("Error: could not write to Chart file.")
+        print(cond)
     })
     
     tryCatch({
@@ -1890,32 +1912,42 @@ perform_CASRN_enrichment_analysis <- function(CASRNRef, outputBaseDir, outfileBa
         sortFunCatProcess <- lapply(names(sortedFunCatTerms_CHART), function(funCatTerm){ 
             tmpSplit <- term2Contents[[funCatTerm]]
             if (as.numeric(tmpSplit[[10]]) > 1){
-                return(list(tmpSplit[[1]], tmpSplit[[2]], tmpSplit[[3]], tmpSplit[[4]], tmpSplit[[5]], tmpSplit[[10]], tmpSplit[[12]]))
+                if(PVALUE_TYPE == "nominal"){
+                    return(list(tmpSplit[[1]], tmpSplit[[2]], tmpSplit[[3]], tmpSplit[[4]], tmpSplit[[5]], tmpSplit[[10]]))
+                } else if(PVALUE_TYPE == "adjusted") {
+                    return(list(tmpSplit[[1]], tmpSplit[[2]], tmpSplit[[3]], tmpSplit[[4]], tmpSplit[[5]], tmpSplit[[10]], tmpSplit[[sigColumnIndex]]))
+                }
             }
             return(NULL)
         })
+        
         sortFunCatProcess <- do.call(rbind, sortFunCatProcess)
         sortFunCatProcess <- data.frame(sortFunCatProcess, stringsAsFactors=FALSE)
         rownames(sortFunCatProcess) <- seq_len(nrow(sortFunCatProcess))
-        colnames(sortFunCatProcess) <- c("Category", "Term", "Count", "Percent", "PValue", "Fold Enrichment", "Benjamini")
+        
+        if(PVALUE_TYPE == "nominal"){
+            colnames(sortFunCatProcess) <- c("Category", "Term", "Count", "Percent", "PValue", "Fold Enrichment")
+        } else if(PVALUE_TYPE == "adjusted") {
+            colnames(sortFunCatProcess) <- c("Category", "Term", "Count", "Percent", "PValue", "Fold Enrichment", sigDFIndex)
+        }
+        
         
         # filter by pvalue (nominal or adjusted)
         if(sigDFIndex == "PValue"){
             sortFunCatProcess <- sortFunCatProcess[sortFunCatProcess$PValue < 0.05, ]
-        } else if(sigDFIndex == "Benjamini"){
-            sortFunCatProcess <- sortFunCatProcess[sortFunCatProcess$Benjamini < 0.05, ]
+        } else if(sigDFIndex == "Benjamini_Hochberg"){
+            sortFunCatProcess <- sortFunCatProcess[sortFunCatProcess$Benjamini_Hochberg < 0.05, ]
         }
         
         sortFunCatProcessNames <- unique(sortFunCatProcess$Category)
         sortFunCatProcess <- lapply(sortFunCatProcessNames, function(x) sortFunCatProcess[sortFunCatProcess$Category == x, ])
         names(sortFunCatProcess) <- sortFunCatProcessNames
-        
         sortFunCatProcess <- lapply(sortFunCatProcess, function(x){
             tmp <- x
             if(sigDFIndex == "PValue"){
                 tmp <- arrange(tmp, PValue)
-            } else if(sigDFIndex == "Benjamini"){
-                tmp <- arrange(tmp, Benjamini)
+            } else if(sigDFIndex == "Benjamini_Hochberg"){
+                tmp <- arrange(tmp, Benjamini_Hochberg)
             }
             tmp <- x %>% slice(seq_len(nodeCutoff))
             return(tmp)
@@ -1927,15 +1959,16 @@ perform_CASRN_enrichment_analysis <- function(CASRNRef, outputBaseDir, outfileBa
         if(sigDFIndex == "PValue"){
             sortFunCatProcess$PValue <- as.numeric(as.character(sortFunCatProcess$PValue))
             sortFunCatProcess <-sortFunCatProcess[order(sortFunCatProcess$PValue), ]
-        } else if(sigDFIndex == "Benjamini"){
-            sortFunCatProcess$Benjamini <- as.numeric(as.character(sortFunCatProcess$Benjamini))
-            sortFunCatProcess <-sortFunCatProcess[order(sortFunCatProcess$Benjamini), ]
+        } else if(sigDFIndex == "Benjamini_Hochberg"){
+            sortFunCatProcess$Benjamini_Hochberg <- as.numeric(as.character(sortFunCatProcess$Benjamini_Hochberg))
+            sortFunCatProcess <-sortFunCatProcess[order(sortFunCatProcess$Benjamini_Hochberg), ]
         }
         sortFunCatProcess <- apply(sortFunCatProcess, 1, function(x) paste0(x, collapse="\t"))
         writeLines(paste0(simpleHeader, paste0(sortFunCatProcess, collapse="\n")), SIMPLE)
         close(SIMPLE)
     }, error=function(cond){
         print("Error: could not write to Chart Simple file.")
+        print(cond)
     })
     
     # Write to matrix file
@@ -1970,6 +2003,7 @@ perform_CASRN_enrichment_analysis <- function(CASRNRef, outputBaseDir, outfileBa
         fwrite(matrixPrintToFile, file=MATRIX, row.names=FALSE, col.names=TRUE, sep="\t")
     }, error=function(cond){
         print("Error: could not write to Matrix file.")
+        print(cond)
     })
 
     # Perform functional term clustering
@@ -1979,6 +2013,7 @@ perform_CASRN_enrichment_analysis <- function(CASRNRef, outputBaseDir, outfileBa
         res <- kappa_cluster(outputBaseDir=outputBaseDir, outfileBase=outfileBase, sortedFunCatTerms=sortedFunCatTerms, sigTerm2CASRNMatrix=sigTerm2CASRNMatrix, sortedFunCatTermsCount=sortedFunCatTermsCount, inputCASRNsCount=inputCASRNsCount, similarityThreshold=similarityThreshold, initialGroupMembership=initialGroupMembership, multipleLinkageThreshold=multipleLinkageThreshold, EASEThreshold=EASEThreshold, term2Pvalue=term2Pvalue, term2Contents=term2Contents, enrichmentUUID=enrichmentUUID, inputCASRNs=inputCASRNs)
     }, error=function(cond){
         print("Error: could not write to Cluster file.")
+        print(cond)
         res <- "success"
     })
     return(res)
@@ -2017,7 +2052,7 @@ kappa_cluster <- function(x, overlap=0.5, outputBaseDir=NULL, outfileBase=NULL, 
     if(PVALUE_TYPE == "nominal"){
         sigDFIndex <- "PValue"
     } else if(PVALUE_TYPE == "adjusted") {
-        sigDFIndex <- "Benjamini"
+        sigDFIndex <- "Benjamini_Hochberg"
     }
     
     # Step#1: Calculate kappa score
@@ -2110,7 +2145,7 @@ kappa_cluster <- function(x, overlap=0.5, outputBaseDir=NULL, outfileBase=NULL, 
         return(NULL)
     })
     ml <- qualifiedSeeds[!vapply(qualifiedSeeds, is.null, FUN.VALUE=logical(1))]
-
+    
     # Step 2.5 - Sort qualified seeds by EASE score before merging
     pValueDF <- data.frame(PValue=unlist(unname(sortedFunCatTermsPValues)), stringsAsFactors=FALSE)
     rownames(pValueDF) <- names(sortedFunCatTermsPValues)
@@ -2187,11 +2222,13 @@ kappa_cluster <- function(x, overlap=0.5, outputBaseDir=NULL, outfileBase=NULL, 
     writeToClusterFile <- unlist(apply(clusterDF, 1, function(clusterRow){
         if(as.numeric(clusterRow["enrichment_score"]) > EASEThreshold){
             clusterScore <- paste0("Annotation Cluster ", clusterRow["cluster_num"], "\tEnrichment Score: ", clusterRow["enrichment_score"])
-            clusterHeader <- paste0("Category\tTerm\tCount\t%\tPValue\tCASRNs\tList Total\tPop Hits\tPop Total\tFold Enrichment\tBonferroni\tBenjamini\tFDR")
+            clusterHeader <- paste0("Category\tTerm\tCount\t%\tPValue\tCASRNs\tList Total\tPop Hits\tPop Total\tFold Enrichment\tBonferroni\tBenjamini_Yekutieli\tBenjamini_Hochberg")
             clusterContentsOrdered <- do.call(rbind.data.frame, lapply(res[[clusterRow["cluster_name"]]], function(termName) term2Contents[[termName]]))
-            colnames(clusterContentsOrdered) <- c("Category", "Term", "Count", "%", "PValue", "CASRNs", "List Total", "Pop Hits", "Pop Total", "Fold Enrichment", "Bonferroni", "Benjamini", "FDR")
+            colnames(clusterContentsOrdered) <- c("Category", "Term", "Count", "%", "PValue", "CASRNs", "List Total", "Pop Hits", "Pop Total", "Fold Enrichment", "Bonferroni", "Benjamini_Yekutieli", "Benjamini_Hochberg")
             clusterContentsOrdered$PValue <- format(clusterContentsOrdered$PValue, scientific=FALSE)
-            clusterContentsOrdered$Benjamini <- format(clusterContentsOrdered$Benjamini, scientific=FALSE)
+            clusterContentsOrdered$Bonferroni <- format(clusterContentsOrdered$Bonferroni, scientific=FALSE)
+            clusterContentsOrdered$Benjamini_Yekutieli <- format(clusterContentsOrdered$Benjamini_Yekutieli, scientific=FALSE)
+            clusterContentsOrdered$Benjamini_Hochberg <- format(clusterContentsOrdered$Benjamini_Hochberg, scientific=FALSE)
             clusterContentsOrdered <- clusterContentsOrdered[order(clusterContentsOrdered[[sigDFIndex]], decreasing=FALSE),]
             clusterContentsOrdered <- apply(clusterContentsOrdered, 1, function(clusterContentRow) paste0(clusterContentRow, collapse="\t"))
             clusterContents <- paste0(clusterContentsOrdered, collapse="\n")
@@ -2384,6 +2421,7 @@ getAnnotationsFunc <- function(enrichmentUUID="-1", annoSelectStr=fullAnnoClassS
                 return(fetchedTerms)
             }, error=function(cond){
                 print("Error creating annotation file.")
+                print(cond)
                 return(NULL)
             })
             return(tmp_fetchedTerms)
@@ -2435,6 +2473,7 @@ getAnnotationsFunc <- function(enrichmentUUID="-1", annoSelectStr=fullAnnoClassS
             return(TRUE)
         }, error=function(cond){
             print("Error creating annotation matrix file.")
+            print(cond)
             return(NULL)
         })
         return(tmp_MatrixOut)
@@ -3695,6 +3734,7 @@ createInput <- function(res, req, transactionId="-1", enrichmentSets, setNames, 
             }
         }, error=function(cond){
             print("Error creating input files for request.")
+            print(cond)
         })
     })
     # Close pool
@@ -3929,9 +3969,18 @@ getBargraph <- function(res, req, transactionId="-1", enrichmentSets){
             if(!tryReadFile){
                 return(list())
             }
+            
             # Reformat P-Values to character vectors so they don't get truncated when being converted to json upon response
             bgChartTmp["PValue"] <- lapply(bgChartTmp["PValue"], function(x) as.character(x))
-            bgChartTmp["Benjamini"] <- lapply(bgChartTmp["Benjamini"], function(x) as.character(x))
+            if("Bonferroni" %in% colnames(bgChartTmp)){
+                bgChartTmp["Bonferroni"] <- lapply(bgChartTmp["Bonferroni"], function(x) as.character(x))
+            }
+            if("Benjamini_Yekutieli" %in% colnames(bgChartTmp)){
+                bgChartTmp["Benjamini_Yekutieli"] <- lapply(bgChartTmp["Benjamini_Yekutieli"], function(x) as.character(x))
+            }
+            if("Benjamini_Hochberg" %in% colnames(bgChartTmp)){
+                bgChartTmp["Benjamini_Hochberg"] <- lapply(bgChartTmp["Benjamini_Hochberg"], function(x) as.character(x))
+            }
             return(bgChartTmp)
         }
         return(list())
