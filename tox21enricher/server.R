@@ -5236,13 +5236,13 @@ shinyServer(function(input, output, session) {
                         if(individualCategory[i, "PValue"] < 0.05){
                             return(individualCategory[i, "PValue"])
                         } else {
-                            return(0) # TODO: is this right?
+                            return(-1) # TODO: is this right?
                         }
                     }))
                     names(PValueAvg) <- individualCategory[, "Term"]
                     # Remove values with non-significant p-values
                     PValueAvg <- PValueAvg[vapply(PValueAvg, function(x){
-                        if(x == 0) {
+                        if(x == -1) {
                             return(FALSE)
                         }
                         return(TRUE)
@@ -5250,6 +5250,7 @@ shinyServer(function(input, output, session) {
                     return(PValueAvg)
                 })
                 names(uniquePValues) <- uniqueCategories
+                
                 # Remove empty categories
                 uniquePValues <- uniquePValues[vapply(uniquePValues, function(x){
                     if(length(x) > 0) {
@@ -6172,8 +6173,8 @@ shinyServer(function(input, output, session) {
                 ) %>% layout(
                     title=catName,
                     margin=list(l=300, r=200, b=160), 
-                    xaxis=list(title="<b>-log<sub>10</sub>(p)</b>", tickfont=list(size=12), automargin=TRUE),
-                    yaxis=list(title="<b>Annotation Terms</b>", tickfont=list(size=10), type="category", automargin=TRUE),
+                    xaxis=list(title="<b>-log<sub>10</sub>(p)</b>", tickfont=list(size=20), automargin=TRUE),
+                    yaxis=list(title="<b>Annotation Terms</b>", tickfont=list(size=20), type="category", tickangle=45, automargin=TRUE),
                     barmode="group",
                     autosize=FALSE,
                     plot_bgcolor="transparent",
