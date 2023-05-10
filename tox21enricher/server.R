@@ -362,7 +362,7 @@ shinyServer(function(input, output, session) {
                 <p>The T3DB database may be downloaded as a large XML file. To parse the data for use in Tox21Enricher, we wrote an iPython script that converts data from XML to TSV/CSV files. These files are then processed by a Perl script to further manipulate the data into the right format for Tox21Enricher.</p>
                 <hr>
             ")),
-            title=HTML(paste0("Annotation selection information ", modalButton("Close"))),
+            title=HTML(paste0("Annotation selection information ", div(style="display:inline-block; float:right;", div(style="display:inline-block; float:right", modalButton("Close"))))),
             footer=tagList(modalButton("Close"))
         ))
     })
@@ -384,7 +384,7 @@ shinyServer(function(input, output, session) {
                 <b>PMID: 35325185</b> - Sherman, B. T., Hao, M., Qiu, J., Jiao, X., Baseler, M. W., Lane, H. C., Imamichi, T., and Chang, W. (2022). DAVID: a web server for functional enrichment analysis and functional annotation of gene lists (2021 update). Nucleic Acids Res. 2022 Jul 5;50(W1):W216-W221. doi: 10.1093/nar/gkac194.
                 </p>
             ")),
-            title=HTML(paste0("Enrichment analysis methodology ", modalButton("Close"))),
+            title=HTML(paste0("Enrichment analysis methodology ", div(style="display:inline-block; float:right;", div(style="display:inline-block; float:right", modalButton("Close"))))),
             footer=tagList(modalButton("Close"))
         ))
     })
@@ -2344,7 +2344,7 @@ shinyServer(function(input, output, session) {
         showModal(modalDialog(
             HTML(paste0("<p><b>Warning</b>: You are about to cancel this request. This action cannot be undone. Continue?</p>")),
             title="Are you sure you want to cancel this request?",
-            footer=tagList(actionButton("cancelConfirm", "Yes, cancel this request."), modalButton("Close"))
+            footer=tagList(actionButton("cancelConfirm", "Yes, cancel this request."), div(style="display:inline-block; float:right;", modalButton("Close")))
         ))
     })
     
@@ -2542,7 +2542,7 @@ shinyServer(function(input, output, session) {
                                 
                                 showModal(
                                     modalDialog(
-                                        title=HTML(paste0(paste0("Annotation file for ", gsub(".txt", "", gsub("__", ": ", setFilesSplit[setFile]))), actionButton(inputId="modalCloseAnnotationTop", label="Close preview"))),
+                                        title=HTML(paste0(paste0("Annotation file for ", gsub(".txt", "", gsub("__", ": ", setFilesSplit[setFile]))), div(style="display:inline-block; float:right", actionButton(inputId="modalCloseAnnotationTop", label="Close preview")))),
                                         footer=actionButton(inputId="modalCloseAnnotation", label="Close preview"),
                                         size="l",
                                         fluidRow(
@@ -2642,7 +2642,7 @@ shinyServer(function(input, output, session) {
                             
                             showModal(
                                 modalDialog(
-                                    title=HTML(paste0(paste0("Input file for ", i), actionButton(inputId="modalCloseInputAnnotationTop", label="Close preview"))),
+                                    title=HTML(paste0(paste0("Input file for ", i), div(style="display:inline-block; float:right", actionButton(inputId="modalCloseInputAnnotationTop", label="Close preview")))),
                                     footer=actionButton(inputId="modalCloseInputAnnotation", label="Close preview"),
                                     size="l",
                                     fluidRow(
@@ -2737,7 +2737,7 @@ shinyServer(function(input, output, session) {
                             
                             showModal(
                                 modalDialog(
-                                    title=HTML(paste0(paste0("Error CASRNs for ", i), actionButton(inputId="modalCloseErrorAnnotationTop", label="Close preview"))),
+                                    title=HTML(paste0(paste0("Error CASRNs for ", i), div(style="display:inline-block; float:right", actionButton(inputId="modalCloseErrorAnnotationTop", label="Close preview")))),
                                     footer=actionButton(inputId="modalCloseErrorAnnotation", label="Close preview"),
                                     size="l",
                                     fluidRow(
@@ -2835,7 +2835,7 @@ shinyServer(function(input, output, session) {
                             
                             showModal(
                                 modalDialog(
-                                    title=HTML(paste0(paste0("Full matrix file for ", i), actionButton(inputId="modalCloseFullMatrixTop", label="Close preview"))),
+                                    title=HTML(paste0(paste0("Full matrix file for ", i), div(style="display:inline-block; float:right", actionButton(inputId="modalCloseFullMatrixTop", label="Close preview")))),
                                     footer=actionButton(inputId="modalCloseFullMatrix", label="Close preview"),
                                     size="l",
                                     fluidRow(
@@ -3320,7 +3320,7 @@ shinyServer(function(input, output, session) {
                                 
                                 showModal(
                                     modalDialog(
-                                        title=HTML(paste0(paste0("Input file for ", i), actionButton(inputId="modalCloseInputEnrichmentTop", label="Close preview"))),
+                                        title=HTML(paste0(paste0("Input file for ", i), div(style="display:inline-block; float:right", actionButton(inputId="modalCloseInputEnrichmentTop", label="Close preview")))),
                                         footer=actionButton(inputId="modalCloseInputEnrichment", label="Close preview"),
                                         size="l",
                                         fluidRow(
@@ -3414,7 +3414,7 @@ shinyServer(function(input, output, session) {
                                 
                                 showModal(
                                     modalDialog(
-                                        title=HTML(paste0(paste0("Chart file for ", i), actionButton(inputId="modalCloseChartTop", label="Close preview"))),
+                                        title=HTML(paste0(paste0("Chart file for ", i), div(style="display:inline-block; float:right", actionButton(inputId="modalCloseChartTop", label="Close preview")))),
                                         footer=actionButton(inputId="modalCloseChart", label="Close preview"),
                                         size="l",
                                         fluidRow(
@@ -3528,7 +3528,7 @@ shinyServer(function(input, output, session) {
                                 
                                 showModal(
                                     modalDialog(
-                                        title=HTML(paste0(paste0("Chart simple file for ", i), actionButton(inputId="modalCloseChartSimpleTop", label="Close preview"))),
+                                        title=HTML(paste0(paste0("Chart simple file for ", i), div(style="display:inline-block; float:right", actionButton(inputId="modalCloseChartSimpleTop", label="Close preview")))),
                                         footer=actionButton(inputId="modalCloseChartSimple", label="Close preview"),
                                         size="l",
                                         fluidRow(
@@ -3681,7 +3681,7 @@ shinyServer(function(input, output, session) {
                                 shinyjs::disable(id="refresh")
                                 showModal(
                                     modalDialog(
-                                        title=HTML(paste0(paste0("Cluster file for ", i), actionButton(inputId="modalCloseClusterTop", label="Close preview"))),
+                                        title=HTML(paste0(paste0("Cluster file for ", i), div(style="display:inline-block; float:right", actionButton(inputId="modalCloseClusterTop", label="Close preview")))),
                                         footer=actionButton(inputId="modalCloseCluster", label="Close preview"),
                                         size="l",
                                         fluidRow(
@@ -3807,7 +3807,7 @@ shinyServer(function(input, output, session) {
                                 
                                 showModal(
                                     modalDialog(
-                                        title=HTML(paste0(paste0("Matrix file for ", i), actionButton(inputId="modalCloseMatrixTop", label="Close preview"))),
+                                        title=HTML(paste0(paste0("Matrix file for ", i), div(style="display:inline-block; float:right", actionButton(inputId="modalCloseMatrixTop", label="Close preview")))),
                                         footer=actionButton(inputId="modalCloseMatrix", label="Close preview"),
                                         size="l",
                                         fluidRow(
@@ -3904,7 +3904,7 @@ shinyServer(function(input, output, session) {
                                 
                                 showModal(
                                     modalDialog(
-                                        title=HTML(paste0(paste0("Error CASRNs for ", i), actionButton(inputId="modalCloseErrorEnrichmentTop", label="Close preview"))),
+                                        title=HTML(paste0(paste0("Error CASRNs for ", i), div(style="display:inline-block; float:right", actionButton(inputId="modalCloseErrorEnrichmentTop", label="Close preview")))),
                                         footer=actionButton(inputId="modalCloseErrorEnrichment", label= "Close preview"),
                                         size="l",
                                         fluidRow(
@@ -4242,7 +4242,7 @@ shinyServer(function(input, output, session) {
                                 shinyjs::disable(id="refresh")
                                 showModal(
                                     modalDialog(
-                                        title=HTML(paste0(paste0(casrn, " "), actionButton(inputId="modalCloseStructureTop", label="Close"))),
+                                        title=HTML(paste0(paste0(casrn, " "), div(style="display:inline-block; float:right", actionButton(inputId="modalCloseStructureTop", label="Close")))),
                                         footer=actionButton(inputId="modalCloseStructure", label="Close"),
                                         size="l",
                                         fluidRow(
@@ -5782,7 +5782,7 @@ shinyServer(function(input, output, session) {
                     shinyjs::disable(id="refresh")
                     showModal(
                         modalDialog(
-                            title=HTML(paste0(paste0("Chemicals for ", termFrom), div(rclipButton("clipboardChartFromTop", HTML(paste0(icon("clipboard"), " Copy chemical list to clipboard (comma-separated)")), paste0(casrnsFrom, collapse=","), modal=TRUE), actionButton(inputId="vennFromButtonCloseChartTop", label="Close")))),
+                            title=HTML(paste0(paste0("Chemicals for ", termFrom), div(rclipButton("clipboardChartFromTop", HTML(paste0(icon("clipboard"), " Copy chemical list to clipboard (comma-separated)")), paste0(casrnsFrom, collapse=","), modal=TRUE), div(style="display:inline-block; float:right", actionButton(inputId="vennFromButtonCloseChartTop", label="Close"))))),
                             footer=div(rclipButton("clipboardChartFrom", HTML(paste0(icon("clipboard"), " Copy chemical list to clipboard (comma-separated)")), paste0(casrnsFrom, collapse=","), modal=TRUE), actionButton(inputId="vennFromButtonCloseChart", label="Close")),
                             size="l",
                             fluidRow(
@@ -5808,7 +5808,7 @@ shinyServer(function(input, output, session) {
                     shinyjs::disable(id="refresh")
                     showModal(
                         modalDialog(
-                            title=HTML(paste0(paste0("Chemicals for ", termTo), div(rclipButton("clipboardChartToTop", HTML(paste0(icon("clipboard"), " Copy chemical list to clipboard (comma-separated)")), paste0(casrnsTo, collapse=","), modal=TRUE), actionButton(inputId="vennToButtonCloseChartTop", label="Close")))),
+                            title=HTML(paste0(paste0("Chemicals for ", termTo), div(rclipButton("clipboardChartToTop", HTML(paste0(icon("clipboard"), " Copy chemical list to clipboard (comma-separated)")), paste0(casrnsTo, collapse=","), modal=TRUE), div(style="display:inline-block; float:right", actionButton(inputId="vennToButtonCloseChartTop", label="Close"))))),
                             footer=div(rclipButton("clipboardChartTo", HTML(paste0(icon("clipboard"), " Copy chemical list to clipboard (comma-separated)")), paste0(casrnsTo, collapse=","), modal=TRUE), actionButton(inputId="vennToButtonCloseChart", label="Close")),
                             size="l",
                             fluidRow(
@@ -5834,7 +5834,7 @@ shinyServer(function(input, output, session) {
                     shinyjs::disable(id="refresh")
                     showModal(
                         modalDialog(
-                            title=HTML(paste0(paste0("Shared chemicals"), div(rclipButton("clipboardChartSharedTop", HTML(paste0(icon("clipboard"), " Copy chemical list to clipboard (comma-separated)")), paste0(casrnsShared, collapse=","), modal=TRUE), actionButton(inputId="vennSharedButtonCloseChartTop", label="Close")))),
+                            title=HTML(paste0(paste0("Shared chemicals"), div(rclipButton("clipboardChartSharedTop", HTML(paste0(icon("clipboard"), " Copy chemical list to clipboard (comma-separated)")), paste0(casrnsShared, collapse=","), modal=TRUE), div(style="display:inline-block; float:right", actionButton(inputId="vennSharedButtonCloseChartTop", label="Close"))))),
                             footer=div(rclipButton("clipboardChartShared", HTML(paste0(icon("clipboard"), " Copy chemical list to clipboard (comma-separated)")), paste0(casrnsShared, collapse=","), modal=TRUE), actionButton(inputId="vennSharedButtonCloseChart", label="Close")),
                             size="l",
                             fluidRow(
@@ -5858,13 +5858,13 @@ shinyServer(function(input, output, session) {
                 output$vennChartDownloadImg <- downloadHandler(
                     filename=paste0("venndiagram.png"),
                     content=function(file){
-                        ggsave(file, plot=vennDiagramPlot)
+                        ggsave(file, plot=vennDiagram)
                     }
                 )
                 output$vennChartDownloadPdf <- downloadHandler(
                     filename=paste0("venndiagram.pdf"),
                     content=function(file){
-                        ggsave(file, plot=vennDiagramPlot)
+                        ggsave(file, plot=vennDiagram)
                     }
                 )
             } else { # Cluster
@@ -5904,7 +5904,7 @@ shinyServer(function(input, output, session) {
                     shinyjs::disable(id="refresh")
                     showModal(
                         modalDialog(
-                            title=HTML(paste0(paste0("Chemicals for ", termFrom), div(rclipButton("clipboardClusterFromTop", HTML(paste0(icon("clipboard"), " Copy chemical list to clipboard (comma-separated)")), paste0(casrnsFrom, collapse=","), modal=TRUE), actionButton(inputId="vennFromButtonCloseClusterTop", label="Close")))),
+                            title=HTML(paste0(paste0("Chemicals for ", termFrom), div(rclipButton("clipboardClusterFromTop", HTML(paste0(icon("clipboard"), " Copy chemical list to clipboard (comma-separated)")), paste0(casrnsFrom, collapse=","), modal=TRUE), div(style="display:inline-block; float:right", actionButton(inputId="vennFromButtonCloseClusterTop", label="Close"))))),
                             footer=div(rclipButton("clipboardClusterFrom", HTML(paste0(icon("clipboard"), " Copy chemical list to clipboard (comma-separated)")), paste0(casrnsFrom, collapse=","), modal=TRUE), actionButton(inputId="vennFromButtonCloseCluster", label="Close")),
                             size="l",
                             fluidRow(
@@ -5930,7 +5930,7 @@ shinyServer(function(input, output, session) {
                     shinyjs::disable(id="refresh")
                     showModal(
                         modalDialog(
-                            title=HTML(paste0(paste0("Chemicals for ", termTo), div(rclipButton("clipboardClusterToTop", HTML(paste0(icon("clipboard"), " Copy chemical list to clipboard (comma-separated)")), paste0(casrnsTo, collapse=","), modal=TRUE), actionButton(inputId="vennToButtonCloseClusterTop", label="Close")))),
+                            title=HTML(paste0(paste0("Chemicals for ", termTo), div(rclipButton("clipboardClusterToTop", HTML(paste0(icon("clipboard"), " Copy chemical list to clipboard (comma-separated)")), paste0(casrnsTo, collapse=","), modal=TRUE), div(style="display:inline-block; float:right", actionButton(inputId="vennToButtonCloseClusterTop", label="Close"))))),
                             footer=div(rclipButton("clipboardClusterTo", HTML(paste0(icon("clipboard"), " Copy chemical list to clipboard (comma-separated)")), paste0(casrnsTo, collapse=","), modal=TRUE), actionButton(inputId="vennToButtonCloseCluster", label="Close")),
                             size="l",
                             fluidRow(
@@ -5956,7 +5956,7 @@ shinyServer(function(input, output, session) {
                     shinyjs::disable(id="refresh")
                     showModal(
                         modalDialog(
-                            title=HTML(paste0(paste0("Shared chemicals"), div(rclipButton("clipboardClusterSharedTop", HTML(paste0(icon("clipboard"), " Copy chemical list to clipboard (comma-separated)")), paste0(casrnsShared, collapse=","), modal=TRUE), actionButton(inputId="vennSharedButtonCloseClusterTop", label="Close")))),
+                            title=HTML(paste0(paste0("Shared chemicals"), div(rclipButton("clipboardClusterSharedTop", HTML(paste0(icon("clipboard"), " Copy chemical list to clipboard (comma-separated)")), paste0(casrnsShared, collapse=","), modal=TRUE), div(style="display:inline-block; float:right", actionButton(inputId="vennSharedButtonCloseClusterTop", label="Close"))))),
                             footer=div(rclipButton("clipboardClusterShared", HTML(paste0(icon("clipboard"), " Copy chemical list to clipboard (comma-separated)")), paste0(casrnsShared, collapse=","), modal=TRUE), actionButton(inputId="vennSharedButtonCloseCluster", label="Close")),
                             size="l",
                             fluidRow(
@@ -5980,13 +5980,13 @@ shinyServer(function(input, output, session) {
                 output$vennClusterDownloadImg <- downloadHandler(
                     filename=paste0("venndiagram.png"),
                     content=function(file){
-                        ggsave(file, plot=vennDiagramPlot)
+                        ggsave(file, plot=vennDiagram)
                     }
                 )
                 output$vennClusterDownloadPdf <- downloadHandler(
                     filename=paste0("venndiagram.pdf"),
                     content=function(file){
-                        ggsave(file, plot=vennDiagramPlot)
+                        ggsave(file, plot=vennDiagram)
                     }
                 )
             }

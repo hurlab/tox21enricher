@@ -2151,11 +2151,10 @@ kappa_cluster <- function(x, overlap=0.5, outputBaseDir=NULL, outfileBase=NULL, 
     rownames(pValueDF) <- names(sortedFunCatTermsPValues)
     mlSort <- unlist(lapply(ml, function(y) calculate_Enrichment_Score(y, pValueDF)))
     mlIDs <- unlist(lapply(ml, function(y) UUIDgenerate()))
-    mlSortDF <- data.frame(id=mlIDs, enrichment_score=mlSort)
-    mlSortDF <- mlSortDF[order(mlSortDF$enrichment_score, decreasing=TRUE), ] # Sort by EASE score in desc. order
     names(ml) <- mlIDs
-    ml <- ml[mlSortDF$id]
-    ml <- unname(ml)
+    mlSortDF <- data.frame(id=mlIDs, enrichment_score=mlSort, stringsAsFactors=FALSE)
+    mlSortDF <- mlSortDF[order(as.numeric(mlSortDF$enrichment_score), decreasing=TRUE), ] # Sort by EASE score in desc. order
+    ml <- lapply(mlSortDF$id, function(x) ml[[x]])
     
     #  Step#3: Iteratively merge qualifying seeds
     # Update status file

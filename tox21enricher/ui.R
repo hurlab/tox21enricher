@@ -101,13 +101,17 @@ shinyUI(function(){
         # Application title
         title="Tox21Enricher",
         tags$head(tags$script(js_link)),
+        tags$style(
+            type='text/css',
+            '.modal-dialog { width: fit-content !important; max-width: 100%; }'
+        ),
         titlePanel(actionLink(inputId="titleLink", label="Tox21Enricher")),
         # Sidebar with options
         sidebarLayout(
             sidebarPanel(
                 id="sidebar",
                 width=2,
-                style="position:fixed; overflow:visible; width:15%; height:600px; z-index:9999; overflow-y:scroll;",
+                style="position:fixed; overflow:visible; width:15%; height:600px; z-index:1; overflow-y:scroll;",
                 # Define JS for additional config & functions
                 useShinyjs(),
                 extendShinyjs(text=js_cbx, functions=c('check', 'uncheck')),
@@ -172,18 +176,6 @@ shinyUI(function(){
                         uiOutput("annotations") %>% withSpinner(),
                     ),
                     hr(),
-                    fluidRow(
-                        h3("Select Enrichment Cutoff"),
-                        tipify(sliderInput(inputId="nodeCutoff", label="Select enrichment cutoff", value=10, min=1, max=50, step=1, width="100%"), "This will determine the maximum number of results per data set and may affect how many nodes are generated during network generation. (default=10). Higher values may cause the enrichment process to take longer (Not available when viewing annotations for Tox21 chemicals).", placement="bottom")
-                    ),
-                    hr(),
-                    
-                    fluidRow(
-                        # Pvalue method selection
-                        h3("Select P-Value Calculation Method"),
-                        tipify(radioButtons(inputId="pvalueTypeSelector", label="Select p-value calculation method", choiceNames=c("Nominal p-value", "Adjusted p-value (Benjamini-Hochberg correction)"), choiceValues=c("nominal", "adjusted")), "During enrichment, should Tox21Enricher use a nominal p-value with no adjustment or a Benjamini-Hochberg-corrected p-value?")
-                    ),
-                    hr(),
                     
                     fluidRow(
                         # Enrichment type selection
@@ -203,22 +195,29 @@ shinyUI(function(){
                     # Chemical input
                     fluidRow(
                         h3(textOutput("input_type")),
-                        fluidRow(id="casrnExamples",
-                            column(3,
-                                actionButton("example_casrns", "CASRNs example single set"),
-                                actionButton("example_casrnsMulti", "CASRNs example multiple sets"))
-                        ),
-                        hidden( #hide SMILES example button by default
-                            fluidRow(id="smilesExamples",
-                                column(3,
-                                    actionButton("example_smiles", "SMILES example set"),
-                                    actionButton("jsme_button", "Draw molecules with JSME")),
+                        div(id="casrnExamples",
+                            column(4,
+                                actionButton("example_casrns", "CASRNs example single set")
+                            ),
+                            column(4,
+                               actionButton("example_casrnsMulti", "CASRNs example multiple sets")
                             )
                         ),
-                        fluidRow(
-                            column(3,
-                                actionButton("clear_casrns", "Clear input box")),
+                        hidden( #hide SMILES example button by default
+                            div(id="smilesExamples",
+                                column(4,
+                                    actionButton("example_smiles", "SMILES example set"),
+                                ),
+                                column(4, 
+                                    actionButton("jsme_button", "Draw molecules with JSME")
+                                )
+                            )
                         ),
+                        
+                        column(4,
+                            actionButton("clear_casrns", "Clear input box")
+                        ),
+                        
                         # Display JSME interface
                         hidden(
                             fluidRow(id="jsmeInput",
@@ -245,6 +244,18 @@ shinyUI(function(){
                             textAreaInput(inputId="submitted_chemicals", label=NULL, rows=12, width="100%", value="", resize="both"),
                         )
                     ),
+                    
+                    hr(),
+                    column(6, 
+                        h3("Select Enrichment Cutoff"),
+                        tipify(sliderInput(inputId="nodeCutoff", label="Select enrichment cutoff", value=10, min=1, max=50, step=1, width="50%"), "This will determine the maximum number of results per data set and may affect how many nodes are generated during network generation. (default=10). Higher values may cause the enrichment process to take longer (Not available when viewing annotations for Tox21 chemicals).", placement="right")
+                    ),
+                    column(6,
+                        # Pvalue method selection
+                        h3("Select P-Value Calculation Method"),
+                        tipify(radioButtons(inputId="pvalueTypeSelector", label="Select p-value calculation method", choiceNames=c("Nominal p-value", "Adjusted p-value (Benjamini-Hochberg correction)"), choiceValues=c("nominal", "adjusted")), "During enrichment, should Tox21Enricher use a nominal p-value with no adjustment or a Benjamini-Hochberg-corrected p-value?", placement="left")
+                    ),
+                    hr(),
                     column(12,
                         actionButton(inputId="submit", "Submit", icon=icon("arrow-alt-circle-right"))
                     ), 
