@@ -5140,7 +5140,7 @@ shinyServer(function(input, output, session) {
                                                 yaxis=list(title="<b>Input Sets</b>", type="category"),
                                                 plot_bgcolor="transparent",
                                                 paper_bgcolor="transparent",
-                                                font=list(color="#000000")
+                                                font=list(size=12, color="#000000")
                                             )
                                         )
                                     )
@@ -6171,12 +6171,13 @@ shinyServer(function(input, output, session) {
                     marker=list(color=colorsList[names(tmpBgCleaned[1])]),
                     height=1000
                 ) %>% layout(
-                    title=catName,
-                    margin=list(l=300, r=200, b=160), 
-                    xaxis=list(title="<b>-log<sub>10</sub>(p)</b>", tickfont=list(size=20), automargin=TRUE),
-                    yaxis=list(title="<b>Annotation Terms</b>", tickfont=list(size=20), type="category", tickangle=45, automargin=TRUE),
+                    title=list(text=catName, font=list(size=30)),
+                    margin=list(l=300, r=200, b=160, t=160), 
+                    xaxis=list(title="<b>-log<sub>10</sub>(p)</b>", titlefont=list(size=30), tickfont=list(size=24), automargin=TRUE),
+                    yaxis=list(title="<b>Annotation Terms</b>", titlefont=list(size=30), tickfont=list(size=24), type="category", tickangle=45, automargin=TRUE),
                     barmode="group",
-                    autosize=FALSE,
+                    autosize=TRUE,
+                    legend=list(font=list(size=20)),
                     plot_bgcolor="transparent",
                     paper_bgcolor="transparent",
                     font=list(color="#000000")
@@ -6192,7 +6193,9 @@ shinyServer(function(input, output, session) {
                 return(tabPanel(title=catName, 
                     div(
                         fluidRow(
-                            bgDisplay
+                            div(style="overflow:scroll;",
+                                bgDisplay
+                            )
                         ),
                         fluidRow(
                             DT::datatable({dataTableBgValues},
