@@ -348,7 +348,7 @@ dbDisconnect(poolClean)
 # Define info for connecting to PostgreSQL Tox21Enricher database on server startup
 pool <- conn()
 # Grab annotation list from Tox21Enricher database on server startup
-queryAnnotations <- sqlInterpolate(ANSI(), "SELECT chemical_detail.casrn, annotation_class.annoclassname, annotation_detail.annoterm FROM term2casrn_mapping INNER JOIN chemical_detail ON term2casrn_mapping.casrnuid_id=chemical_detail.casrnuid INNER JOIN annotation_detail ON term2casrn_mapping.annotermid=annotation_detail.annotermid INNER JOIN annotation_class ON term2casrn_mapping.annoclassid=annotation_class.annoclassid;")
+queryAnnotations <- sqlInterpolate(ANSI(), "SELECT chemical_detail.casrn, annotation_class.annoclassname, annotation_detail.annoterm FROM term2casrn_mapping INNER JOIN chemical_detail ON term2casrn_mapping.casrnuid=chemical_detail.casrnuid INNER JOIN annotation_detail ON term2casrn_mapping.annotermid=annotation_detail.annotermid INNER JOIN annotation_class ON term2casrn_mapping.annoclassid=annotation_class.annoclassid;")
 outpAnnotations <- dbGetQuery(pool, queryAnnotations)
 
 # Grab annotation details
@@ -604,10 +604,15 @@ performEnrichment <- function(enrichmentUUID="-1", annoSelectStr=fullAnnoClassSt
     # Create DAVID Chart/Cluster files
     create_david_chart_cluster(baseDirName, nodeCutoff, "ALL", "P", 0.05, "P", enrichmentUUID)
     # zip result files
-    if(dir.exists(baseDirName)){
-        zipDir <- dir(baseDirName, recursive=TRUE, include.dirs=TRUE)
-        filesToZip <- unlist(lapply(zipDir, function(x) paste0(baseDirName, "/", x)))
-        system2("cd", paste0(baseDirName, "/ ; zip -r9X ./tox21enricher_", enrichmentUUID, ".zip ./*"))
+    if(dir.exists(inDir) & dir.exists(outDir)){
+        system2("cp", paste0("-r ", inDir, "/. ", outDir))
+        inFilesToDelete <- Sys.glob(paste0(inDir, "/*"))
+        inFilesToDelete <- unlist(lapply(inFilesToDelete, function(inFileToDelete) {
+            tmp <- unlist(str_split(inFileToDelete, "/"))
+            return(paste0(outDir, "/", tmp[length(tmp)]))
+        }))
+        system2("cd", paste0(outDir, "/ ; zip -r9X ./tox21enricher_", enrichmentUUID, ".zip ./*"))
+        system2("rm", paste0(inFilesToDelete, collapse=" "))
     } else { # Return with error if did not complete. Do not update in database
         return("problem creating directory for request") 
     }
@@ -2343,7 +2348,21 @@ getAnnotationsFunc <- function(enrichmentUUID="-1", annoSelectStr=fullAnnoClassS
             # Connect to db
             poolMatrix <- conn()
             # Grab matrix
-            queryMatrix <- sqlInterpolate(ANSI(), paste0("SELECT annotation FROM annotation_matrix WHERE casrn='", CASRN, "';"))
+            queryMatrix <- sqlInterpolate(ANSI(), paste0("
+                SELECT
+                    concat(ac.annoclassname , '\t', ad.annoterm) as annotation
+                FROM
+                    annotation_detail ad,
+                    annotation_class ac,
+                    term2casrn_mapping tcm,
+                    chemical_detail cd
+                WHERE
+                    tcm.annoclassid = ac.annoclassid
+                AND tcm.annotermid = ad.annotermid
+                AND tcm.casrnuid = cd.casrnuid
+                AND cd.casrn='", CASRN, "';"
+            ))
+            
             outpMatrix <- tryCatch({
                 dbGetQuery(poolMatrix, queryMatrix)
             }, error=function(e){
@@ -2352,13 +2371,10 @@ getAnnotationsFunc <- function(enrichmentUUID="-1", annoSelectStr=fullAnnoClassS
             })
             # poolClose(poolMatrix)
             dbDisconnect(poolMatrix)
-            fetchedCASRNs <- outpMatrix[, 1]
-            
-            # Split up list of annotation IDs
-            fetchedCASRNsList <- unlist(str_split(fetchedCASRNs, "\\|"))
-            fetchedCASRNsList <- fetchedCASRNsList[lapply(fetchedCASRNsList, length) > 0]
-            fetchedCASRNsList <- fetchedCASRNsList[-length(fetchedCASRNsList)]
-            return(fetchedCASRNsList)
+            if(nrow(outpMatrix) > 0){
+                return(outpMatrix$annotation)
+            }
+            return(NULL)
         })
         # Set list names to CASRNs
         names(annotations) <- inputCASRNs
@@ -2386,38 +2402,15 @@ getAnnotationsFunc <- function(enrichmentUUID="-1", annoSelectStr=fullAnnoClassS
             tmp_fetchedTerms <- tryCatch({
                 file.create(paste0(outDir, "/", setName, "__", CASRN, ".txt"))
                 OUTPUT <- file(paste0(outDir, "/", setName, "__", CASRN, ".txt"))
-                outAnnotationList <- paste0(annotations[[CASRN]], collapse="\n")
-                
-                # Fetch actual term names from IDs
-                fetchedTerms <- lapply(annotations[[CASRN]], function(annotation){
-                    # Connect to db
-                    poolMatrix <- conn()
-                    queryTerm <- sqlInterpolate(ANSI(), paste0("SELECT term FROM annotation_matrix_terms WHERE id=", annotation, ";"))
-                    outpTerm <- dbGetQuery(poolMatrix, queryTerm)
-                    # poolClose(poolMatrix)
-                    dbDisconnect(poolMatrix)
-                    fetchedTerm <- outpTerm[[1, 1]]
-                    
-                    # Check if the fetched term is in the selected annotations
-                    fetchedTermSplit <- unlist(str_split(fetchedTerm, "__"), recursive=FALSE)[1]
-                    if(fetchedTermSplit %in% annoSelect){
-                        # replace "__" with "\t" for better utility and return
-                        return(gsub("__", "\t", fetchedTerm))
-                    }
-                    # else, return null if we deselected the annotation set for this given annotation
-                    return(NULL)
-                })
-                fetchedTerms <- fetchedTerms[!vapply(fetchedTerms, is.null, FUN.VALUE=logical(1))]
-                fetchedTerms <- unlist(fetchedTerms, recursive=FALSE)
-                
+                outAnnotationList <- annotations[[CASRN]]
                 # Write annotations to output file
-                if(!is.null(fetchedTerms)){
-                    writeLines(fetchedTerms, OUTPUT)
+                if(!is.null(outAnnotationList)){
+                    writeLines(paste0(outAnnotationList, collapse="\n"), OUTPUT)
                 } else { # blank file if no matches
                     writeLines("No matching annotations.", OUTPUT)
                 }
                 close(OUTPUT)
-                return(fetchedTerms)
+                return(outAnnotationList)
             }, error=function(cond){
                 print("Error creating annotation file.")
                 print(cond)
@@ -2502,10 +2495,15 @@ getAnnotationsFunc <- function(enrichmentUUID="-1", annoSelectStr=fullAnnoClassS
     }
     
     # zip result files
-    if(dir.exists(outDir)){
-        zipDir <- dir(outDir, recursive=TRUE, include.dirs=TRUE)
-        filesToZip <- unlist(lapply(zipDir, function(x) paste0(outDir, "/", x)))
-        system2("cd", paste0(outDir, "/ ; zip -r9X ./tox21enricher_", enrichmentUUID, ".zip ./*")) 
+    if(dir.exists(inDir) & dir.exists(outDir)){
+        system2("cp", paste0("-r ", inDir, "/. ", outDir))
+        inFilesToDelete <- Sys.glob(paste0(inDir, "/*"))
+        inFilesToDelete <- unlist(lapply(inFilesToDelete, function(inFileToDelete) {
+            tmp <- unlist(str_split(inFileToDelete, "/"))
+            return(paste0(outDir, "/", tmp[length(tmp)]))
+        }))
+        system2("cd", paste0(outDir, "/ ; zip -r9X ./tox21enricher_", enrichmentUUID, ".zip ./*"))
+        system2("rm", paste0(inFilesToDelete, collapse=" "))
     } else { # Return with error if did not complete. Do not update in database
         return("problem creating result files for request") 
     }
@@ -2789,9 +2787,6 @@ queue <- function(res, req, mode="", enrichmentUUID="-1", annoSelectStr=fullAnno
         # Release lock
         query <- sqlInterpolate(ANSI(), paste0("UPDATE queue SET lock=0 WHERE uuid='", enrichmentUUID, "';"), id="setLock")
         outp <- dbExecute(poolFinished, query)
-        
-        # Close pool
-        # poolClose(poolFinished)
         dbDisconnect(poolFinished)
     }, seed=TRUE)
     return(TRUE)
@@ -3995,7 +3990,7 @@ getBargraph <- function(res, req, transactionId="-1", enrichmentSets){
 #* @param input Prepared string with the current input set generated by Tox21Enricher.
 #* @param qval Q-value for use in network generation.
 #* @get /getNetwork
-getNetwork <- function(res, req, transactionId="-1", cutoff, mode, input, qval){
+getNetwork <- function(res, req, transactionId="-1", cutoff, mode, input, qval=0.05){
     if(!grepl("[A-Za-z0-9]+-[A-Za-z0-9]+-[A-Za-z0-9]+-[A-Za-z0-9]+-[A-Za-z0-9]+", transactionId)){
         res$status <- 400
         return("Error: Incorrect format for argument 'transactionId'.")
@@ -4017,11 +4012,13 @@ getNetwork <- function(res, req, transactionId="-1", cutoff, mode, input, qval){
     }
     if(is.na(as.numeric(qval))){
         res$status <- 400
-        return("Error: Invalid value for argument 'qval'. Must be between 0.01 and 1.00 (inclusive).")
-    } else if(as.numeric(qval) < 0.01 | as.numeric(qval) > 1.00){
-        res$status <- 400
-        return("Error: Invalid value for argument 'qval'. Must be between 0.01 and 1.00 (inclusive).")
+        return("Error: Invalid value for q-value.")
     }
+    if(!is.finite(as.numeric(10^-(as.numeric(qval))))){
+        res$status <- 400
+        return("Error: Invalid value for q-value.")
+    }
+    
     input <- unlist(str_split(input, "#"))
     baseDirName <- paste0(APP_DIR, OUT_DIR, transactionId, "/")
     chartForNetFile <- NULL
@@ -4083,7 +4080,8 @@ getNetwork <- function(res, req, transactionId="-1", cutoff, mode, input, qval){
         return(NULL)
     }))
     chartNetworkUIDs <- chartNetworkUIDs[!vapply(chartNetworkUIDs, is.null, FUN.VALUE=logical(1))]
-    # If no UIDs, return empty list to trigger error handline on client
+    
+    # If no UIDs, return empty list to trigger error handling on client
     if(length(chartNetworkUIDs) < 1) {
         return(list())
     }
@@ -4103,11 +4101,9 @@ getNetwork <- function(res, req, transactionId="-1", cutoff, mode, input, qval){
         ON a.annoclassid=ac.annoclassid
         LEFT JOIN annotation_class bc 
         ON b.annoclassid=bc.annoclassid
-        WHERE p.term1uid IN (", termsStringPlaceholder, ") AND p.term2uid IN (", termsStringPlaceholder, ") AND p.qvalue <", qval, ";"
+        WHERE p.term1uid IN (", termsStringPlaceholder, ") AND p.term2uid IN (", termsStringPlaceholder, ") AND p.qvalue <", 10^-(as.numeric(qval)), ";"
     ), id="addToDb")
     outpNetwork <- dbGetQuery(poolNetwork, queryNetwork)
-    # Close pool
-    # poolClose(poolNetwork)
     dbDisconnect(poolNetwork)
     return(outpNetwork)
 }
@@ -4149,23 +4145,71 @@ getNodeChemicals <- function(res, req, termFrom, termTo, classFrom, classTo){
     # Connect to db
     poolNode <- conn()
     # Get internal ID number of From annotation
-    nodeQuery <- sqlInterpolate(ANSI(), paste0( "SELECT id FROM annotation_matrix_terms WHERE term='", classFrom, "__", termFrom, "';" ), id="getFromID")
+    nodeQuery <- sqlInterpolate(ANSI(), paste0("
+        SELECT DISTINCT
+            ad.annotermid
+        FROM
+            annotation_detail ad,
+            annotation_class ac,
+            term2casrn_mapping tcm
+            
+        WHERE
+            tcm.annotermid = ad.annotermid
+        AND tcm.annoclassid = ac.annoclassid
+        AND ac.annoclassname = '", classFrom, "'
+        AND ad.annoterm = '", termFrom, "'
+    ;" ), id="getFromID")
+    
     nodeOutp <- dbGetQuery(poolNode, nodeQuery)
     fromID <- nodeOutp
+    
     # Get internal ID number of To annotation
-    nodeQuery <- sqlInterpolate(ANSI(), paste0( "SELECT id FROM annotation_matrix_terms WHERE term='", classTo, "__", termTo, "';" ), id="getToID")
+    nodeQuery <- sqlInterpolate(ANSI(), paste0("
+        SELECT DISTINCT
+            ad.annotermid
+        FROM
+            annotation_detail ad,
+            annotation_class ac,
+            term2casrn_mapping tcm
+            
+        WHERE
+            tcm.annotermid = ad.annotermid
+        AND tcm.annoclassid = ac.annoclassid
+        AND ac.annoclassname = '", classTo, "'
+        AND ad.annoterm = '", termTo, "'
+    ;" ), id="getToID")
+    
     nodeOutp <- dbGetQuery(poolNode, nodeQuery)
     toID <- nodeOutp
     # Get list of casrns associated with From annotation
-    nodeQuery <- sqlInterpolate(ANSI(), paste0( "SELECT casrn FROM annotation_matrix WHERE annotation LIKE '%", fromID, "%';" ), id="getCasrnsFrom")
+    nodeQuery <- sqlInterpolate(ANSI(), paste0("
+        SELECT
+            cd.casrn
+        FROM
+            term2casrn_mapping tcm,
+            chemical_detail cd
+        WHERE
+            tcm.casrnuid = cd.casrnuid
+        AND tcm.annotermid = ", fromID, "
+    ;" ), id="getCasrnsFrom")
     nodeOutp <- dbGetQuery(poolNode, nodeQuery)
     casrnsFrom <- nodeOutp
+    
     # Get list of casrns associated with To annotation
-    nodeQuery <- sqlInterpolate(ANSI(), paste0( "SELECT casrn FROM annotation_matrix WHERE annotation LIKE '%", toID, "%';" ), id="getCasrnsTo")
+    nodeQuery <- sqlInterpolate(ANSI(), paste0("
+        SELECT
+            cd.casrn
+        FROM
+            term2casrn_mapping tcm,
+            chemical_detail cd
+        WHERE
+            tcm.casrnuid = cd.casrnuid
+        AND tcm.annotermid = ", toID, "
+    ;" ), id="getCasrnsTo")
+    
     nodeOutp <- dbGetQuery(poolNode, nodeQuery)
     casrnsTo <- nodeOutp
-    # Close pool
-    #poolClose(poolNode)
+    
     dbDisconnect(poolNode)
     return(list(casrnsFrom=casrnsFrom[, "casrn"], casrnsTo=casrnsTo[, "casrn"]))
 }

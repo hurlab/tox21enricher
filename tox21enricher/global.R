@@ -1,6 +1,7 @@
 # Load shared libraries
 library(dplyr)
 library(DT)
+library(heatmaply)
 library(httr)
 library(igraph)
 library(igraphdata)

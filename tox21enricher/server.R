@@ -2265,12 +2265,15 @@ shinyServer(function(input, output, session) {
         tableLoaded$loaded <- TRUE
         return(TRUE)
     }
-    
+    # Reactive variable to store node cutoff when reloading results
+    reactiveCutoff <- reactiveValues(cutoff=10)
     redirectToResultsPage <- function(){
         mode <- inputSetList$inputSet[1, "Mode"]
         transactionId <- inputSetList$inputSet[1, "UUID"]
         annoSelectStr <- gsub(", ", "=checked,", inputSetList$inputSet[1, "Selected.Annotations"], fixed=TRUE)
         nodeCutoff <- inputSetList$inputSet[1, "Node.Cutoff"]
+        reactiveCutoff$cutoff <- nodeCutoff
+        
         # Query the API to see if we ran into an error
         resp <- NULL
         tryError <- tryCatch({
@@ -4022,13 +4025,13 @@ shinyServer(function(input, output, session) {
                                    radioButtons(inputId=paste0("hHeatmapColorControl__", i), label="Select 1 color for heatmap:", choices=c("white", "gray", "black", "red", "blue", "yellow", "green", "brown", "purple", "orange"), selected=hHeatmapColor[[paste0("color__", i)]])
                                 ),
                                 column(10,
-                                    plot_ly(x=gctAnnoNames, y=gctCASRNNames, z=gctFileMatrix, colors=colorRamp(c(lHeatmapColor[[paste0("color__", i)]], hHeatmapColor[[paste0("color__", i)]])), type="heatmap", xgap=2, ygap=2 ) %>%
+                                    heatmaply(gctFileMatrix, seriation="OLO", dendrogram="both", grid_gap=2, xlab="<b>Annotations</b>", ylab="<b>Input CASRNs</b>", scale_fill_gradient_fun=ggplot2::scale_fill_gradient2(low=lHeatmapColor[[paste0("color__", i)]], high=hHeatmapColor[[paste0("color__", i)]], midpoint=0.5)) %>%
                                     layout(
                                         autosize=TRUE,
                                         showlegend=FALSE,
                                         margin=list(r=200, b=200),
-                                        xaxis=list(title="<b>Annotations</b>", tickfont=list(size=9), tickangle=15, automargin=TRUE),
-                                        yaxis=list(title="<b>Input CASRNs</b>", type="category", automargin=TRUE),
+                                        xaxis=list(tickfont=list(size=9, color="#000000"), tickangle=15),
+                                        yaxis=list(tickfont=list(color="#000000")),
                                         plot_bgcolor="transparent",
                                         paper_bgcolor="transparent",
                                         font=list(color="#000000")
@@ -4050,13 +4053,13 @@ shinyServer(function(input, output, session) {
                                             radioButtons(inputId=paste0("hHeatmapColorControl__", i), label="Select 1 color for heatmap:", choices=c("white", "gray", "black", "red", "blue", "yellow", "green", "brown", "purple", "orange"), selected=hHeatmapColor[[paste0("color__", i)]])
                                         ),
                                         column(10,
-                                            plot_ly(x=gctAnnoNames, y=gctCASRNNames, z=gctFileMatrix, colors=colorRamp(c(lHeatmapColor[[paste0("color__", i)]], hHeatmapColor[[paste0("color__", i)]])), type="heatmap", xgap=2, ygap=2 ) %>%
+                                            heatmaply(gctFileMatrix, seriation="OLO", dendrogram="both", grid_gap=2, xlab="<b>Annotations</b>", ylab="<b>Input CASRNs</b>", scale_fill_gradient_fun=ggplot2::scale_fill_gradient2(low=lHeatmapColor[[paste0("color__", i)]], high=hHeatmapColor[[paste0("color__", i)]], midpoint=0.5)) %>%
                                             layout(
                                                 autosize=TRUE,
                                                 showlegend=FALSE,
                                                 margin=list(r=200, b=200),
-                                                xaxis=list(title="<b>Annotations</b>", tickfont=list(size=9), tickangle=15, automargin=TRUE),
-                                                yaxis=list(title="<b>Input CASRNs</b>", type="category", automargin=TRUE),
+                                                xaxis=list(tickfont=list(size=9, color="#000000"), tickangle=15),
+                                                yaxis=list(tickfont=list(color="#000000")),
                                                 plot_bgcolor="transparent",
                                                 paper_bgcolor="transparent",
                                                 font=list(color="#000000")
@@ -4077,13 +4080,13 @@ shinyServer(function(input, output, session) {
                                        radioButtons(inputId=paste0("hHeatmapColorControl__", i), label="Select 1 color for heatmap:", choices=c("white", "gray", "black", "red", "blue", "yellow", "green", "brown", "purple", "orange"), selected=hHeatmapColor[[paste0("color__", i)]])
                                     ),
                                     column(10,
-                                        plot_ly(x=gctAnnoNames, y=gctCASRNNames, z=gctFileMatrix, colors=colorRamp(c(lHeatmapColor[[paste0("color__", i)]], hHeatmapColor[[paste0("color__", i)]])), type="heatmap", xgap=2, ygap=2 ) %>%
+                                        heatmaply(gctFileMatrix, seriation="OLO", dendrogram="both", grid_gap=2, xlab="<b>Annotations</b>", ylab="<b>Input CASRNs</b>", scale_fill_gradient_fun=ggplot2::scale_fill_gradient2(low=lHeatmapColor[[paste0("color__", i)]], high=hHeatmapColor[[paste0("color__", i)]], midpoint=0.5)) %>%
                                         layout(
                                             autosize=TRUE,
                                             showlegend=FALSE,
                                             margin=list(r=200, b=200),
-                                            xaxis=list(title="<b>Annotations</b>", tickfont=list(size=9), tickangle=15, automargin=TRUE),
-                                            yaxis=list(title="<b>Input CASRNs</b>", type="category", automargin=TRUE),
+                                            xaxis=list(tickfont=list(size=9, color="#000000"), tickangle=15),
+                                            yaxis=list(tickfont=list(color="#000000")),
                                             plot_bgcolor="transparent",
                                             paper_bgcolor="transparent",
                                             font=list(color="#000000")
@@ -4745,14 +4748,14 @@ shinyServer(function(input, output, session) {
                 clusterClasses <- unique(unlist(lapply(colnames(gctFileClusterMatrix), function(x) unlist(str_split(x, " \\| "))[1])))
             }
             # Generate networks for chart & cluster
-            chartFullNetwork <- generateNetwork(transactionId=transactionId, cutoff=cutoff, networkMode="chart", inputNetwork=names(enrichmentSets), qval=0.05, physicsEnabled=FALSE, smoothCurve=TRUE, keep=chartClasses)
-            clusterFullNetwork <- generateNetwork(transactionId=transactionId, cutoff=cutoff, networkMode="cluster", inputNetwork=names(enrichmentSets), qval=0.05, physicsEnabled=FALSE, smoothCurve=TRUE, keep=clusterClasses)
+            chartFullNetwork <- generateNetwork(transactionId=transactionId, cutoff=cutoff, networkMode="chart", inputNetwork=names(enrichmentSets), qval=5, physicsEnabled=FALSE, smoothCurve=TRUE, keep=chartClasses)
+            clusterFullNetwork <- generateNetwork(transactionId=transactionId, cutoff=cutoff, networkMode="cluster", inputNetwork=names(enrichmentSets), qval=5, physicsEnabled=FALSE, smoothCurve=TRUE, keep=clusterClasses)
             
             lHeatmapColorChart$color <- "white"
             hHeatmapColorChart$color <- "red"
             lHeatmapColorCluster$color <- "white"
             hHeatmapColorCluster$color <- "red"
-            
+
             # Display heatmap/network panels
             output[["chartHeatmap"]] <- renderUI(
                 fluidRow(
@@ -4783,7 +4786,13 @@ shinyServer(function(input, output, session) {
                                 fluidRow(
                                     column(3, 
                                         h4("Edge Selection Criteria"),
-                                        numericInput(inputId="chartqval", label="q-value", value=0.05, step=0.01, max=1.00, min=0.01),
+                                        column(6, 
+                                            tipify(numericInput(inputId="chartqval", label=HTML("-log<sub>10</sub>(q-value)"), value=5, step=0.000001, max=1000.00, min=-1000), HTML("Input a -log<sub>10</sub>-transformed value: it must be greater than 1 but no larger than 1000."))
+                                        ),
+                                        column(6, 
+                                            shinyjs::disabled(numericInput(inputId="chartqvalraw", label=HTML("raw q-value"), value=10^-(5), step=0.000001, max=1000.00, min=-1000))
+                                        ),
+                                        actionLink(inputId="chartqvaluedist", label="View q-value distribution"),
                                         checkboxGroupInput(label="Selected Input Sets", inputId="chartNetworkChoices", choices=names(enrichmentSets), selected=names(enrichmentSets)),
                                         checkboxGroupInput(label="Selected Annotation Classes", inputId="chartNetworkClasses", choices=chartClasses, selected=chartClasses),
                                         HTML("<h5><b>Other Options</b></h5>"),
@@ -4854,7 +4863,13 @@ shinyServer(function(input, output, session) {
                                     fluidRow(
                                         column(3, 
                                             h4("Edge Selection Criteria"),
-                                            numericInput(inputId="clusterqval", label="q-value", value=0.05, step=0.01, max=1.00, min=0.01),
+                                            column(6, 
+                                                tipify(numericInput(inputId="clusterqval", label=HTML("-log<sub>10</sub>(q-value)"), value=5, step=0.000001, max=1000.00, min=-1000), HTML("Input a -log<sub>10</sub>-transformed value: it must be greater than 1 but no larger than 1000."))
+                                            ),
+                                            column(6, 
+                                                shinyjs::disabled(numericInput(inputId="clusterqvalraw", label=HTML("raw q-value"), value=10^-(5), step=0.000001, max=1000.00, min=-1000))
+                                            ),
+                                            actionLink(inputId="clusterqvaluedist", label="View q-value distribution"),
                                             checkboxGroupInput( label="Selected Input Sets", inputId="clusterNetworkChoices", choices=names(enrichmentSets), selected=names(enrichmentSets) ),
                                             checkboxGroupInput( label="Selected Annotation Classes", inputId="clusterNetworkClasses", choices=clusterClasses, selected=clusterClasses ),
                                             HTML("<h5><b>Other Options</b></h5>"),
@@ -4893,7 +4908,7 @@ shinyServer(function(input, output, session) {
             } else {
                 output$clusterHeatmap <- renderUI({h4("No clusters generated.")})
             }
-            
+
             # Observers for chart/cluster heatmap color selectors
             setColorsObservers$observers[["heatmapColorChartH"]] <- observeEvent(input$lHeatmapColorControl__Chart, {
                 lHeatmapColorChart$color <- input$lHeatmapColorControl__Chart
@@ -4927,7 +4942,13 @@ shinyServer(function(input, output, session) {
                                     fluidRow(
                                         column(3, 
                                             h4("Edge Selection Criteria"),
-                                            numericInput(inputId="chartqval", label="q-value", value=0.05, step=0.01, max=1.00, min=0.01),
+                                            column(6, 
+                                                tipify(numericInput(inputId="chartqval", label=HTML("-log<sub>10</sub>(q-value)"), value=5, step=0.000001, max=1000.00, min=-1000), HTML("Input a -log<sub>10</sub>-transformed value: it must be greater than 1 but no larger than 1000."))
+                                            ),
+                                            column(6, 
+                                                shinyjs::disabled(numericInput(inputId="chartqvalraw", label=HTML("raw q-value"), value=10^-(5), step=0.000001, max=1000.00, min=-1000))
+                                            ),
+                                            actionLink(inputId="chartqvaluedist", label="View q-value distribution"),
                                             checkboxGroupInput(label="Selected Input Sets", inputId="chartNetworkChoices", choices=names(enrichmentSets), selected=names(enrichmentSets)),
                                             checkboxGroupInput(label="Selected Annotation Classes", inputId="chartNetworkClasses", choices=chartClasses, selected=chartClasses),
                                             HTML("<h5><b>Other Options</b></h5>"),
@@ -5005,7 +5026,13 @@ shinyServer(function(input, output, session) {
                                     fluidRow(
                                         column(3, 
                                             h4("Edge Selection Criteria"),
-                                            numericInput(inputId="clusterqval", label="q-value", value=0.05, step=0.01, max=1.00, min=0.01),
+                                            column(6, 
+                                                tipify(numericInput(inputId="clusterqval", label=HTML("-log<sub>10</sub>(q-value)"), value=5, step=0.000001, max=1000.00, min=-1000), HTML("Input a -log<sub>10</sub>-transformed value: it must be greater than 1 but no larger than 1000."))
+                                            ),
+                                            column(6, 
+                                                shinyjs::disabled(numericInput(inputId="clusterqvalraw", label=HTML("raw q-value"), value=10^-(5), step=0.000001, max=1000.00, min=-1000))
+                                            ),
+                                            actionLink(inputId="clusterqvaluedist", label="View q-value distribution"),
                                             checkboxGroupInput( label="Selected Input Sets", inputId="clusterNetworkChoices", choices=names(enrichmentSets), selected=names(enrichmentSets) ),
                                             checkboxGroupInput( label="Selected Annotation Classes", inputId="clusterNetworkClasses", choices=clusterClasses, selected=clusterClasses ),
                                             HTML("<h5><b>Other Options</b></h5>"),
@@ -5078,7 +5105,13 @@ shinyServer(function(input, output, session) {
                                     fluidRow(
                                         column(3, 
                                             h4("Edge Selection Criteria"),
-                                            numericInput(inputId="clusterqval", label="q-value", value=0.05, step=0.01, max=1.00, min=0.01),
+                                            column(6, 
+                                                tipify(numericInput(inputId="clusterqval", label=HTML("-log<sub>10</sub>(q-value)"), value=5, step=0.000001, max=1000.00, min=-1000), HTML("Input a -log<sub>10</sub>-transformed value: it must be greater than 1 but no larger than 1000."))
+                                            ),
+                                            column(6, 
+                                                shinyjs::disabled(numericInput(inputId="clusterqvalraw", label=HTML("raw q-value"), value=10^-(5), step=0.000001, max=1000.00, min=-1000))
+                                            ),
+                                            actionLink(inputId="clusterqvaluedist", label="View q-value distribution"),
                                             checkboxGroupInput( label="Selected Input Sets", inputId="clusterNetworkChoices", choices=names(enrichmentSets), selected=names(enrichmentSets) ),
                                             checkboxGroupInput( label="Selected Annotation Classes", inputId="clusterNetworkClasses", choices=clusterClasses, selected=clusterClasses ),
                                             HTML("<h5><b>Other Options</b></h5>"),
@@ -5149,7 +5182,13 @@ shinyServer(function(input, output, session) {
                                     fluidRow(
                                         column(3, 
                                             h4("Edge Selection Criteria"),
-                                            numericInput(inputId="chartqval", label="q-value", value=0.05, step=0.01, max=1.00, min=0.01),
+                                            column(6, 
+                                                tipify(numericInput(inputId="chartqval", label=HTML("-log<sub>10</sub>(q-value)"), value=5, step=0.000001, max=1000.00, min=-1000), HTML("Input a -log<sub>10</sub>-transformed value: it must be greater than 1 but no larger than 1000."))
+                                            ),
+                                            column(6, 
+                                                shinyjs::disabled(numericInput(inputId="chartqvalraw", label=HTML("raw q-value"), value=10^-(5), step=0.000001, max=1000.00, min=-1000))
+                                            ),
+                                            actionLink(inputId="chartqvaluedist", label="View q-value distribution"),
                                             checkboxGroupInput(label="Selected Input Sets", inputId="chartNetworkChoices", choices=names(enrichmentSets), selected=names(enrichmentSets)),
                                             checkboxGroupInput(label="Selected Annotation Classes", inputId="chartNetworkClasses", choices=chartClasses, selected=chartClasses),
                                             HTML("<h5><b>Other Options</b></h5>"),
@@ -5190,7 +5229,7 @@ shinyServer(function(input, output, session) {
                     )
                 )
             }, ignoreInit=TRUE)
-            
+
             # Render networks in containers
             output$chartNetwork <- renderUI(chartFullNetwork)
             output$clusterNetwork <- renderUI(clusterFullNetwork)
@@ -5468,13 +5507,161 @@ shinyServer(function(input, output, session) {
         shinyjs::enable(id="enrichmentResults")
     }
     
+    # Update network q-value to non-adjusted q-value
+    observeEvent(input$chartqval, {
+        updateNumericInput(session, inputId="chartqvalraw", value=10^-(input$chartqval))
+        shinyjs::disable(id="chartqvalraw")
+    }, ignoreInit=FALSE)
+    
+    observeEvent(input$clusterqval, {
+        updateNumericInput(session, inputId="clusterqvalraw", value=10^-(input$clusterqval))
+        shinyjs::disable(id="clusterqvalraw")
+    }, ignoreInit=FALSE)
+    
+    # View saved q-value distributions
+    observeEvent(input$chartqvaluedist, {
+        tmp <- reactiveChartNetworkDF$df[, c("pairwiseid", "class1", "name1", "class2", "name2", "qvalue", "qvalue_adj")]
+        colnames(tmp) <- c("Pair ID", "Class 1", "Term 1", "Class 2", "Term 2", "q-value", "-log10(q-value)")
+        tmp <- tmp[order(tmp[["q-value"]], decreasing=FALSE), ]
+        showModal(
+            modalDialog(
+                title=HTML(paste0("Chart network q-value distribution", div(style="display:inline-block; float:right", actionButton(inputId="modalCloseQvalueChartTop", label="Close")))),
+                footer=actionButton(inputId="modalCloseQvalueChart", label="Close"),
+                size="l",
+                fluidRow(
+                    column(12, 
+                        tabsetPanel(
+                            tabPanel("Table", div(
+                                HTML("<p>The q-values in the table below are provided both as-is and -log<sub>10</sub>-transformed. Extremely small q-values (close to 0) are capped at a maximum of 1000 when adjusted.</p>"),
+                                dataTableOutput("chartQvalueDT")
+                            )),
+                            tabPanel("Distribution plot", div(style="overflow-x:scroll;",
+                                plotlyOutput("chartQvaluePlot")
+                            ))
+                        )
+                    )
+                )
+            )
+        )
+        output$chartQvalueDT <- renderDataTable({
+            DT::datatable({tmp},
+                escape=FALSE,
+                rownames=FALSE,
+                class="row-border stripe compact",
+                style="bootstrap",
+                select="none",
+                options=list( 
+                    paging=TRUE,
+                    scrollX=TRUE,
+                    dom="Bfrtip",
+                    pageLength=10,
+                    buttons=list("copy", "csv", "excel", "pdf", "print")  
+                ),
+                extensions="Buttons"
+            )
+        })
+        
+        tmpPlot <- plot_ly(x=tmp[["Pair ID"]], y=tmp[["-log10(q-value)"]], type="bar", width=1500, name=HTML("-log<sub>10</sub>(q-value)")) %>% layout(
+            title=list(text=HTML("Annotation pair -log<sub>10</sub>(q-value) distribution")),
+            xaxis=list(title="<b>Pair ID</b>", type="category", tickangle=45, automargin=FALSE),
+            yaxis=list(title="<b>-log<sub>10</sub>(q-value)</b>", automargin=FALSE),
+            barmode="group",
+            autosize=FALSE,
+            margin=list(l=50, r=20, b=70, t=50),
+            plot_bgcolor="transparent",
+            paper_bgcolor="transparent",
+            font=list(color="#000000")
+        )
+        output$chartQvaluePlot <- renderPlotly(tmpPlot)
+    }, ignoreInit=FALSE)
+    
+    # View saved q-value distributions
+    observeEvent(input$clusterqvaluedist, {
+        tmp <- reactiveClusterNetworkDF$df[, c("pairwiseid", "class1", "name1", "class2", "name2", "qvalue", "qvalue_adj")]
+        colnames(tmp) <- c("Pair ID", "Class 1", "Term 1", "Class 2", "Term 2", "q-value", "-log10(q-value)")
+        tmp <- tmp[order(tmp[["q-value"]], decreasing=FALSE), ]
+        showModal(
+            modalDialog(
+                title=HTML(paste0("Cluster network q-value distribution", div(style="display:inline-block; float:right", actionButton(inputId="modalCloseQvalueClusterTop", label="Close")))),
+                footer=actionButton(inputId="modalCloseQvalueCluster", label="Close"),
+                size="l",
+                fluidRow(
+                    column(12, 
+                        tabsetPanel(
+                            tabPanel("Table", div(
+                                HTML("<p>The q-values in the table below are provided both as-is and -log<sub>10</sub>-transformed. Extremely small q-values (close to 0) are capped at a maximum of 1000 when adjusted.</p>"),
+                                dataTableOutput("clusterQvalueDT")
+                            )),
+                            tabPanel("Distribution plot", div(style="overflow-x:scroll;",
+                                plotlyOutput("clusterQvaluePlot")
+                            ))
+                        )
+                    )
+                )
+            )
+        )
+        output$clusterQvalueDT <- renderDataTable({
+            DT::datatable({tmp},
+                escape=FALSE,
+                rownames=FALSE,
+                class="row-border stripe compact",
+                style="bootstrap",
+                select="none",
+                options=list( 
+                    paging=TRUE,
+                    scrollX=TRUE,
+                    dom="Bfrtip",
+                    pageLength=10,
+                    buttons=list("copy", "csv", "excel", "pdf", "print")  
+                ),
+                extensions="Buttons"
+            )
+        })
+        
+        tmpPlot <- plot_ly(x=tmp[["Pair ID"]], y=tmp[["-log10(q-value)"]], type="bar", width=1500, name=HTML("-log<sub>10</sub>(q-value)")) %>% layout(
+            title=list(text=HTML("Annotation pair -log<sub>10</sub>(q-value) distribution")),
+            xaxis=list(title="<b>Pair ID</b>", type="category", tickangle=45, automargin=FALSE),
+            yaxis=list(title="<b>-log<sub>10</sub>(q-value)</b>", automargin=FALSE),
+            barmode="group",
+            autosize=FALSE,
+            margin=list(l=50, r=20, b=70, t=50),
+            plot_bgcolor="transparent",
+            paper_bgcolor="transparent",
+            font=list(color="#000000")
+        )
+        output$clusterQvaluePlot <- renderPlotly(tmpPlot)
+    }, ignoreInit=FALSE)
+    
+    observeEvent(input$modalCloseQvalueChartTop, {
+        # enable refreshbutton
+        shinyjs::enable(id="refresh")
+        removeModal()
+    })
+    observeEvent(input$modalCloseQvalueChart, {
+        # enable refreshbutton
+        shinyjs::enable(id="refresh")
+        removeModal()
+    })
+    observeEvent(input$modalCloseQvalueClusterTop, {
+        # enable refreshbutton
+        shinyjs::enable(id="refresh")
+        removeModal()
+    })
+    observeEvent(input$modalCloseQvalueCluster, {
+        # enable refreshbutton
+        shinyjs::enable(id="refresh")
+        removeModal()
+    })
+    
     # Re-order bar graphs with respect to given input set
     observeEvent(input$updateBargraphButton, {
         createBargraph(bgChartFull=bgChartFullReactive$bgChartFull, bgChartAllCategories=bgChartAllCategoriesReactive$bgChartAllCategories, orderSet=input$radioBargraph, colorsList=setColors$color)
     })
     
     # Shared code to create networks
-    generateNetwork <- function(transactionId, cutoff, networkMode, inputNetwork, qval, physicsEnabled=FALSE, smoothCurve=TRUE, keep=list()){
+    reactiveChartNetworkDF <- reactiveValues(df=data.frame())
+    reactiveClusterNetworkDF <- reactiveValues(df=data.frame())
+    generateNetwork <- function(transactionId, cutoff, networkMode, inputNetwork, qval=5, physicsEnabled=FALSE, smoothCurve=TRUE, keep=list()){
         inputNetwork <- paste0(inputNetwork, collapse="#")
         # Error handling
         resp <- NULL
@@ -5488,9 +5675,14 @@ shinyServer(function(input, output, session) {
             showNotification("Error: An error occurred while generating the network.", type="error")
             return(FALSE)
         }
-        if(resp$status_code != 200 | is.null(content(resp))){
-            showNotification("Error: An error occurred while generating the network.", type="error")
-            return(HTML("<p class=\"text-danger\"><b>Error:</b> An error occurred while generating the network.</p>"))
+        if(resp$status_code != 200){
+            if(!is.null(content(resp))){
+                showNotification(content(resp), type="error")
+                return(HTML(paste0("<p class=\"text-danger\">", content(resp), "</p>")))
+            } else {
+                showNotification("Error: An error occurred while generating the network.", type="error")
+                return(HTML("<p class=\"text-danger\"><b>Error:</b> An error occurred while generating the network.</p>"))
+            }
         }
         if(length(content(resp)) == 0){
             showNotification("Error: An error occurred while generating the network.", type="error")
@@ -5517,7 +5709,20 @@ shinyServer(function(input, output, session) {
             ))
         })
         outpNetwork <- do.call(rbind.data.frame, outpNetwork)
+        outpNetwork$qvalue_adj <- lapply(outpNetwork$qvalue, function(qv) {
+            qtmp <- -log10(qv)
+            if(is.finite(qtmp)){
+                return(round(qtmp, digits=4))
+            }
+            return(1000)
+        })
         rownames(outpNetwork) <- seq_len(nrow(outpNetwork))
+        
+        if(networkMode == "chart"){
+            reactiveChartNetworkDF$df <- outpNetwork
+        } else if(networkMode == "cluster"){
+            reactiveClusterNetworkDF$df <- outpNetwork
+        }
         
         # Define class colors
         classColors <- generateAnnoClassColors()
@@ -5761,10 +5966,10 @@ shinyServer(function(input, output, session) {
                 output[["vennChartButtons"]] <- renderUI({
                     fluidRow(
                         column(12,
-                            actionButton(inputId="vennFromButtonChart", label=HTML(paste0("View chemicals for<br/>", classFrom, " |<br/>", termFrom)) )      
+                            actionButton(inputId="vennFromButtonChart", label=HTML(paste0("View chemicals for<br/>", classFrom, " |<br/>", termFrom)))
                         ),
                         column(12,
-                            actionButton(inputId="vennToButtonChart", label=HTML(paste0("View chemicals for<br/>", classTo, " |<br/>", termTo)) )
+                            actionButton(inputId="vennToButtonChart", label=HTML(paste0("View chemicals for<br/>", classTo, " |<br/>", termTo)))
                         ),
                         column(12,
                             actionButton(inputId="vennSharedButtonChart", label="View shared chemicals")
@@ -6003,12 +6208,12 @@ shinyServer(function(input, output, session) {
         if(length(input$chartNetworkChoices) == 0){
             output$chartNetwork <- renderUI(HTML("<p class=\"text-danger\"><b>Error:</b> No input sets selected.</p>"))
         } else {
-            chartFullNetwork <- generateNetwork(transactionId=reactiveTransactionId$id, cutoff=input$nodeCutoffRe, networkMode="chart", inputNetwork=input$chartNetworkChoices, qval=input$chartqval, physicsEnabled=input$physicsEnabledChart, smoothCurve=input$smoothCurveChart, keep=input$chartNetworkClasses)
+            chartFullNetwork <- generateNetwork(transactionId=reactiveTransactionId$id, cutoff=reactiveCutoff$cutoff, networkMode="chart", inputNetwork=input$chartNetworkChoices, qval=input$chartqval, physicsEnabled=input$physicsEnabledChart, smoothCurve=input$smoothCurveChart, keep=input$chartNetworkClasses)
             # Render networks
-            output$chartNetwork <- renderUI(chartFullNetwork) 
+            output$chartNetwork <- renderUI(chartFullNetwork)
         }
     })
-    
+
     # Re-generate cluster network
     observeEvent(input$clusterNetworkUpdateButton, {
         # Hide old network
@@ -6017,7 +6222,7 @@ shinyServer(function(input, output, session) {
         if(length(input$clusterNetworkChoices) == 0){
             output$clusterNetwork <- renderUI(HTML("<p class=\"text-danger\"><b>Error:</b> No input sets selected.</p>"))
         } else {
-            clusterFullNetwork <- generateNetwork(transactionId=reactiveTransactionId$id, cutoff=input$nodeCutoffRe, networkMode="cluster", inputNetwork=input$clusterNetworkChoices, qval=input$clusterqval, physicsEnabled=input$physicsEnabledCluster, smoothCurve=input$smoothCurveCluster, keep=input$clusterNetworkClasses)
+          clusterFullNetwork <- generateNetwork(transactionId=reactiveTransactionId$id, cutoff=reactiveCutoff$cutoff, networkMode="cluster", inputNetwork=input$clusterNetworkChoices, qval=input$clusterqval, physicsEnabled=input$physicsEnabledCluster, smoothCurve=input$smoothCurveCluster, keep=input$clusterNetworkClasses)
             # Render networks
             output$clusterNetwork <- renderUI(clusterFullNetwork)
         }

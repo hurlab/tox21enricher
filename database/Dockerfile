@@ -63,7 +63,7 @@ USER $ENV_USER_USERNAME
 # Use Conda to install Postgres
 USER root
 ENV HOME=/home/$ENV_USER_USERNAME/
-RUN $HOME/miniconda/bin/conda create -c conda-forge -n my-rdkit-env rdkit
+RUN $HOME/miniconda/bin/conda update -n base -c defaults conda --repodata-fn=repodata.json && $HOME/miniconda/bin/conda create -c conda-forge -n my-rdkit-env rdkit
 RUN $HOME/miniconda/bin/activate my-rdkit-env && $HOME/miniconda/bin/conda install requests && $HOME/miniconda/bin/conda install -c rdkit rdkit-postgresql
 USER $ENV_USER_USERNAME
 # Initialize db directory

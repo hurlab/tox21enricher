@@ -2,6 +2,7 @@ pkgs <- c(
     'config',
     'dplyr',
     'DT',
+    'heatmaply',
     'httr',
     'igraph',
     'igraphdata',
