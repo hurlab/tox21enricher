@@ -14,7 +14,11 @@ USER root
 RUN apt-get update && apt-get install -y --no-install-recommends \
     "libxml2-dev" \
     "libcurl4-openssl-dev" \
-    "libssl-dev"
+    "libssl-dev" \
+    "librsvg2-dev" \
+    "libmariadb-dev" \
+    "libharfbuzz-dev" \
+    "libfribidi-dev"
 
 # Install necessary R packages from source
 # Set HOME environment variable again (this is required for COPY to work correctly)
