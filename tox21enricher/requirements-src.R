@@ -2,6 +2,8 @@ pkgs <- c(
     'config',
     'dplyr',
     'DT',
+    'scales',
+    'colorspace',
     'heatmaply',
     'httr',
     'igraph',
