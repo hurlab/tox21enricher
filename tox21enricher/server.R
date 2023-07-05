@@ -1641,6 +1641,12 @@ shinyServer(function(input, output, session) {
                 showNotification(paste0("Error: Duplicate set names are not allowed: ", paste0(setNamesDuplicate$setNamesList, collapse=", ")), type="error")
                 return(FALSE)
             }
+            
+            # 5a) check if more than 1000 chemicals at once
+            if(length(casrnValidatedInput) > 1000){
+                showNotification(paste0("Error: The Tox21Enricher-Shiny application only supports a maximum of 1000 lines at once in CASRN input mode. You have ", length(casrnValidatedInput), " lines. Please trim your input data and try again."), duration=10, type="error")
+                return(FALSE)
+            }
         }
         if(!performEnrichment(inputToSubmit, reenrichFlag=FALSE)){
             changePage(page="enrichment")
@@ -1982,7 +1988,7 @@ shinyServer(function(input, output, session) {
         # Convert enrichmentSets into a form that is API-friendly 2
         enrichmentSetsSanitizedLocal <- lapply(names(enrichmentSets), function(enrichmentSet) paste0(paste0(enrichmentSets[[enrichmentSet]], collapse=paste0("__", enrichmentSet, "|")), "__", enrichmentSet))
         enrichmentSetsSanitizedLocal <- paste0(enrichmentSetsSanitizedLocal, collapse="|")
-
+        
         # Preemptively remove chemicals with reactive structure warnings if option is checked
         if (enrichmentType$enrichType == "similarity" | enrichmentType$enrichType == "substructure") {
             if(input$includeChemsWithWarnings){
@@ -2128,6 +2134,7 @@ shinyServer(function(input, output, session) {
         # Clean up colors to put into local file
         colorsToPrint <- lapply(seq_len(length(colorsAllSets)), function(i) paste0(names(colorsAllSets)[i], "__", colorsAllSets[i]))
         colorsToPrint <- paste0(colorsToPrint, collapse="|")
+        
         if(length(enrichmentSets) > 0){ # only create input file and database entry if at least one good set
             # Send query to create transaction entry in database
             resp <- NULL
@@ -3217,6 +3224,7 @@ shinyServer(function(input, output, session) {
                     })))
                     # Coerce to data frame so we can name cols and rows and then transpose
                     gctFile <- as.data.frame(gctFile, stringsAsFactors=FALSE, check.names=FALSE)
+                    
                     # Only do this if more than 1 col
                     if(ncol(gctFile) > 1){
                         gctFile <- t(gctFile)
@@ -3228,7 +3236,8 @@ shinyServer(function(input, output, session) {
                     }))
                     rownames(gctFile) <- gctFileRowNames
                 }
-
+                
+                gctFileMatrix <- data.frame()
                 if(!is.null(gctFile)){
                     gctFileMatrix <- data.matrix(gctFile)
                     gctCASRNNames <- rownames(gctFile)
@@ -4015,31 +4024,41 @@ shinyServer(function(input, output, session) {
                     )
                     
                     if(!is.null(gctFile)){
-                        output[[paste0("perSetHeatmap__", i)]] <- renderUI(
-                            # Main heatmap per set
-                            fluidRow(
-                                column(1,
-                                   radioButtons(inputId=paste0("lHeatmapColorControl__", i), label="Select 0 color for heatmap:", choices=c("white", "gray", "black", "red", "blue", "yellow", "green", "brown", "purple", "orange"), selected=lHeatmapColor[[paste0("color__", i)]]),
-                                ),
-                                column(1,
-                                   radioButtons(inputId=paste0("hHeatmapColorControl__", i), label="Select 1 color for heatmap:", choices=c("white", "gray", "black", "red", "blue", "yellow", "green", "brown", "purple", "orange"), selected=hHeatmapColor[[paste0("color__", i)]])
-                                ),
-                                column(10,
-                                    heatmaply(gctFileMatrix, seriation="OLO", dendrogram="both", grid_gap=2, xlab="<b>Annotations</b>", ylab="<b>Input CASRNs</b>", scale_fill_gradient_fun=ggplot2::scale_fill_gradient2(low=lHeatmapColor[[paste0("color__", i)]], high=hHeatmapColor[[paste0("color__", i)]], midpoint=0.5)) %>%
-                                    layout(
-                                        autosize=TRUE,
-                                        showlegend=FALSE,
-                                        margin=list(r=200, b=200),
-                                        xaxis=list(tickfont=list(size=9, color="#000000"), tickangle=15),
-                                        yaxis=list(tickfont=list(color="#000000")),
-                                        plot_bgcolor="transparent",
-                                        paper_bgcolor="transparent",
-                                        font=list(color="#000000")
-                                    ) %>% hide_colorbar()
+                        if(ncol(gctFileMatrix) < 2){
+                            output[[paste0("perSetHeatmap__", i)]] <- renderUI(
+                                fluidRow(
+                                    column(12,
+                                        p("Insufficient annotations to generate heatmap.")
+                                    )
                                 )
                             )
-                        )
-    
+                        } else {
+                            output[[paste0("perSetHeatmap__", i)]] <- renderUI(
+                                # Main heatmap per set
+                                fluidRow(
+                                    column(1,
+                                       radioButtons(inputId=paste0("lHeatmapColorControl__", i), label="Select 0 color for heatmap:", choices=c("white", "gray", "black", "red", "blue", "yellow", "green", "brown", "purple", "orange"), selected=lHeatmapColor[[paste0("color__", i)]]),
+                                    ),
+                                    column(1,
+                                       radioButtons(inputId=paste0("hHeatmapColorControl__", i), label="Select 1 color for heatmap:", choices=c("white", "gray", "black", "red", "blue", "yellow", "green", "brown", "purple", "orange"), selected=hHeatmapColor[[paste0("color__", i)]])
+                                    ),
+                                    column(10,
+                                        heatmaply(gctFileMatrix, seriation="OLO", dendrogram="both", grid_gap=2, xlab="<b>Annotations</b>", ylab="<b>Input CASRNs</b>", scale_fill_gradient_fun=ggplot2::scale_fill_gradient2(low=lHeatmapColor[[paste0("color__", i)]], high=hHeatmapColor[[paste0("color__", i)]], midpoint=0.5)) %>%
+                                        layout(
+                                            autosize=TRUE,
+                                            showlegend=FALSE,
+                                            margin=list(r=200, b=200),
+                                            xaxis=list(tickfont=list(size=9, color="#000000"), tickangle=15),
+                                            yaxis=list(tickfont=list(color="#000000")),
+                                            plot_bgcolor="transparent",
+                                            paper_bgcolor="transparent",
+                                            font=list(color="#000000")
+                                        ) %>% hide_colorbar()
+                                    )
+                                )
+                            )
+                        }
+        
                         # add observers for heatmap colors
                         observeEvent(input[[paste0("lHeatmapColorControl__", i)]], {
                             lHeatmapColor[[paste0("color__", i)]] <- input[[paste0("lHeatmapColorControl__", i)]]

@@ -387,6 +387,7 @@ CASRN2funCatTerm <- mclapply(CASRN2funCatTerm_lv1, mc.cores=CORES, mc.silent=FAL
 # funCatTerm2CASRN
 funCatTerm2CASRN_lv1 <- mclapply(split(outpAnnotations, outpAnnotations$annoclassname), mc.cores=CORES, mc.silent=FALSE, function(x) split(x, x$annoterm))
 funCatTerm2CASRN <- mclapply(funCatTerm2CASRN_lv1, mc.cores=CORES, mc.silent=FALSE, function(x) lapply(x, function(y) y$casrn))
+
 # funCat2CASRN
 funCat2CASRN <- mclapply(split(outpAnnotations, outpAnnotations$annoclassname), mc.cores=CORES, mc.silent=FALSE, function(x) split(x, x$casrn))
 # term2funCat
@@ -421,8 +422,8 @@ performEnrichment <- function(enrichmentUUID="-1", annoSelectStr=fullAnnoClassSt
     # Set begin time in transaction table
     query <- sqlInterpolate(ANSI(), paste0("UPDATE transaction SET timestamp_started='", beginTime, "' WHERE uuid='", enrichmentUUID, "';"), id="updateTransactionStart")
     outp <- dbExecute(poolInput, query)
+    
     # Close pool
-    # poolClose(poolInput)
     dbDisconnect(poolInput)
     
     # Enrichment parameters
@@ -550,10 +551,7 @@ performEnrichment <- function(enrichmentUUID="-1", annoSelectStr=fullAnnoClassSt
         CASRNS <- inputIDListHash[[outfileBase]]
         
         # Check mapped CASRNS
-        mappedCASRNs <- CASRNS[CASRNS %in% names(CASRN2DSSTox)]
-        
-        
-        # TODO: Implement pvalue type selector into below method for switching !!!
+        mappedCASRNs <- unique(CASRNS[CASRNS %in% names(CASRN2DSSTox)])
         
         # Perform enrichment analysis
         print(paste0("Performing enrichment on ", outfileBase, "..."))
@@ -680,9 +678,8 @@ process_variable_DAVID_CHART_directories_individual_file <- function(inputDirNam
     outpPvalue <- dbGetQuery(poolInput, queryPvalue)
     # poolClose(poolInput) # Close pool
     dbDisconnect(poolInput)
-    
     PVALUE_TYPE <- outpPvalue[1, "pvalue"]
-    
+
     # Get significance column (nominal pvalue or adjusted pvalue (BH-correction))
     sigColumnName <- "P"
     valueColumnName <- "P"
@@ -923,7 +920,6 @@ create_david_chart_cluster <- function(baseDirName="", topTermLimit=10, mode="AL
     outpPvalue <- dbGetQuery(poolInput, queryPvalue)
     # poolClose(poolInput) # Close pool
     dbDisconnect(poolInput)
-    
     PVALUE_TYPE <- outpPvalue[1, "pvalue"]
     
     # Get significance column (nominal pvalue or adjusted pvalue (BH-correction))
@@ -984,9 +980,7 @@ process_variable_DAVID_CLUSTER_directories <- function(dirName, outputDir, extTa
     outpPvalue <- dbGetQuery(poolInput, queryPvalue)
     # poolClose(poolInput) # Close pool
     dbDisconnect(poolInput)
-    
     PVALUE_TYPE <- outpPvalue[1, "pvalue"]
-    
     # Get significance column (nominal pvalue or adjusted pvalue (BH-correction))
     sigColumnName <- "P"
     valueColumnName <- "P"
@@ -1307,7 +1301,6 @@ process_variable_DAVID_CHART_directories <- function(dirName, outputDir, extTag,
     outpPvalue <- dbGetQuery(poolInput, queryPvalue)
     # poolClose(poolInput) # Close pool
     dbDisconnect(poolInput)
-    
     PVALUE_TYPE <- outpPvalue[1, "pvalue"]
     
     # Get significance column (nominal pvalue or adjusted pvalue (BH-correction))
@@ -1661,9 +1654,7 @@ perform_CASRN_enrichment_analysis <- function(CASRNRef, outputBaseDir, outfileBa
     outpPvalue <- dbGetQuery(poolInput, queryPvalue)
     # poolClose(poolInput) # Close pool
     dbDisconnect(poolInput)
-    
     PVALUE_TYPE <- outpPvalue[1, "pvalue"]
-    
     # Get significance column (nominal pvalue or adjusted pvalue (BH-correction))
     sigDFIndex <- "PValue"
     if(PVALUE_TYPE == "nominal"){
@@ -1722,19 +1713,32 @@ perform_CASRN_enrichment_analysis <- function(CASRNRef, outputBaseDir, outfileBa
         return(length(tmp_localTermsList[!vapply(tmp_localTermsList, is.null, FUN.VALUE=logical(1))]))
     })
     names(localTermsList) <- names(funCat2Selected)
-    
     funCat2SelectedProcessed_datArray <- funCatTerm2CASRN[names(funCat2Selected)] # filter selected annotation classes
-    funCat2SelectedProcessed_datArray <- mclapply(names(funCat2SelectedProcessed_datArray), mc.cores=CORES, mc.silent=FALSE, function(funCat) {
-        targetTotalCASRNInFunCatCount <- localTermsList[[funCat]]
-        tmp_datArray <- lapply(names(funCat2SelectedProcessed_datArray[[funCat]]), function(term_inner){
-            targetCASRNsRef <- funCat2SelectedProcessed_datArray[[funCat]][[term_inner]][funCat2SelectedProcessed_datArray[[funCat]][[term_inner]] %in% mappedCASRNs]
+    funCat2SelectedProcessed_datArray <- mclapply(names(funCat2Selected), mc.cores=CORES, mc.silent=FALSE, function(funCat) {
+        funCatTerms <- funCatTerm2CASRN[[funCat]]
+        targetTotalCASRNInFunCatCount <- length(unlist(lapply(mappedCASRNs, function(CASRN){
+            if(funCat %in% names(CASRN2funCatTerm[[CASRN]])){
+                return(CASRN)
+            }
+            return(NULL)
+        })))
+        tmp_datArray <- lapply(names(funCatTerms), function(term_inner){
+            targetCASRNsRef <- unlist(lapply(mappedCASRNs, function(CASRN){
+                if(CASRN %in% funCatTerm2CASRN[[funCat]][[term_inner]]){
+                    return(CASRN)
+                }
+                return(NULL)
+            }))
             targetCASRNCount <- length(targetCASRNsRef)
+            
             # Calculate the EASE score
             if (targetCASRNCount > 1){
+                
                 np1 <- targetTotalCASRNInFunCatCount - 1
                 n11 <- targetCASRNCount - 1
                 npp <- funCat2CASRNCount[[funCat]]
                 n1p <- funCatTerm2CASRNCount[[funCat]][[term_inner]]
+                
                 # skip any under-represented terms
                 datArrayLine <- list(n11, (n1p - n11), (np1 - n11), (npp - n1p - np1 + n11))
                 annoArrayLine <- list(funCat, term_inner, targetCASRNCount, round((targetCASRNCount / inputCASRNsCount * 100), digits=15), 1, paste(unlist(unname(vapply(targetCASRNsRef, paste, FUN.VALUE=character(1), collapse=", "))), collapse=', '), targetTotalCASRNInFunCatCount, n1p, npp, (targetCASRNCount / targetTotalCASRNInFunCatCount) / (n1p / npp))
@@ -1901,16 +1905,27 @@ perform_CASRN_enrichment_analysis <- function(CASRNRef, outputBaseDir, outfileBa
     sortedFunCatTermsCount <- length(sortedFunCatTerms)
     sortedFunCatTerms_CHART <-sortedFunCatTerms # save to temp variable
     
-    tryCatch({
-        # Write to chart File
-        writeToChart <- unlist(lapply(names(sortedFunCatTerms_CHART), function(funCatTerm) paste0(term2Contents[[funCatTerm]], collapse='\t')))
-        writeToChart <- writeToChart[!vapply(writeToChart, is.null, FUN.VALUE=logical(1))]
-        writeLines(paste0(chartHeader, paste0(writeToChart, collapse="\n")), OUTFILE)
-        close(OUTFILE)
-    }, error=function(cond){
-        print("Error: could not write to Chart file.")
-        print(cond)
-    })
+    # Write blank files to chart if no items
+    if(length(sortedFunCatTerms_CHART) < 1){
+        tryCatch({
+            writeLines(chartHeader, OUTFILE)
+            close(OUTFILE)
+        }, error=function(cond){
+            print("Error creating error files.")
+            print(cond)
+        })
+    } else {
+        tryCatch({
+            # Write to chart File
+            writeToChart <- unlist(lapply(names(sortedFunCatTerms_CHART), function(funCatTerm) paste0(term2Contents[[funCatTerm]], collapse='\t')))
+            writeToChart <- writeToChart[!vapply(writeToChart, is.null, FUN.VALUE=logical(1))]
+            writeLines(paste0(chartHeader, paste0(writeToChart, collapse="\n")), OUTFILE)
+            close(OUTFILE)
+        }, error=function(cond){
+            print("Error: could not write to Chart file.")
+            print(cond)
+        })
+    }
     
     tryCatch({
         # Write to simple chart file
@@ -1935,7 +1950,6 @@ perform_CASRN_enrichment_analysis <- function(CASRNRef, outputBaseDir, outfileBa
         } else if(PVALUE_TYPE == "adjusted") {
             colnames(sortFunCatProcess) <- c("Category", "Term", "Count", "Percent", "PValue", "Fold Enrichment", sigDFIndex)
         }
-        
         
         # filter by pvalue (nominal or adjusted)
         if(sigDFIndex == "PValue"){
@@ -1968,9 +1982,21 @@ perform_CASRN_enrichment_analysis <- function(CASRNRef, outputBaseDir, outfileBa
             sortFunCatProcess$Benjamini_Hochberg <- as.numeric(as.character(sortFunCatProcess$Benjamini_Hochberg))
             sortFunCatProcess <-sortFunCatProcess[order(sortFunCatProcess$Benjamini_Hochberg), ]
         }
-        sortFunCatProcess <- apply(sortFunCatProcess, 1, function(x) paste0(x, collapse="\t"))
-        writeLines(paste0(simpleHeader, paste0(sortFunCatProcess, collapse="\n")), SIMPLE)
-        close(SIMPLE)
+        
+        # Write blank files to simple if no items
+        if(length(sortFunCatProcess) < 1){
+            tryCatch({
+                writeLines(simpleHeader, SIMPLE)
+                close(SIMPLE)
+            }, error=function(cond){
+                print("Error creating error files.")
+                print(cond)
+            })
+        } else {
+            sortFunCatProcess <- apply(sortFunCatProcess, 1, function(x) paste0(x, collapse="\t"))
+            writeLines(paste0(simpleHeader, paste0(sortFunCatProcess, collapse="\n")), SIMPLE)
+            close(SIMPLE)
+        }
     }, error=function(cond){
         print("Error: could not write to Chart Simple file.")
         print(cond)
@@ -2004,8 +2030,19 @@ perform_CASRN_enrichment_analysis <- function(CASRNRef, outputBaseDir, outfileBa
         })
         
         matrixPrintToFile <- rbind.fill.matrix(tmp_mat_split)
-        # Write matrix to file
-        fwrite(matrixPrintToFile, file=MATRIX, row.names=FALSE, col.names=TRUE, sep="\t")
+        
+        # Write blank files to chart if no items
+        if(length(matrixPrintToFile) < 1){
+            tryCatch({
+                fwrite(data.frame(), file=MATRIX, row.names=FALSE, col.names=TRUE, sep="\t")
+            }, error=function(cond){
+                print("Error creating error files.")
+                print(cond)
+            })
+        } else {
+            # Write matrix to file
+            fwrite(matrixPrintToFile, file=MATRIX, row.names=FALSE, col.names=TRUE, sep="\t")
+        }
     }, error=function(cond){
         print("Error: could not write to Matrix file.")
         print(cond)
@@ -2712,7 +2749,7 @@ queue <- function(res, req, mode="", enrichmentUUID="-1", annoSelectStr=fullAnno
         }, seed=TRUE)
     }
 
-    future({
+    # future({
         # Connect to DB to get status info
         poolStatus <- connQueue()
         # Set lock for current request so it won't be reprocessed
@@ -2749,6 +2786,7 @@ queue <- function(res, req, mode="", enrichmentUUID="-1", annoSelectStr=fullAnno
                 status_code <- performEnrichment(enrichmentUUID=enrichmentUUID, annoSelectStr=annoSelectStr, nodeCutoff=nodeCutoff)
             } 
         }, error=function(cond){
+            print(cond)
             status_code <- "unknown error"
         })
         
@@ -2788,7 +2826,7 @@ queue <- function(res, req, mode="", enrichmentUUID="-1", annoSelectStr=fullAnno
         query <- sqlInterpolate(ANSI(), paste0("UPDATE queue SET lock=0 WHERE uuid='", enrichmentUUID, "';"), id="setLock")
         outp <- dbExecute(poolFinished, query)
         dbDisconnect(poolFinished)
-    }, seed=TRUE)
+    # }, seed=TRUE)
     return(TRUE)
 }
 
@@ -2915,13 +2953,14 @@ createTransaction <- function(res, req, originalMode="", mode="", uuid="-1", ann
             reenrichFlag <- 0
         }
     }
+
     # Connect to db
     poolTransaction <- connQueue()
     # Update database with transaction entry
     query <- sqlInterpolate(ANSI(), paste0("INSERT INTO transaction(original_mode, mode, uuid, annotation_selection_string, cutoff, input, casrn_box, original_names, reenrich, reenrich_flag, colors, timestamp_posted, pvalue) VALUES('", originalMode, "', '", mode, "', '", uuid, "', '", annoSelectStr, "', '", cutoff, "', '", input, "', '", casrnBox, "', '", originalNames, "', '", reenrich, "', '", reenrichFlag, "', '", color, "', '", timestampPosted, "', '", pvalueType, "');"), id="createTransactionEntry")
     outp <- dbExecute(poolTransaction, query)
+    
     # Close pool
-    # poolClose(poolTransaction)
     dbDisconnect(poolTransaction)
     return(TRUE)
 }
@@ -3709,6 +3748,7 @@ createInput <- function(res, req, transactionId="-1", enrichmentSets, setNames, 
                 }
                 return(TRUE)
             }, FUN.VALUE=logical(1))]
+            
             # Format fetched data to print to file
             outString <- paste0(goodCasrns, collapse="\n")
             # Strip "err__" from beginning of CASRNs
