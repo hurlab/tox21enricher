@@ -1642,11 +1642,12 @@ shinyServer(function(input, output, session) {
                 return(FALSE)
             }
             
+            # TODO: comment this back in
             # 5a) check if more than 1000 chemicals at once
-            if(length(casrnValidatedInput) > 1000){
-                showNotification(paste0("Error: The Tox21Enricher-Shiny application only supports a maximum of 1000 lines at once in CASRN input mode. You have ", length(casrnValidatedInput), " lines. Please trim your input data and try again."), duration=10, type="error")
-                return(FALSE)
-            }
+            # if(length(casrnValidatedInput) > 1000){
+            #     showNotification(paste0("Error: The Tox21Enricher-Shiny application only supports a maximum of 1000 lines at once in CASRN input mode. You have ", length(casrnValidatedInput), " lines. Please trim your input data and try again."), duration=10, type="error")
+            #     return(FALSE)
+            # }
         }
         if(!performEnrichment(inputToSubmit, reenrichFlag=FALSE)){
             changePage(page="enrichment")
@@ -2138,8 +2139,10 @@ shinyServer(function(input, output, session) {
         if(length(enrichmentSets) > 0){ # only create input file and database entry if at least one good set
             # Send query to create transaction entry in database
             resp <- NULL
+            
             tryTransaction <- tryCatch({
-                resp <- POST(url=paste0(API_PROTOCOL, API_ADDR, "/createTransaction"), query=list(originalMode=originalEnrichModeList$originalEnrichMode, mode=enrichmentType$enrichType, uuid=transactionId, annoSelectStr=annoSelectStr, cutoff=cutoff, input=enrichmentSetsSanitizedLocal, casrnBox=casrnBox, originalNames=paste0(originalNamesList$originalNames, collapse="|"), reenrich=paste0(reenrichResultsSanitized, collapse="|"), color=colorsToPrint, timestampPosted=beginTime, reenrichFlag=reenrichFlagReactive$reenrichFlagReactive, pvalueType=input$pvalueTypeSelector))
+                args <- list(originalMode=originalEnrichModeList$originalEnrichMode, mode=enrichmentType$enrichType, uuid=transactionId, annoSelectStr=annoSelectStr, cutoff=cutoff, input=enrichmentSetsSanitizedLocal, casrnBox=casrnBox, originalNames=paste0(originalNamesList$originalNames, collapse="|"), reenrich=paste0(reenrichResultsSanitized, collapse="|"), color=colorsToPrint, timestampPosted=as.character(beginTime), reenrichFlag=reenrichFlagReactive$reenrichFlagReactive, pvalueType=input$pvalueTypeSelector)
+                resp <- POST(url=paste0(API_PROTOCOL, API_ADDR, "/createTransaction"), body=toJSON(args), add_headers("Content-Type" = "application/json"))
                 TRUE
             }, error=function(cond){
                 return(FALSE)
@@ -2163,7 +2166,7 @@ shinyServer(function(input, output, session) {
             }
             if(resp$status_code != 200){
                 changePage(page="enrichment")
-                showNotification("Error: Problem creating input files for enrichment.", type="error")
+                showNotification(paste0("Error: Problem creating input files for enrichment: ", unlist(content(resp))), type="error")
                 return(FALSE)
             }
         } else {
