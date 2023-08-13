@@ -117,7 +117,7 @@ shinyUI(function(){
                 extendShinyjs(text=js_cbx, functions=c('check', 'uncheck')),
                 extendShinyjs(text=js_session, functions=c('saveSession', 'getSession', 'clearSession', 'saveHostInfo', 'getHostInfo', 'clearHostInfo')),
                 p("Welcome to Tox21Enricher! Please see this ", tags$a(href="https://github.com/hurlab/tox21enricher/blob/main/docs/Tox21Enricher_Manual.pdf", "link"), "for instructions on using this application and the descriptions about the chemical / biological categories. Other resources from the Tox21 toolbox can be viewed", tags$a(href="https://ntp.niehs.nih.gov/whatwestudy/tox21/toolbox/index.html", "here."), "A sufficiently robust internet connection and JavaScript are required to use all of this application's features."),
-                p("An older version of Tox21Enricher using the", tags$a(href="https://grails.org/", "Grails framework"), "is hosted", tags$a(href="http://hurlab.med.und.edu/tox21enricher-grails", "here.")),
+                p("An older version of Tox21Enricher using the", tags$a(href="https://grails.org/", "Grails framework"), "may be accessed", tags$a(href="https://doi.org/10.1002/minf.201700129", "here (doi: 10.1002/minf.201700129).")),
                 p(actionLink(inputId="linkEnrichmentDetails", label="Click here to view our annotation enrichment methodology.")),
                 
                 # Display API connection status
@@ -128,7 +128,9 @@ shinyUI(function(){
                 actionButton(inputId="searchButton", label="View previous results", icon=icon("search")),
                 hidden(
                     actionButton("refresh", "Start over", icon=icon("undo"))
-                )
+                ),
+                
+                HTML("<hr><p>To cite Tox21Enricher-Shiny, use the following reference:<br>Combs, P., Erickson, J., Hsieh, J.-H., Guo, K., Nolte, S., Schmitt, C., Auerbach, S., and Hur, J. (2023). Tox21Enricher-Shiny: an R Shiny application for toxicity functional annotation analysis. <i>Frontiers in Toxicology</i> 5, 2023. doi: 10.3389/ftox.2023.1147608.<p>")
             ),
             # Main panel depicting enrichment instructions and options
             mainPanel(id="enrichmentPanel", width=10,
