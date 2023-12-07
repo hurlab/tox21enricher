@@ -689,7 +689,10 @@ shinyServer(function(input, output, session) {
                             cutoff <- transactionData$cutoff[[1]]
                             casrnBox <- transactionData$casrn_box[[1]]
                             casrnBoxSplit <- unlist(str_split(casrnBox, "\n"))
+                            
+                            # TODO: check this
                             casrnBoxSplit <- casrnBoxSplit[nchar(casrnBoxSplit) > 0] # remove any blank lines
+
                             reenrichFlag <- transactionData$reenrich_flag[[1]]
                             reenrichFlagReactive$reenrichFlagReactive <- reenrichFlag
                             enrichmentDisplayType <- ""
@@ -1649,6 +1652,7 @@ shinyServer(function(input, output, session) {
             #     return(FALSE)
             # }
         }
+
         if(!performEnrichment(inputToSubmit, reenrichFlag=FALSE)){
             changePage(page="enrichment")
         }
@@ -1728,6 +1732,7 @@ shinyServer(function(input, output, session) {
         # Initialize list to hold result chemicals for reenrichment (Substructure & Similarity only)
         reenrichResults <- list()
         casrnBoxSplit <- unlist(str_split(casrnBox, "\n"))
+        casrnBoxSplit <- casrnBoxSplit[nchar(casrnBoxSplit) > 0] # remove any blank lines
         # Split CASRNBox to get each line and organize into sets
         if (enrichmentType$enrichType == "casrn" | enrichmentType$enrichType == "annotation") {
             enrichmentSets <- list()
@@ -1903,9 +1908,9 @@ shinyServer(function(input, output, session) {
                 }
                 return(FALSE)
             }
-
             names(reenrichResults) <- unlist(lapply(seq_len(length(casrnBoxSplit)), function(i) paste0("Set", i)))
             reenrichResults <- reenrichResults[!vapply(reenrichResults, is.null, FUN.VALUE=logical(1))]
+
             if(length(reenrichResults) > 0){
                 enrichmentSets <- lapply(seq_len(length(reenrichResults)), function(i){
                     if(!is.null(reenrichResults[[i]])) {
@@ -1953,6 +1958,7 @@ shinyServer(function(input, output, session) {
         setColors$color <- colorsAllSets
         reenrichResultsList$reenrichResults <- reenrichResults
         enrichmentSetsList$enrichmentSets <- enrichmentSets
+
         # Get list of original input names for InChIs/SMILES and set names to display later
         if(reenrichFlag == FALSE){
             if (enrichmentType$enrichType == "similarity" | enrichmentType$enrichType == "substructure") {
@@ -2036,7 +2042,7 @@ shinyServer(function(input, output, session) {
                     enrichmentSets <- unlist(lapply(names(enrichmentSets), function(setName){
                         currentSet <- enrichmentSets[[setName]]
                         currentSetWarnings <- originalReactiveStructures[[setName]]
-                        relevantWarnings <- warningDF %>% filter(warningDF$casrn %in% currentSet)
+                        relevantWarnings <- warningDF %>% filter(casrn %in% currentSet)
                         rownames(relevantWarnings) <- relevantWarnings$casrn
                         relevantWarnings$casrn <- NULL # remove casrn column and set now names to casrns
                         CASRNsToKeep <- unlist(lapply(rownames(relevantWarnings), function(x){
@@ -2054,7 +2060,7 @@ shinyServer(function(input, output, session) {
                     reenrichResults <- lapply(names(enrichmentSets), function(setName){
                         currentSet <- enrichmentSets[[setName]]
                         currentSetWarnings <- originalReactiveStructures[[setName]]
-                        relevantWarnings <- warningDF %>% filter(casrn %in% currentSet)
+                        relevantWarnings <- warningDF %>% filter(warningDF$casrn %in% currentSet)
                         rownames(relevantWarnings) <- relevantWarnings$casrn
                         relevantWarnings$casrn <- NULL # remove casrn column and set now names to casrns
                         CASRNsToKeep <- unlist(lapply(rownames(relevantWarnings), function(x){
@@ -2139,10 +2145,27 @@ shinyServer(function(input, output, session) {
         if(length(enrichmentSets) > 0){ # only create input file and database entry if at least one good set
             # Send query to create transaction entry in database
             resp <- NULL
-            
             tryTransaction <- tryCatch({
-                args <- list(originalMode=originalEnrichModeList$originalEnrichMode, mode=enrichmentType$enrichType, uuid=transactionId, annoSelectStr=annoSelectStr, cutoff=cutoff, input=enrichmentSetsSanitizedLocal, casrnBox=casrnBox, originalNames=paste0(originalNamesList$originalNames, collapse="|"), reenrich=paste0(reenrichResultsSanitized, collapse="|"), color=colorsToPrint, timestampPosted=as.character(beginTime), reenrichFlag=reenrichFlagReactive$reenrichFlagReactive, pvalueType=input$pvalueTypeSelector)
-                resp <- POST(url=paste0(API_PROTOCOL, API_ADDR, "/createTransaction"), body=toJSON(args), add_headers("Content-Type" = "application/json"))
+                # args <- list(originalMode=originalEnrichModeList$originalEnrichMode, mode=enrichmentType$enrichType, uuid=transactionId, annoSelectStr=annoSelectStr, cutoff=cutoff, input=enrichmentSetsSanitizedLocal, casrnBox=casrnBox, originalNames=paste0(originalNamesList$originalNames, collapse="|"), reenrich=paste0(reenrichResultsSanitized, collapse="|"), color=colorsToPrint, timestampPosted=as.character(beginTime), reenrichFlag=reenrichFlagReactive$reenrichFlagReactive, pvalueType=input$pvalueTypeSelector)
+                # resp <- POST(url=paste0(API_PROTOCOL, API_ADDR, "/createTransaction"), body=toJSON(args), add_headers("Content-Type" = "application/json"))
+              
+                request_json <- list(
+                  originalMode=originalEnrichModeList$originalEnrichMode,
+                  mode=enrichmentType$enrichType,
+                  uuid=transactionId,
+                  annoSelectStr=annoSelectStr,
+                  cutoff=cutoff,
+                  input=enrichmentSetsSanitizedLocal,
+                  casrnBox=casrnBox,
+                  originalNames=paste0(originalNamesList$originalNames, collapse="|"),
+                  reenrich=paste0(reenrichResultsSanitized, collapse="|"),
+                  color=colorsToPrint,
+                  timestampPosted=as.character(beginTime),
+                  reenrichFlag=reenrichFlagReactive$reenrichFlagReactive,
+                  pvalueType=input$pvalueTypeSelector
+                )
+                resp <- POST(url=paste0(API_PROTOCOL, API_ADDR, "/createTransaction"), body=request_json, encode="json")
+              
                 TRUE
             }, error=function(cond){
                 return(FALSE)
@@ -2155,7 +2178,15 @@ shinyServer(function(input, output, session) {
             # Send query to create input file
             resp <- NULL
             tryInput <- tryCatch({
-                resp <- POST(url=paste0(API_PROTOCOL, API_ADDR, "/createInput"), query=list(transactionId=transactionId, enrichmentSets=enrichmentSetsSanitized, setNames=paste0(names(enrichmentSets), collapse="\n"), mode=enrichmentType$enrichType, nodeCutoff=cutoff, annoSelectStr=annoSelectStr))
+                request_json <- list(
+                  transactionId=transactionId,
+                  enrichmentSets=enrichmentSetsSanitized,
+                  setNames=paste0(names(enrichmentSets), collapse="\n"),
+                  mode=enrichmentType$enrichType,
+                  nodeCutoff=cutoff,
+                  annoSelectStr=annoSelectStr
+                )
+                resp <- POST(url=paste0(API_PROTOCOL, API_ADDR, "/createInput"), body=request_json, encode="json")
                 TRUE
             }, error=function(cond){
                 return(FALSE)
@@ -2174,6 +2205,7 @@ shinyServer(function(input, output, session) {
             showNotification("Error: No valid input sets.", type="error")
             return(FALSE)
         }
+        
         # Show waiting page
         changePage(page="waiting")
         splitAnnotations <- unlist(str_split(annoSelectStr, "=checked,"))
@@ -2203,7 +2235,17 @@ shinyServer(function(input, output, session) {
         # Query API to put request in queue
         resp <- NULL
         tryQueue <- tryCatch({
-            resp <- POST(url=paste0(API_PROTOCOL, API_ADDR, "/queue"), query=list(mode=enrichmentType$enrichType, enrichmentUUID=transactionId, annoSelectStr=annoSelectStr, nodeCutoff=cutoff, setNames=paste0(names(enrichmentSets), collapse="\n")))
+          
+            request_json <- list(
+              mode=enrichmentType$enrichType,
+              enrichmentUUID=transactionId,
+              annoSelectStr=annoSelectStr,
+              nodeCutoff=cutoff,
+              setNames=paste0(names(enrichmentSets), collapse="\n")
+            )
+            # resp <- POST(url=paste0(API_PROTOCOL, API_ADDR, "/createInput"), body=request_json, encode="json")
+            # resp <- POST(url=paste0(API_PROTOCOL, API_ADDR, "/queue"), query=list(mode=enrichmentType$enrichType, enrichmentUUID=transactionId, annoSelectStr=annoSelectStr, nodeCutoff=cutoff, setNames=paste0(names(enrichmentSets), collapse="\n")))
+            resp <- POST(url=paste0(API_PROTOCOL, API_ADDR, "/queue"), body=request_json, encode="json")
             TRUE
         }, error=function(cond){
             return(FALSE)
@@ -4197,12 +4239,11 @@ shinyServer(function(input, output, session) {
                         return(FALSE)
                     }
                     structuresSvg <- content(resp)
-
+                    
                     resultImages <- lapply(reenrichResults[[i]][, "casrn"], function(casrnName) {
-                        # Note: this is kind of a hacky way to resize the SVG images generated by rdkit, but it works...
-                        resizedSvg <- gsub("width='250px'", "width='50px'", unlist(structuresSvg[casrnName][[1]]))
-                        resizedSvg <- gsub("height='200px'", "height='40px'", resizedSvg)
-
+                        resizedSvg <- unlist(structuresSvg[casrnName][[1]])
+                        resizedSvg <- gsub("svg version='1.1'", "svg version='1.1' width='100' height='100' viewBox='0 0 250 200'", resizedSvg)
+                        
                         # Add fetched, resized SVG to list too
                         if(is.null(structuresSvg[casrnName][[1]]) == TRUE){
                             svgImagesList[paste0(casrnName, "__", i)] <<- "<svg><text>No image</text></svg>"
@@ -4257,9 +4298,8 @@ shinyServer(function(input, output, session) {
                         
                         # Resize structural image
                         svgExpanded <- paste0(svgImagesList[paste0(casrn, "__", i)])
-                        svgExpanded <- gsub("width='50px'", "width='600px'", svgExpanded)
-                        svgExpanded <- gsub("height='40px'", "height='480px'", svgExpanded)
-      
+                        svgExpanded <- gsub("svg version='1.1' width='100' height='100' viewBox='0 0 250 200'", "svg version='1.1' width='500' height='500' viewBox='0 0 250 200'", svgExpanded)
+
                         # Create observer
                         if(is.null(setFilesObservers$observers[[paste0("svgObserver__", casrn, "__", i)]])){
                             setFilesObservers$observers[[paste0("svgObserver__", casrn, "__", i)]] <- observeEvent(input[[paste0("ab__img__", casrn, "__", i)]], {
