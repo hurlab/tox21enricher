@@ -123,3 +123,9 @@ Additionally, building the project images using Docker or running the project us
 Parallel processing is not supported if running the API directly on a Windows machine. Parallel processing also needs to allocate at least 2000 MiB or 2 GiB of memory to function properly.
 
 The development machine for Tox21Enricher-Shiny uses 64-bit Linux, so that is the recommended architecture. Other builds may not perform as expected.
+
+<h2>Credit</h2>
+If using this work, please cite the following publication(s):
+
+- Combs P, Erickson J, Hsieh J-H, Guo K, Nolte S, Schmitt C, Auerbach S and Hur J (2023). _Tox21Enricher-Shiny: an R Shiny application for toxicity functional annotation analysis_. Front. Toxicol. 5:1147608. doi: 10.3389/ftox.2023.1147608.
+- Combs P, Erickson J, Hsieh J-H, Guo K, Nolte S, Schmitt C, Auerbach S and Hur J (2023). _Corrigendum: Tox21Enricher-Shiny: an R Shiny application for toxicity functional annotation analysis_. Front. Toxicol. 5:1278066. doi: 10.3389/ftox.2023.1278066.
