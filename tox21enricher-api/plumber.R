@@ -32,11 +32,6 @@ options("plumber.port" = 8000)
 # Increase globals maximum size for futures (this is required to pass large global variables [> 500 MiB] in memory to async processes).
 options(future.globals.maxSize = 2000 * 1024^2)
 
-# Create cluster for OS-agnostic parallel processing
-# n.cores <- detectCores()
-# parClust <- makeCluster(n.cores)
-
-
 ## Code to run on startup, not part of API endpoints / global variables
 # Load params from config file
 tox21config <- config::get("tox21enricher")
@@ -84,7 +79,21 @@ if(as.numeric(tox21config$cores) != round(as.numeric(tox21config$cores)) | as.nu
     print("Error: specified number of cores must be a positive integer (1+).")
     stop()
 }
-CORES <- as.numeric(tox21config$cores) * 2
+
+# Handle specifying the number of cores
+# If Windows, use CORES = 1
+# If invalid, default to CORES = 1
+CORES <- 1
+if(Sys.info()['sysname'] == "Windows"){
+    CORES <- 1
+} else {
+    CORES <- as.numeric(tox21config$cores) * 2
+    if(is.na(CORES)){
+        print("Invalid cores supplied. Defaulting to CORES = 1.")
+        CORES <- 1
+    }
+}
+
 
 if(is.na(as.numeric(tox21queue$cleanupTime))){
     print("Error: cleanupTime must be a number.")
@@ -274,7 +283,6 @@ if(grepl("/$", API_ADDR)){
 
 # vv future plan - futures won't work correctly without this line vv
 plan('multicore')
-# plan('multisession')
 
 print(paste0("! Tox21Enricher Plumber API initializing..."))
 print("! Loading annotation resources...")
@@ -1612,17 +1620,33 @@ perform_CASRN_enrichment_analysis <- function(CASRNRef, outputBaseDir, outfileBa
     })
     names(localTermsList) <- names(funCat2Selected)
     funCat2SelectedProcessed_datArray <- funCatTerm2CASRN[names(funCat2Selected)] # filter selected annotation classes
+    
+    mappedCASRNs_unique <- unique(mappedCASRNs)
+    
     funCat2SelectedProcessed_datArray <- mclapply(names(funCat2Selected), mc.cores=CORES, mc.silent=FALSE, function(funCat) {
         funCatTerms <- funCatTerm2CASRN[[funCat]]
-        targetTotalCASRNInFunCatCount <- length(unlist(lapply(mappedCASRNs, function(CASRN){
-            if(funCat %in% names(CASRN2funCatTerm[[CASRN]])){
-                return(CASRN)
+        # targetTotalCASRNInFunCatCount <- length(unlist(lapply(mappedCASRNs, function(CASRN){
+        #     if(funCat %in% names(CASRN2funCatTerm[[CASRN]])){
+        #         return(CASRN)
+        #     }
+        #     return(NULL)
+        # })))
+        # 
+        targetTotalCASRNInFunCatCount <- sum(unlist(lapply(mappedCASRNs, function(CASRN){
+            tmp <- match(funCat, names(CASRN2funCatTerm[[CASRN]]))
+            tmp <- tmp[!is.na(tmp)]
+            if(length(tmp) > 0){
+                return(1)
             }
-            return(NULL)
+            return(0)
         })))
+        
         tmp_datArray <- lapply(names(funCatTerms), function(term_inner){
-            targetCASRNsRef <- intersect(funCatTerm2CASRN[[funCat]][[term_inner]], mappedCASRNs) # TODO: speed up
+            tmp_CASRNS <- unique(funCatTerm2CASRN[[funCat]][[term_inner]])
+            targetCASRNsRef <- mappedCASRNs_unique[match(tmp_CASRNS, mappedCASRNs_unique)]
+            targetCASRNsRef <- targetCASRNsRef[!is.na(targetCASRNsRef)]
             targetCASRNCount <- length(targetCASRNsRef)
+            
             # Calculate the EASE score
             if (targetCASRNCount > 1){
                 
@@ -1982,27 +2006,29 @@ kappa_cluster <- function(x, overlap=0.5, outputBaseDir=NULL, outfileBase=NULL, 
     
     termpair2kappaOverThreshold <- expand.grid(seq_len(sortedFunCatTermsCount - 1), seq_len(sortedFunCatTermsCount), stringsAsFactors=FALSE)
     termpair2kappaOverThreshold <- termpair2kappaOverThreshold %>% filter(termpair2kappaOverThreshold$Var1 < termpair2kappaOverThreshold$Var2)
-    #termpair2kappaOverThreshold <- as.data.table(termpair2kappaOverThreshold)
-    setDT(termpair2kappaOverThreshold)
+    setDT(termpair2kappaOverThreshold) # Convert to data.table to speed up
+    setkey(termpair2kappaOverThreshold, Var1, Var2)
     
-    #termpair2kappaOverThreshold <- lapply(seq_len(nrow(termpair2kappaOverThreshold)), function(term_row) {
+    sigTerm2CASRNMatrix_tmp <- lapply(sigTerm2CASRNMatrix, function(x) unique(x))
+    
+    sigTerm2CASRNMatrix_tmp <- sigTerm2CASRNMatrix_tmp[order(names(sigTerm2CASRNMatrix_tmp))]
+    
     termpair2kappaOverThreshold <- mclapply(seq_len(nrow(termpair2kappaOverThreshold)), mc.cores=CORES, mc.silent=FALSE, function(term_row) {
         term1 <- termpair2kappaOverThreshold[[term_row, "Var1"]] # get the first term in the pairwise comparison
         term2 <- termpair2kappaOverThreshold[[term_row, "Var2"]] # get the second term in the pairwise comparison
-        
-        posTermTotalTmp <- posTermCASRNCount[c(sortedFunCatTerms[term1], sortedFunCatTerms[term2])]
-        posTerm1Total <- posTermTotalTmp[[1]] # number of CASRNs associated with first annotation
-        posTerm2Total <- posTermTotalTmp[[2]] # number of CASRNs associated with second annotation
+
+        posTerm1Total <- posTermCASRNCount[[sortedFunCatTerms[term1]]]
+        posTerm2Total <- posTermCASRNCount[[sortedFunCatTerms[term2]]]
         
         negTerm1Total <- inputCASRNsCount - posTerm1Total # number of CASRNs NOT associated with first annotation (note that the total is inputCASRNsCount not the mapped total)
         negTerm2Total <- inputCASRNsCount - posTerm2Total # number of CASRNs NOT associated with second annotation (note that the total is inputCASRNsCount not the mapped total)
         
         # Get number of chemicals that are shared or not for term1 and term2
-        tmpMat1 <- sigTerm2CASRNMatrix[[sortedFunCatTerms[term1]]]
-        tmpMat2 <- sigTerm2CASRNMatrix[[sortedFunCatTerms[term2]]]
+        tmpMat1 <- sigTerm2CASRNMatrix_tmp[[sortedFunCatTerms[term1]]]
+        tmpMat2 <- sigTerm2CASRNMatrix_tmp[[sortedFunCatTerms[term2]]]
 
-        # TODO speed this up vvv
-        sharedTerms <- intersect(tmpMat1, tmpMat2) # TODO: speed up
+        sharedTerms <- match(tmpMat1, tmpMat2)
+        sharedTerms <- sharedTerms[!is.na(sharedTerms)]
         
         term1term2 <- length(sharedTerms)
         term1only <- length(tmpMat1) - length(sharedTerms)
@@ -2044,9 +2070,6 @@ kappa_cluster <- function(x, overlap=0.5, outputBaseDir=NULL, outfileBase=NULL, 
         return("request canceled")
     }
     
-    
-    
-    #qualifiedSeeds <- lapply(seq_len(sortedFunCatTermsCount), function(i){
     qualifiedSeeds <- mclapply(seq_len(sortedFunCatTermsCount), mc.cores=CORES, mc.silent=FALSE, function(i){
         # Seed condition #1: initial group membership
         if (!is.null(termpair2kappaOverThreshold[[sortedFunCatTerms[i]]]) & length(termpair2kappaOverThreshold[[sortedFunCatTerms[i]]]) >= (initialGroupMembership - 1)) {
@@ -2159,8 +2182,11 @@ merge_term <- function(ml, overlap, multipleLinkageThreshold){
         while(TRUE){
             bestovl <- 0
             bestindex <- NULL
+            curr_unique <- unique(curr)
             for(i in seq_len(length((ml)))){
-                ovl <- (2 * length(intersect(curr, ml[[i]]))) / (length(curr) + length(ml[[i]]))
+                intersecting <- match(curr_unique, unique(ml[[i]]))
+                intersecting <- intersecting[!is.na(intersecting)]
+                ovl <- (2 * length(intersecting)) / (length(curr) + length(ml[[i]]))
                 if(ovl > multipleLinkageThreshold){
                     if(bestovl < ovl){
                         bestovl <- ovl
